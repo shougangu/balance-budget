@@ -1,6 +1,6 @@
 import wandb
 import argparse
-from tuning.training.config_training import ModelLoadConfig, LoraConfig, PTRunConfig, DPOTrainingConfig, DatasetConfig, SFTRunConfig
+from tuning.training.config_training import ModelLoadConfig, LoraConfig, PTRunConfig, DPOTrainingConfig, DatasetConfig, PassAtKConfig, SFTRunConfig
 from tuning.config import HF_MODEL_MAP
 from tuning.run_inference import run_inference
 from tuning.run_evaluation import run_evaluation
@@ -14,6 +14,7 @@ if __name__ == "__main__":
     parser.add_argument("--model", type=str, help="llama3-8B", required=True)
     parser.add_argument("--dataset", type=str, help="Dataset", required=True)
     parser.add_argument("--train_size", type=int, help="Train size", required=True)
+    parser.add_argument("--dynamic_path", type=str, help="Dynamic dataset path", required=False)
     parser.add_argument("--sft_train_size", type=int, help="SFT run train size", required=False)
     parser.add_argument("--task", type=str, help="Task name", required=True)
     parser.add_argument("--pft_method", type=str, help="PFT method", required=True)
@@ -27,7 +28,7 @@ if __name__ == "__main__":
     lora_config = LoraConfig()
     model_load_config = ModelLoadConfig()
     training_args = DPOTrainingConfig()
-
+    training_args.eval_steps = 40
     dataset_config = DatasetConfig(
         dataset = args.dataset,
         dataset_type = "pt",
@@ -37,11 +38,13 @@ if __name__ == "__main__":
     print(dataset_config)
 
     if args.sft_train_size:
+        # the sft_run_config.run_name = DatasetConfig.full_name
         sft_run_config = SFTRunConfig(
             dataset_config = DatasetConfig(
                 dataset = args.dataset,
                 dataset_type = "sft",
                 train_size = args.sft_train_size,
+                dynamic_path = args.dynamic_path,
             ),
             model_name_hf = HF_MODEL_MAP[args.model],
             model_name = args.model,
@@ -62,7 +65,15 @@ if __name__ == "__main__":
 
     print(run_config)
 
-
+    passk_config = PassAtKConfig(
+        target_pass_at_k=[1.2],
+        k_values=[1],
+        n_samples=1,
+        num_prompts=100,
+        temperature=0.7,
+        strict=True,
+        enabled=True,
+    )
     if run_config.do_training:
         run = wandb.init(name=run_config.run_name, project="tuning", reinit=True)
 
@@ -73,6 +84,8 @@ if __name__ == "__main__":
                     lora_config = lora_config,
                     model_load_config = model_load_config,
                     training_args = training_args,
+                    passk_config = passk_config,
+                    perplexity_thresholds= [0.1]
                 )
             elif run_config.pft_method == "kto":
                 train_model_kto(
@@ -81,6 +94,7 @@ if __name__ == "__main__":
                     model_load_config = model_load_config,
                     training_args = training_args,
                 )
+            
             import time, torch
             torch.cuda.empty_cache()
             time.sleep(30)

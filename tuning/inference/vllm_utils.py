@@ -4,7 +4,7 @@ from tuning.config import MODELS_DIR
 from tuning.inference.config_inference import VLLMSamplingParamsConfig
 import os
 
-def load_vlm_model(model_name: str, max_logprobs = 20) -> LLM:
+def load_vlm_model(model_name: str, n: int = None, temperature: float = None, max_logprobs = 20) -> LLM:
     model_path = f"{MODELS_DIR}/{model_name}"
     print(f"Loading model from {model_path}")
 
@@ -16,8 +16,15 @@ def load_vlm_model(model_name: str, max_logprobs = 20) -> LLM:
         max_logprobs = max_logprobs,
         gpu_memory_utilization=gpu_util
     )
+    
+    config = VLLMSamplingParamsConfig()
+    if n is not None:
+        config.n = n
+    if temperature is not None:
+        config.temperature = temperature
+    
     sampling_params = SamplingParams(
-        **VLLMSamplingParamsConfig().model_dump()
+        **config.model_dump()
     )
 
     return llm, sampling_params
@@ -63,6 +70,6 @@ def generate_responses_vllm(llm: LLM, sampling_params: SamplingParams, prompts: 
             results.append({"prompt": prompt, "response": response_group})
         
     return results
-    
+
 
 

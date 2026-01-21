@@ -2,10 +2,11 @@ from enum import Enum
 from pydantic import BaseModel
 from tuning.config import MODELS_DIR
 from typing import Optional
+import os
 
 BaseModel.model_config['protected_namespaces'] = ()
 
-
+EFFECTIVE_BATCH_SIZE = 16
 def sft_batch_size(dataset_size: int):
     return 1
 
@@ -34,13 +35,13 @@ class LoraConfig(BaseModel):
 
 class TrainingArgumentsConfig(BaseModel):
     # sft training parameters
-    per_device_train_batch_size: int = 4
+    per_device_train_batch_size: int = 1
+    gradient_accumulation_steps: int = EFFECTIVE_BATCH_SIZE // per_device_train_batch_size # one opt step uses effective_batch_size data
     per_device_eval_batch_size: int = 8
-    eval_steps: float = 0.1
+    eval_strategy: str = "steps"
+    eval_steps: float = 20
     logging_steps: int = 1
     do_eval: bool = True
-    eval_strategy: str = "steps"
-    gradient_accumulation_steps: int = 4
     warmup_ratio: int = 0.1
     num_train_epochs: int = 2
     learning_rate: float = 5e-5
@@ -48,6 +49,11 @@ class TrainingArgumentsConfig(BaseModel):
     weight_decay: float = 0.01
     lr_scheduler_type: str = "cosine"
     report_to: list[str] = ["wandb"]
+    save_strategy: str = "no"
+    save_steps: int = 20 # each checkpoint step is one gradient weight update (optimizer.step()), data = grad_acc * batch_size * save_steps = effective_batch_size * save_steps
+    save_total_limit: int = 1
+    load_best_model_at_end: bool = False
+    dataloader_drop_last: bool = False
 
 
 class DPOTrainingConfig(TrainingArgumentsConfig):
@@ -57,13 +63,28 @@ class DPOTrainingConfig(TrainingArgumentsConfig):
     per_device_eval_batch_size: int = 2
 
 
+class PassAtKConfig(BaseModel):
+    """Configuration for pass@k evaluation callback."""
+    target_pass_at_k: list[float] = [0.8]  # Target pass@k score to stop training (0.0 to 1.0)
+    k_values: list[int] = [1]  # The k values for pass@k evaluation. First value is used for stopping.
+    n_samples: int = 16  # Number of samples to generate per prompt
+    num_prompts: int = 50  # Number of prompts to evaluate (subset for speed)
+    temperature: float = 0.7  # Sampling temperature for generation
+    max_tokens: int = 1024  # Maximum tokens to generate per response
+    strict: bool = True  # Use strict (True) or loose (False) IFEval evaluation
+    enabled: bool = True  # Whether to enable the callback
+
+
 class DatasetConfig(BaseModel):
     dataset: str = "gsm8k"
     dataset_type: str = "sft"
     train_size: int = 100
+    dynamic_path: str = None
 
     @property
     def dataset_full_name(self):
+        if self.dynamic_path:
+            return os.path.basename(self.dynamic_path)
         if not self.train_size:
             return f"{self.dataset_type}-{self.dataset}"
         return f"{self.dataset_type}-{self.dataset}-{self.train_size}"

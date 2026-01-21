@@ -23,7 +23,7 @@ export PYTHONUNBUFFERED=1
 # --- Defaults here (overridable via --export=ALL,VAR=... ) ---
 export TASK="${TASK:-instruction}"
 export DATASET="${DATASET:-tuluif}"
-export SFT_RATIO="${SFT_RATIO:-0.5}"
+export SFT_RATIO="${SFT_RATIO:-0.75}"
 export BASE_MODEL="${BASE_MODEL:-llama3-8B}"
 export PFT_METHOD="${PFT_METHOD:-dpo}"
 

@@ -58,9 +58,9 @@ if __name__ == "__main__":
             model_name="llama3-8B",
             task_name="math",
             dataset_config=DatasetConfig(
-                dataset="tuluif", #gsm8k
+                dataset="gsm8k", #gsm8k
                 dataset_type="sft",
-                train_size=10000,
+                train_size=100,
             ),
             do_training=True,
         )

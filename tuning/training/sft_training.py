@@ -3,19 +3,25 @@ from unsloth import FastLanguageModel, is_bfloat16_supported
 from trl import SFTTrainer
 from transformers import TrainingArguments
 from tuning.data.train_dataset import get_train_dataset
-from tuning.training.config_training import ModelLoadConfig, LoraConfig, SFTRunConfig, TrainingArgumentsConfig, sft_batch_size, effective_batch_size
-
+from tuning.training.config_training import ModelLoadConfig, LoraConfig, SFTRunConfig, TrainingArgumentsConfig, PassAtKConfig, sft_batch_size, effective_batch_size
+from tuning.training.perplexity_callback import PerplexityStoppingCallback
+from tuning.training.passk_callback import PassAtKStoppingCallback
 from tuning.utils.utils import apply_chat_template, chat_template_func
 import json
 import sys
-
+from datasets import load_from_disk
+from typing import List, Optional, Union
+from pathlib import Path
+from tuning.config import DATASETS_DIR, HF_MODEL_MAP
+import os
 def train_model_sft(
     run_config: SFTRunConfig = None,
     lora_config: LoraConfig = None,
     model_load_config: ModelLoadConfig = None,
     training_args: TrainingArgumentsConfig = None,
+    perplexity_thresholds: Optional[List[float]] = None,
+    passk_config = None,  # PassAtKConfig object
 ):  
-
     train_batch_size = sft_batch_size(run_config.dataset_config.train_size)
 
     gradient_accumulation_steps = effective_batch_size(run_config.dataset_config.train_size) // train_batch_size
@@ -51,6 +57,41 @@ def train_model_sft(
         loftq_config = lora_config.loftq_config,
     )
 
+    # Setup callbacks
+    callbacks = []
+    if passk_config is not None and passk_config.enabled:
+        passk_callback = PassAtKStoppingCallback(
+            target_pass_at_k=passk_config.target_pass_at_k,  
+            tokenizer=chat_template_func(tokenizer),
+            k_values=passk_config.k_values,
+            n_samples=passk_config.n_samples,
+            num_prompts=passk_config.num_prompts,
+            temperature=passk_config.temperature,
+            max_tokens=passk_config.max_tokens,
+            strict=passk_config.strict,
+            model_name=run_config.model_name,
+        )
+        callbacks.append(passk_callback)
+        print(f"[SFT] Will stop training when pass@{passk_config.k_values[0]} >= {passk_config.target_pass_at_k[-1]}")
+        print(f"[SFT] Checkpoints will be saved at thresholds: {passk_config.target_pass_at_k}")
+
+    if perplexity_thresholds is not None:
+        # Load raw dataset (without chat template applied) for perplexity evaluation
+        raw_test_dataset = load_from_disk(f"{DATASETS_DIR}/sft-tuluif")["test"]
+        raw_test_dataset = dataset["test"]
+        perplexity_callback = PerplexityStoppingCallback(
+            model_name = run_config.model_name,
+            perplexity_thresholds=perplexity_thresholds,
+            test_dataset=raw_test_dataset,
+            tokenizer=chat_template_func(tokenizer),
+            num_samples=200,  
+        )
+        callbacks.append(perplexity_callback)
+        print(f"[SFT] Perplexity thresholds: {perplexity_thresholds}")
+        print(f"[SFT] Will checkpoint at each threshold and stop at final: {min(perplexity_thresholds)}")
+
+   
+
     trainer = SFTTrainer(
         model = model,
         tokenizer = chat_template_func(tokenizer),
@@ -59,10 +100,11 @@ def train_model_sft(
         dataset_text_field = "text",
         max_seq_length = model_load_config.max_seq_length,
         dataset_num_proc = 2,
-        packing = False, 
+        packing = False,
+        callbacks = callbacks if callbacks else None,
         args = TrainingArguments(
-            per_device_train_batch_size = train_batch_size,
-            gradient_accumulation_steps = gradient_accumulation_steps,
+            per_device_train_batch_size = training_args.per_device_train_batch_size,
+            gradient_accumulation_steps = training_args.gradient_accumulation_steps,
             per_device_eval_batch_size = training_args.per_device_eval_batch_size,
             eval_steps = training_args.eval_steps,
             do_eval = training_args.do_eval,
@@ -76,7 +118,11 @@ def train_model_sft(
             report_to = training_args.report_to,
             logging_steps = training_args.logging_steps,
             output_dir = run_config.output_dir,
-            save_strategy="no",
+            save_strategy = training_args.save_strategy,
+            save_steps = training_args.save_steps,
+            save_total_limit = training_args.save_total_limit,
+            load_best_model_at_end = training_args.load_best_model_at_end,
+            dataloader_drop_last = training_args.dataloader_drop_last,
             fp16 = not is_bfloat16_supported(),
             bf16 = is_bfloat16_supported(),
             seed = 42,
@@ -85,7 +131,17 @@ def train_model_sft(
     args = trainer.args.to_dict()
 
     print(args)
-    trainer_stats = trainer.train()
+    
+    # Resume from checkpoint if it exists
+    resume_from_checkpoint = None
+    if Path(run_config.output_dir).exists():
+        checkpoints = list(Path(run_config.output_dir).glob("checkpoint-*"))
+        if checkpoints:
+            resume_from_checkpoint = str(max(checkpoints, key=lambda x: int(x.name.split("-")[1])))
+            print(f"[SFT] Resuming from checkpoint: {resume_from_checkpoint}")
+    
+    trainer_stats = trainer.train(resume_from_checkpoint=resume_from_checkpoint) 
+    # weights, opt, scheduler, step counter
 
     model.save_pretrained_merged(run_config.output_dir, tokenizer, save_method = "merged_16bit")
 
@@ -99,19 +155,23 @@ def train_model_sft(
 if __name__ == "__main__":
     from tuning.training.config_training import DatasetConfig, SFTRunConfig
     from tuning.config import MODELS_DIR
+    model = "llama3-8B"
+    # model = "llama3-3B"
+    # model = "llama3-1B"
+    # model = "qwen2-7B"
 
     dataset_config = DatasetConfig(
-        dataset = "combined",
+        dataset = "tuluif",
         dataset_type = "sft",
-        train_size = 5000,
+        train_size = 8192, # 29980
     )
 
     print(dataset_config)
 
     run_config = SFTRunConfig(
         dataset_config = dataset_config,
-        model_name_hf = "unsloth/Qwen2.5-7B",
-        model_name = f"{MODELS_DIR}/llama3-8B_pt-combined-5000",
+        model_name_hf = HF_MODEL_MAP[model],  # Use HuggingFace model name, not local path
+        model_name = model,  # Base model name for output directory construction
         do_training=True,
         do_inference=False,
         do_evaluation=False,
@@ -121,15 +181,35 @@ if __name__ == "__main__":
 
     lora_config = LoraConfig()
     model_load_config = ModelLoadConfig()
+    model_load_config.max_seq_length = 4096
     training_args = TrainingArgumentsConfig()
+    
+    # Enable checkpointing for main runs
+    # training_args.save_strategy = "steps"
+    # training_args.save_steps = 2
+    # training_args.save_total_limit = 10
+    # training_args.load_best_model_at_end = False
+    # training_args.dataloader_drop_last = False
 
 
+    # Configure pass@k evaluation
+    # passk_config = PassAtKConfig(
+    #     target_pass_at_k=[0.2,0.3,0.4,0.45,0.5,0.55,0.6,0.65,0.7,0.75,0.8,0.85,0.9],
+    #     k_values=[1], 
+    #     n_samples=64,
+    #     num_prompts=75,
+    #     temperature=0.7,
+    #     strict=True,
+    #     enabled=True,
+    # )
+
+
+    perplexity_thresholds = [7.0,6.0, 5.75, 5.5, 5.25, 5.0, 4.75, 4.5, 4.25,4.0, 3.9, 3.8, 3.7, 3.6,3.55,3.5,3.45,3.4,3.35,3.3, 3.25, 3.2, 3.15, 3.1]
     train_model_sft(
         run_config = run_config,
         lora_config = lora_config,
         model_load_config = model_load_config,
         training_args = training_args,
+        perplexity_thresholds = perplexity_thresholds, 
+        # passk_config = passk_config,
     )
-
-
-

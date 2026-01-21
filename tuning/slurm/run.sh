@@ -1,6 +1,6 @@
 #!/bin/bash
 
-train_sizes=( 100 ) #1000 10000 )
+train_sizes=( 1000 ) #1000 10000 )
 
 # Set boolean config values to "n" by default
 export DO_TRAINING="${DO_TRAINING:-n}"
