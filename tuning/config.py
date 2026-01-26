@@ -8,6 +8,7 @@ DATA_DIR = "/data"
 
 DATASETS_DIR = ROOT_DIR + DATA_DIR + "/datasets"
 MODELS_DIR = ROOT_DIR + "/models" 
+MODELS_METADATA_DIR = ROOT_DIR + "/models_metadata"
 OUTPUTS_DIR = ROOT_DIR + "/outputs"
 
 IFEVAL_OUTPUTS_DIR = OUTPUTS_DIR + "/ifeval"

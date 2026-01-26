@@ -6,24 +6,22 @@ import shutil
 import gc
 import os
 import json
+import datetime
 from typing import List, Dict
 from pathlib import Path
 from transformers import TrainerCallback, TrainerControl, TrainerState
 from transformers.training_args import TrainingArguments
 from collections import defaultdict
-from peft import PeftModel
 from vllm import LLM, SamplingParams
-import sys
-sys.path.insert(0, '/home/shougan/projects/aip-fredashi/shougan/balance-budget')
+from vllm.distributed.parallel_state import destroy_model_parallel
 
 from instruction_following_eval import evaluation_lib
 from tuning.data.test_dataset import get_ifeval_test_dataset
 from tuning.utils.utils import chat_template_func
-from tuning.config import MODELS_DIR
+from tuning.config import MODELS_DIR, MODELS_METADATA_DIR
 
 BASE_DIR = Path('/home/shougan/projects/aip-fredashi/shougan/balance-budget')
 IFEVAL_INPUT_PATH = BASE_DIR / "instruction_following_eval/data/input_data.jsonl"
-
 
 def pass_at_k(n: int, c: int, k: int) -> float:
     """Calculate pass@k: probability that at least one of k samples is correct."""
@@ -62,23 +60,8 @@ class PassAtKStoppingCallback(TrainerCallback):
         max_tokens: int = 1024,
         strict: bool = True,
         model_name: str = None,
-        output_dir: str = None,
+        prevWindow: int = None,
     ):
-        """
-        Args:
-            target_pass_at_k: List of pass@k targets (ascending order, e.g., [0.4, 0.5, 0.6]).
-                              Checkpoints saved when each is reached. Training stops at the last one.
-            tokenizer: Tokenizer for the model.
-            k_values: List of k values - first is used for stopping, rest are logged only.
-            n_samples: Number of samples to generate per prompt.
-            num_prompts: Number of prompts to evaluate.
-            temperature: Sampling temperature.
-            max_tokens: Maximum tokens to generate.
-            strict: Whether to use strict IFEval evaluation.
-            model_name: Model name for checkpoint naming.
-            output_dir: Directory to save sweetspot checkpoints. If None, uses MODELS_DIR.
-        """
-        # Sort thresholds in ascending order (lower pass@k = easier to reach first)
         self.target_pass_at_k_thresholds = sorted(target_pass_at_k, reverse = True)
         self.completed_thresholds = set()  # Track which thresholds have been crossed
         self.tokenizer = tokenizer
@@ -90,10 +73,10 @@ class PassAtKStoppingCallback(TrainerCallback):
         self.max_tokens = max_tokens
         self.strict = strict
         self.model_name = model_name
-        self.output_dir =  MODELS_DIR
-        self._trainer = None
+        self.metadata_path = None
+        self.prevResults = []
+        self.prevWindow = prevWindow
         
-        # Load test dataset
         self.test_dataset = get_ifeval_test_dataset()
         if num_prompts is not None:
             self.test_dataset = self.test_dataset.select(range(min(num_prompts, len(self.test_dataset))))
@@ -110,13 +93,12 @@ class PassAtKStoppingCallback(TrainerCallback):
         print(f"[PassAtKCallback] n_samples={n_samples}, temperature={temperature}, strict={strict}")
         print(f"[PassAtKCallback] IFEval prompts loaded: {len(self.inputs_map)}, num_prompts={len(self.test_dataset)}")
         print(f"[PassAtKCallback] Using vLLM with model save/load (replicating run_inference_ifeval)")
-    
     def on_train_begin(self, args, state, control, **kwargs):
-        """Capture trainer reference at the start of training."""
-        self._trainer = kwargs.get("model")
-        # Set output_dir from training args if not provided
-        if self.output_dir is None:
-            self.output_dir = MODELS_DIR
+        if not self.model_name:
+            self.model_name = kwargs.get("model")
+        print(f"[PassAtKCallback] on_train_begin: model_name={self.model_name}")
+        now = datetime.datetime.now().strftime("%m%d_%H%M")
+        self.metadata_path = os.path.join(MODELS_METADATA_DIR, f"{self.model_name}_passatk-{now}.json")
     
     def _save_sweetspot_checkpoint(self, model, threshold: float, state: TrainerState, args: TrainingArguments):
         """Save a checkpoint when a pass@k sweetspot threshold is reached."""
@@ -127,13 +109,16 @@ class PassAtKStoppingCallback(TrainerCallback):
 
         # Use data_points_seen as the checkpoint name suffix
         checkpoint_name = f"{self.model_name}_pass@{self.stopping_k}-{threshold:.2f}_sft-{data_points_seen}"
-        checkpoint_path = os.path.join(self.output_dir, checkpoint_name)
+        checkpoint_path = os.path.join(MODELS_DIR, checkpoint_name)
 
         print(f"[PassAtKCallback] Saving sweetspot checkpoint to {checkpoint_path}")
         
         # Save using Unsloth's merged 16bit method (consistent with PerplexityCallback)
         model.save_pretrained_merged(checkpoint_path, self.tokenizer, save_method="merged_16bit")
         
+        with open(f"{checkpoint_path}/training_config.json", "w") as f:
+            json.dump(args.to_dict(), f, indent=4)
+
         # Write metadata marker file for orchestrator/downstream DPO
         metadata = {
             "threshold_type": f"pass_at_{self.stopping_k}",
@@ -145,12 +130,13 @@ class PassAtKStoppingCallback(TrainerCallback):
             "n_samples": self.n_samples,
             "strict": self.strict,
         }
-        metadata_path = os.path.join(checkpoint_path, "sweetspot_metadata.json")
-        with open(metadata_path, "w") as f:
+        
+        with open(self.metadata_path, "w") as f:
             json.dump(metadata, f, indent=2)
         
-        print(f"[PassAtKCallback] Sweetspot checkpoint saved with metadata at {metadata_path}")
+        print(f"[PassAtKCallback] Sweetspot checkpoint saved with metadata at {self.metadata_path}")
         return checkpoint_path
+    
     def _run_inference_with_vllm(self, model_path: str) -> List[Dict]:
         """
         Run inference using vLLM, replicating the pattern from run_inference_ifeval.
@@ -158,9 +144,11 @@ class PassAtKStoppingCallback(TrainerCallback):
         """
         # Load model with vLLM (similar to load_vlm_model)
         print(f"[PassAtKCallback] Loading model with vLLM from {model_path}...")
+        print("LLM UTILISATION IS 0.8")
+
         llm = LLM(
             model=model_path,
-            gpu_memory_utilization=0.9,
+            gpu_memory_utilization=0.8,
             trust_remote_code=True,
         )
         
@@ -198,12 +186,14 @@ class PassAtKStoppingCallback(TrainerCallback):
             else:
                 grouped[prompt].append(resp)
         
-        model_results = [{"prompt": p, "responses": resps} for p, resps in grouped.items()]
-        
-        # Cleanup vLLM to free GPU memory
         del llm
         gc.collect()
         torch.cuda.empty_cache()
+
+
+        model_results = [{"prompt": p, "responses": resps} for p, resps in grouped.items()]
+        
+        
         
         return model_results
     
@@ -289,36 +279,36 @@ class PassAtKStoppingCallback(TrainerCallback):
         for k in self.k_values:
             log_dict[f"eval/pass_at_{k}"] = scores[f"pass_at_{k}"]
         wandb.log(log_dict)
-        
-        # Print all scores
+
+        self.prevResults.append(scores[f"pass_at_{self.stopping_k}"])
+
         eval_type = "strict" if self.strict else "loose"
         scores_str = ", ".join([f"pass@{k}={scores[f'pass_at_{k}']:.4f}" for k in self.k_values])
         print(f"\n[PassAtKCallback] Step {state.global_step}, Data Points {data_points_seen}: "
               f"{scores_str} ({eval_type}, {scores['num_prompts_evaluated']} prompts)")
         
-        # Check each threshold and save checkpoint if crossed (Fork Strategy)
-        already_stopped = False
-        stopping_score = scores[f"pass_at_{self.stopping_k}"]
         for threshold in self.target_pass_at_k_thresholds:
-            if threshold not in self.completed_thresholds and stopping_score >= threshold:
-                already_stopped = True
-                self.completed_thresholds.add(threshold)
+            if self.prevWindow: continue
+            if threshold in self.completed_thresholds or scores[f"pass_at_{self.stopping_k}"] < threshold:
+                continue  # Already handled this threshold
 
-                print(f"[PassAtKCallback] Sweetspot threshold pass@{self.stopping_k}>={threshold} reached!")
-                
-                # Save the checkpoint for this sweetspot
-                if not already_stopped:
-                    checkpoint_path = self._save_sweetspot_checkpoint(model, threshold, state, args)
-                    dpo_data = 8192 - data_points_seen
-                    print(f"[PassAtKCallback] Launching DPO job with data points {dpo_data} at checkpoint {checkpoint_path}")
-                    os.system(f"sbatch /home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/slurm/run_dpo.sh {self.model_name} tuluif {dpo_data} {checkpoint_path} {data_points_seen} ifeval dpo")
+            print(f"[PassAtKCallback] Checking threshold: pass@{self.stopping_k} >= {threshold:.4f}")
+            self.completed_thresholds.add(threshold)
 
-                
-                # Check if this is the final (highest) threshold - stop training
-                if threshold == self.target_pass_at_k_thresholds[0]:
-                    print(f"[PassAtKCallback] Final threshold {threshold} reached! Stopping training.")
+            checkpoint_path = self._save_sweetspot_checkpoint(model, threshold, state, args)
+            dpo_data = 8192 - data_points_seen
+
+            print(f"[PassAtKCallback] Sweetspot threshold {threshold} reached! ")
+
+            if threshold == self.target_pass_at_k_thresholds[-1]:
+                print(f"[PassAtKCallback] Final threshold reached, stopping training.")
+                control.should_training_stop = True
+            break
+
+        if self.prevWindow:
+            if len(self.prevResults) > self.prevWindow:
+                if self.prevResults[-self.prevWindow] == max(self.prevResults[-self.prevWindow:]):
+                    print(f"[PassAtKCallback] No improvement in last {self.prevWindow} evaluations. Stopping training.")
                     control.should_training_stop = True
-                else:
-                    print(f"[PassAtKCallback] Continuing training to next threshold...")
-        
+                
         return control

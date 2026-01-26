@@ -14,10 +14,10 @@ if __name__ == "__main__":
     parser.add_argument("--model", type=str, help="llama3-8B", required=True)
     parser.add_argument("--dataset", type=str, help="Dataset", required=True)
     parser.add_argument("--train_size", type=int, help="Train size", required=True)
-    parser.add_argument("--dynamic_path", type=str, help="Dynamic dataset path", required=False)
-    parser.add_argument("--sft_train_size", type=int, help="SFT run train size", required=False)
     parser.add_argument("--task", type=str, help="Task name", required=True)
     parser.add_argument("--pft_method", type=str, help="PFT method", required=True)
+    parser.add_argument("--dynamic_path", type=str, help="Dynamic dataset path", required=False)
+    parser.add_argument("--sft_train_size", type=int, help="SFT run train size", required=False) # for standard sft->dpo
     parser.add_argument("--do_training", action="store_true", help="Do training")
     parser.add_argument("--do_inference", action="store_true", help="Do inference")
     parser.add_argument("--do_evaluation", action="store_true", help="Do evaluation")
@@ -44,7 +44,7 @@ if __name__ == "__main__":
                 dataset = args.dataset,
                 dataset_type = "sft",
                 train_size = args.sft_train_size,
-                dynamic_path = args.dynamic_path,
+                dynamic_path = args.dynamic_path if args.dynamic_path != "" else None,
             ),
             model_name_hf = HF_MODEL_MAP[args.model],
             model_name = args.model,
@@ -53,7 +53,7 @@ if __name__ == "__main__":
 
     run_config = PTRunConfig(
         dataset_config = dataset_config,
-        model_name_hf = HF_MODEL_MAP[args.model],
+        # model_name_hf = HF_MODEL_MAP[args.model],
         model_name = args.model,
         sft_run_config = sft_run_config if args.sft_train_size else None,
         task_name=args.task,

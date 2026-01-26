@@ -14,6 +14,9 @@ from typing import List, Optional, Union
 from pathlib import Path
 from tuning.config import DATASETS_DIR, HF_MODEL_MAP
 import os
+from tuning.training.config_training import DatasetConfig, SFTRunConfig
+from tuning.config import MODELS_DIR
+
 def train_model_sft(
     run_config: SFTRunConfig = None,
     lora_config: LoraConfig = None,
@@ -23,7 +26,6 @@ def train_model_sft(
     passk_config = None,  # PassAtKConfig object
 ):  
     train_batch_size = sft_batch_size(run_config.dataset_config.train_size)
-
     gradient_accumulation_steps = effective_batch_size(run_config.dataset_config.train_size) // train_batch_size
 
     dataset = get_train_dataset(run_config)
@@ -148,13 +150,12 @@ def train_model_sft(
     with open(f"{run_config.output_dir}/training_config.json", "w") as f:
         json.dump(args, f, indent=4)
 
-    return model, tokenizer, trainer
+    return model, tokenizer, trainer, callbacks
 
 
 
 if __name__ == "__main__":
-    from tuning.training.config_training import DatasetConfig, SFTRunConfig
-    from tuning.config import MODELS_DIR
+    
     model = "llama3-8B"
     # model = "llama3-3B"
     # model = "llama3-1B"
@@ -165,8 +166,6 @@ if __name__ == "__main__":
         dataset_type = "sft",
         train_size = 8192, # 29980
     )
-
-    print(dataset_config)
 
     run_config = SFTRunConfig(
         dataset_config = dataset_config,
@@ -205,11 +204,16 @@ if __name__ == "__main__":
 
 
     perplexity_thresholds = [7.0,6.0, 5.75, 5.5, 5.25, 5.0, 4.75, 4.5, 4.25,4.0, 3.9, 3.8, 3.7, 3.6,3.55,3.5,3.45,3.4,3.35,3.3, 3.25, 3.2, 3.15, 3.1]
-    train_model_sft(
+    model, tokenizer, trainer = train_model_sft(
         run_config = run_config,
         lora_config = lora_config,
         model_load_config = model_load_config,
         training_args = training_args,
         perplexity_thresholds = perplexity_thresholds, 
-        # passk_config = passk_config,
     )
+    metadata_file = trainer.callbacks[-1].metadata_path
+    print(f"SFT training complete. Metadata file: {metadata_file}")
+
+
+
+

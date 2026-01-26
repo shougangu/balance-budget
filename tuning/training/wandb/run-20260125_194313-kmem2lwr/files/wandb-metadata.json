@@ -1,0 +1,93 @@
+{
+  "os": "Linux-6.8.0-54-generic-x86_64-Intel-R-_Xeon-R-_Gold_6442Y-with-glibc2.37",
+  "python": "CPython 3.11.5",
+  "startedAt": "2026-01-26T00:43:13.866312Z",
+  "program": "tuning/training/Untitled.ipynb",
+  "git": {
+    "remote": "https://github.com/lucedes27/balance-budget/",
+    "commit": "4992bdb0f35289437e6f77db61d2371532dd718f"
+  },
+  "email": "dashoug001@gmail.com",
+  "root": "/project/6105902/shougan/balance-budget/tuning/training",
+  "host": "kn174",
+  "executable": "/project/6105902/shougan/balance-budget/venv/bin/python",
+  "cpu_count": 48,
+  "cpu_count_logical": 48,
+  "gpu": "NVIDIA H100 80GB HBM3",
+  "gpu_count": 1,
+  "disk": {
+    "/": {
+      "total": "33501757440",
+      "used": "8679809024"
+    }
+  },
+  "memory": {
+    "total": "2164019646464"
+  },
+  "gpu_nvidia": [
+    {
+      "name": "NVIDIA H100 80GB HBM3",
+      "memoryTotal": "85520809984",
+      "cudaCores": 16896,
+      "architecture": "Hopper",
+      "uuid": "GPU-7d83c649-a451-78d1-cf90-503a571b9ab4"
+    }
+  ],
+  "cudaVersion": "12.8",
+  "slurm": {
+    "cluster_name": "killarney",
+    "conf": "/cm/shared/apps/slurm/var/etc/killarney/slurm.conf",
+    "cpus_on_node": "4",
+    "cpus_per_task": "4",
+    "gpus_on_node": "1",
+    "gtids": "0",
+    "job_account": "aip-fredashi",
+    "job_cpus_per_node": "4",
+    "job_end_time": "1769424082",
+    "job_gid": "3152857",
+    "job_gpus": "7",
+    "job_id": "1985699",
+    "job_name": "interactive",
+    "job_nodelist": "kn174",
+    "job_num_nodes": "1",
+    "job_partition": "gpubase_h100_b2",
+    "job_qos": "normal",
+    "job_start_time": "1769380882",
+    "job_uid": "3152857",
+    "job_user": "shougan",
+    "jobid": "1985699",
+    "launch_node_ipaddr": "10.1.6.102",
+    "localid": "0",
+    "mem_per_node": "65536",
+    "mpi_type": "pmix",
+    "nnodes": "1",
+    "nodeid": "0",
+    "nodelist": "kn174",
+    "pmix_mapping_serv": "(vector,(0,1,1))",
+    "pmixp_abort_agent_port": "45611",
+    "prio_process": "0",
+    "procid": "0",
+    "pty_port": "38503",
+    "pty_win_col": "69",
+    "pty_win_row": "95",
+    "script_context": "prolog_task",
+    "srun_comm_host": "10.1.6.102",
+    "srun_comm_port": "35525",
+    "step_id": "4294967290",
+    "step_launcher_port": "35525",
+    "step_nodelist": "kn174",
+    "step_num_nodes": "1",
+    "step_num_tasks": "1",
+    "step_tasks_per_node": "1",
+    "stepid": "4294967290",
+    "submit_dir": "/project/6105902/shougan/balance-budget",
+    "submit_host": "klogin02",
+    "task_pid": "728614",
+    "tasks_per_node": "1",
+    "tmpdir": "/tmp",
+    "topology_addr": "kn174",
+    "topology_addr_pattern": "node",
+    "tres_per_task": "cpu=4"
+  },
+  "writerId": "zskc32m6hug4f95tuztkvhmuwndjtmii"
+}

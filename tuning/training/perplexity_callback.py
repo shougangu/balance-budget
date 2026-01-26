@@ -6,18 +6,13 @@ from typing import List
 from transformers import TrainerCallback, TrainerControl, TrainerState
 from transformers.training_args import TrainingArguments
 import wandb
-from tuning.config import MODELS_DIR
+from tuning.config import MODELS_DIR, MODELS_METADATA_DIR
 import os
+import subprocess
+import json, datetime
+import os, json
 
 class PerplexityStoppingCallback(TrainerCallback):
-    """
-    Save checkpoints at perplexity sweetspots for downstream DPO runs.
-    
-    Implements the "Fork Strategy": training continues through all thresholds,
-    saving checkpoints at each sweetspot without stopping. The final threshold
-    in the list will stop training.
-    """
-    
     def __init__(
         self, 
         perplexity_thresholds: List[float], 
@@ -25,40 +20,33 @@ class PerplexityStoppingCallback(TrainerCallback):
         tokenizer, 
         num_samples: int = 100,
         model_name: str = None,
-        output_dir: str = None,
+        prevWindow: int = None,
     ):
-        """
-        Args:
-            perplexity_thresholds: List of perplexity targets (descending order, e.g., [3.0, 2.5, 2.0]).
-                                   Checkpoints saved when each is reached. Training stops at the last one.
-            test_dataset: Dataset to evaluate perplexity on.
-            tokenizer: Tokenizer for the model.
-            num_samples: Number of samples to use for perplexity evaluation.
-            output_dir: Directory to save sweetspot checkpoints. If None, uses trainer's output_dir.
-        """
-        # Sort thresholds in descending order (higher perplexity = easier to reach first)
+        # Sort thresholds in descending order (lower perplexity = harder to reach)
         self.perplexity_thresholds = sorted(perplexity_thresholds, reverse=False)
         self.completed_thresholds = set()  # Track which thresholds have been crossed
         self.test_dataset = test_dataset
         self.tokenizer = tokenizer
         self.num_samples = num_samples
-        self.output_dir = output_dir
+        self.metadata_path = None
         self.model_name = model_name
-        self._trainer = None  # Will be set when training starts
+        self.prevResults = []
+        self.prevWindow = prevWindow
 
-        
         print(f"[PerplexityCallback] Initialized with perplexity_thresholds={self.perplexity_thresholds}")
         print(f"[PerplexityCallback] Training will stop at final threshold: {self.perplexity_thresholds[-1]}")
         print(f"[PerplexityCallback] num_samples={num_samples}")
         print(f"[PerplexityCallback] Test dataset size: {len(test_dataset)}")
         print(f"Dataset sample 1st one: {test_dataset[0]}")
+
+        
     
     def on_train_begin(self, args, state, control, **kwargs):
-        """Capture trainer reference at the start of training."""
-        self._trainer = kwargs.get("model")
-        # Set output_dir from training args if not provided
-        if self.output_dir is None:
-            self.output_dir = args.output_dir
+        if not self.model_name:
+            self.model_name = kwargs.get("model")
+        print(f"[PerplexityCallback] on_train_begin: model_name={self.model_name}")
+        now = datetime.datetime.now().strftime("%m%d_%H%M")
+        self.metadata_path = os.path.join(MODELS_METADATA_DIR, f"{self.model_name}_ppl-{now}.json") 
     
     def _save_sweetspot_checkpoint(self, model, threshold: float, state: TrainerState, args: TrainingArguments):
         train_batch_size = args.per_device_train_batch_size
@@ -75,6 +63,9 @@ class PerplexityStoppingCallback(TrainerCallback):
         # Save using Unsloth's merged 16bit method (consistent with PassAtKCallback)
         model.save_pretrained_merged(checkpoint_path, self.tokenizer, save_method="merged_16bit")
         
+        with open(f"{checkpoint_path}/training_config.json", "w") as f:
+            json.dump(args.to_dict(), f, indent=4)
+
         # Write metadata marker file for orchestrator/downstream DPO
         metadata = {
             "threshold_type": "perplexity",
@@ -83,12 +74,10 @@ class PerplexityStoppingCallback(TrainerCallback):
             "checkpoint_path": checkpoint_path,
             "data_points_seen": data_points_seen,
         }
-        import json
-        metadata_path = os.path.join(checkpoint_path, "sweetspot_metadata.json")
-        with open(metadata_path, "w") as f:
-            json.dump(metadata, f, indent=2)
+        with open(self.metadata_path, "a") as f:
+            f.write(json.dumps(metadata)+"\n")
         
-        print(f"[PerplexityCallback] Sweetspot checkpoint saved with metadata at {metadata_path}")
+        print(f"[PerplexityCallback] Sweetspot checkpoint saved with metadata at {self.metadata_path}")
         return checkpoint_path
     
     def compute_perplexity(self, log_probs):
@@ -152,39 +141,46 @@ class PerplexityStoppingCallback(TrainerCallback):
         grad_accum = args.gradient_accumulation_steps
         world_size = getattr(args, "world_size", 1)
         data_points_seen = state.global_step * train_batch_size * grad_accum * world_size
+        
         if model is None:
             model = kwargs.get("model")
         if model is None:
             model = self._trainer
         if model is None:
-            print("[PerplexityCallback] Warning: model is None, skipping perplexity check")
+            print("[PerplexityCallback] Warning: model is None, skipping ppl check")
             return control
         
         current_perplexity = self.evaluate_perplexity(model)
         wandb.log({"eval/perplexity": current_perplexity, "train/global_step": state.global_step})
+        self.prevWindow.append(current_perplexity)
         
         print(f"\n[PerplexityCallback] Step {state.global_step}, Data Points {data_points_seen}: PPL = {current_perplexity:.4f}")
         
         # Check each threshold and save checkpoint if crossed (Fork Strategy)
         for threshold in self.perplexity_thresholds:
+            if self.prevWindow: continue
             if threshold in self.completed_thresholds or current_perplexity > threshold:
                 continue
             
             print(f"[PerplexityCallback] Sweetspot threshold {threshold} reached!")
             self.completed_thresholds.add(threshold)
             
-            # Save the checkpoint and launch DPO job
             checkpoint_path = self._save_sweetspot_checkpoint(model, threshold, state, args)
+
             dpo_data = 8192 - data_points_seen # Let's say we have 8192 datapoint budget
             print(f"[PerplexityCallback] Launching DPO job with data points {dpo_data} at checkpoint {checkpoint_path}")
-            os.system(f"sbatch /home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/slurm/run_dpo.sh {self.model_name} tuluif {dpo_data} {checkpoint_path} {data_points_seen} ifeval dpo")
+            # subprocess.run(["sbatch", "/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/slurm/run_dpo.sh", self.model_name, "tuluif", str(dpo_data), checkpoint_path, str(data_points_seen), "ifeval", "dpo"], env=os.environ.copy())
 
-            # Stop training if this is the final (lowest) threshold
             if threshold == self.perplexity_thresholds[0]:
                 print(f"[PerplexityCallback] Final threshold {threshold} reached! Stopping training.")
                 control.should_training_stop = True
             else:
                 print(f"[PerplexityCallback] Continuing training to next threshold...")
-            break  # Only handle one threshold per evaluation
-
+            break  # Only handle one threshold per evaluation (which is the hardest )
+        
+        if self.prevWindow:
+            if len(self.prevResults) > self.prevWindow:
+                if self.prevResults[-self.prevWindow] == min(self.prevResults[-self.prevWindow:]):
+                    print(f"[PerplexityCallback] No improvement in last {self.prevWindow} evaluations. Stopping training.")
+                    control.should_training_stop = True
         return control

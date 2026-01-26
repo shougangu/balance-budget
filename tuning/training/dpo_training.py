@@ -152,7 +152,9 @@ def train_model_dpo(
 
     args = trainer.args.to_dict()
     with open(f"{run_config.output_dir}/training_config.json", "w") as f:
-        json.dump(args, f, indent=4)    
+        json.dump(args, f, indent=4)
+
+    return model, tokenizer, trainer    
 
 if __name__ == "__main__":
     from tuning.config import HF_MODEL_MAP
