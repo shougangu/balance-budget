@@ -62,8 +62,9 @@ class PassAtKStoppingCallback(TrainerCallback):
         model_name: str = None,
         prevWindow: int = None,
     ):
-        self.target_pass_at_k_thresholds = sorted(target_pass_at_k, reverse = True)
-        self.completed_thresholds = set()  # Track which thresholds have been crossed
+        # Sort thresholds in descending order (hardest to easiest: 0.7, 0.5, 0.3)
+        # Higher pass@k = harder to reach, so we process from largest to smallest
+        self.target_pass_at_k_thresholds = sorted(target_pass_at_k, reverse=True)
         self.tokenizer = tokenizer
         self.k_values = k_values
         self.stopping_k = self.k_values[0]  # First k value is used for stopping
@@ -88,7 +89,7 @@ class PassAtKStoppingCallback(TrainerCallback):
         }
         
         print(f"[PassAtKCallback] Initialized with pass@{self.stopping_k} thresholds={self.target_pass_at_k_thresholds}")
-        print(f"[PassAtKCallback] Training will stop at final threshold: {self.target_pass_at_k_thresholds[-1]}")
+        print(f"[PassAtKCallback] Training will stop when hardest threshold is reached: {self.target_pass_at_k_thresholds[0]}")
         print(f"[PassAtKCallback] k_values={self.k_values} (stopping on k={self.stopping_k})")
         print(f"[PassAtKCallback] n_samples={n_samples}, temperature={temperature}, strict={strict}")
         print(f"[PassAtKCallback] IFEval prompts loaded: {len(self.inputs_map)}, num_prompts={len(self.test_dataset)}")
@@ -186,9 +187,11 @@ class PassAtKStoppingCallback(TrainerCallback):
             else:
                 grouped[prompt].append(resp)
         
+        destroy_model_parallel()
         del llm
         gc.collect()
         torch.cuda.empty_cache()
+        torch.cuda.synchronize()
 
 
         model_results = [{"prompt": p, "responses": resps} for p, resps in grouped.items()]
@@ -206,19 +209,15 @@ class PassAtKStoppingCallback(TrainerCallback):
         try:
             print(f"[PassAtKCallback] Saving model to {temp_dir}...")
             
-            # assume PEFT model with Unsloth adapter
             model.save_pretrained_merged(temp_dir, self.tokenizer, save_method="merged_16bit")
             
-            # Step 2: Move training model to CPU to free GPU memory
             print(f"[PassAtKCallback] Moving training model to CPU...")
             original_device = next(model.parameters()).device
             model.cpu()
             torch.cuda.empty_cache()
             
-            # Step 3: Run inference with vLLM (replicating run_inference_ifeval)
             model_results = self._run_inference_with_vllm(temp_dir)
             
-            # Step 4: Move training model back to GPU (original model with LoRA intact)
             print(f"[PassAtKCallback] Moving training model back to GPU...")
             model.to(original_device)
             model.train()  # Ensure model is back in training mode
@@ -287,23 +286,37 @@ class PassAtKStoppingCallback(TrainerCallback):
         print(f"\n[PassAtKCallback] Step {state.global_step}, Data Points {data_points_seen}: "
               f"{scores_str} ({eval_type}, {scores['num_prompts_evaluated']} prompts)")
         
-        for i,threshold in enumerate(self.target_pass_at_k_thresholds):
-            if self.prevWindow: continue
-            if threshold in self.completed_thresholds or scores[f"pass_at_{self.stopping_k}"] < threshold:
-                continue  # Already handled this threshold
-            ## self.target_pass_at_k_thresholds = self.target_pass_at_k_thresholds[:i] check i =0 # Remove handled thresholds
-            print(f"[PassAtKCallback] Checking threshold: pass@{self.stopping_k} >= {threshold:.4f}")
-            self.completed_thresholds.add(threshold)
+        # Check each threshold and save checkpoint if crossed (Fork Strategy)
+        # Thresholds are sorted descending (hardest to easiest: 0.7, 0.5, 0.3)
+        # We iterate to find the hardest threshold that current pass@k has reached
+        if not self.prevWindow:
+            current_pass_at_k = scores[f"pass_at_{self.stopping_k}"]
+            reached_threshold = None
+            reached_index = None
 
-            checkpoint_path = self._save_sweetspot_checkpoint(model, threshold, state, args)
-            dpo_data = 8192 - data_points_seen
+            for i, threshold in enumerate(self.target_pass_at_k_thresholds):
+                if current_pass_at_k >= threshold:
+                    reached_threshold = threshold
+                    reached_index = i
+                    break
 
-            print(f"[PassAtKCallback] Sweetspot threshold {threshold} reached! ")
+            if reached_threshold is not None:
+                print(f"[PassAtKCallback] Sweetspot threshold {reached_threshold} reached!")
 
-            if threshold == self.target_pass_at_k_thresholds[0]:
-                print(f"[PassAtKCallback] Final threshold reached, stopping training.")
-                control.should_training_stop = True
-            break
+                checkpoint_path = self._save_sweetspot_checkpoint(model, reached_threshold, state, args)
+
+                dpo_data = 8192 - data_points_seen  # Let's say we have 8192 datapoint budget
+                print(f"[PassAtKCallback] Launching DPO job with data points {dpo_data} at checkpoint {checkpoint_path}")
+
+                # Trim thresholds to only include harder ones (before current index)
+                self.target_pass_at_k_thresholds = self.target_pass_at_k_thresholds[:reached_index]
+                print(f"[PassAtKCallback] Remaining thresholds: {self.target_pass_at_k_thresholds}")
+
+                if len(self.target_pass_at_k_thresholds) == 0:
+                    print(f"[PassAtKCallback] All thresholds reached! Stopping training.")
+                    control.should_training_stop = True
+                else:
+                    print(f"[PassAtKCallback] Continuing training to next threshold: {self.target_pass_at_k_thresholds[0]}")
 
         if self.prevWindow:
             if len(self.prevResults) > self.prevWindow:

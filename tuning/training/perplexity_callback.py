@@ -1,4 +1,8 @@
 import os
+import json
+import datetime
+import subprocess
+
 import torch
 import torch.nn.functional as F
 import numpy as np
@@ -6,11 +10,8 @@ from typing import List
 from transformers import TrainerCallback, TrainerControl, TrainerState
 from transformers.training_args import TrainingArguments
 import wandb
+
 from tuning.config import MODELS_DIR, MODELS_METADATA_DIR
-import os
-import subprocess
-import json, datetime
-import os, json
 
 class PerplexityStoppingCallback(TrainerCallback):
     def __init__(
@@ -22,9 +23,9 @@ class PerplexityStoppingCallback(TrainerCallback):
         model_name: str = None,
         prevWindow: int = None,
     ):
-        # Sort thresholds in descending order (lower perplexity = harder to reach)
+        # Sort thresholds in ascending order (hardest to easiest: 2.0, 2.5, 3.0)
+        # Lower perplexity = harder to reach, so we process from smallest to largest
         self.perplexity_thresholds = sorted(perplexity_thresholds, reverse=False)
-        self.completed_thresholds = set()  # Track which thresholds have been crossed
         self.test_dataset = test_dataset
         self.tokenizer = tokenizer
         self.num_samples = num_samples
@@ -34,7 +35,7 @@ class PerplexityStoppingCallback(TrainerCallback):
         self.prevWindow = prevWindow
 
         print(f"[PerplexityCallback] Initialized with perplexity_thresholds={self.perplexity_thresholds}")
-        print(f"[PerplexityCallback] Training will stop at final threshold: {self.perplexity_thresholds[-1]}")
+        print(f"[PerplexityCallback] Training will stop when hardest threshold is reached: {self.perplexity_thresholds[0]}")
         print(f"[PerplexityCallback] num_samples={num_samples}")
         print(f"[PerplexityCallback] Test dataset size: {len(test_dataset)}")
         print(f"Dataset sample 1st one: {test_dataset[0]}")
@@ -159,26 +160,35 @@ class PerplexityStoppingCallback(TrainerCallback):
         print(f"\n[PerplexityCallback] Step {state.global_step}, Data Points {data_points_seen}: PPL = {current_perplexity:.4f}")
         
         # Check each threshold and save checkpoint if crossed (Fork Strategy)
-        for threshold in self.perplexity_thresholds:
-            if self.prevWindow: continue
-            if threshold in self.completed_thresholds or current_perplexity > threshold:
-                continue
-            
-            print(f"[PerplexityCallback] Sweetspot threshold {threshold} reached!")
-            self.completed_thresholds.add(threshold)
-            
-            checkpoint_path = self._save_sweetspot_checkpoint(model, threshold, state, args)
+        # Thresholds are sorted ascending (hardest to easiest: 2.0, 2.5, 3.0)
+        # We iterate to find the hardest threshold that current_perplexity has reached
+        if not self.prevWindow:
+            reached_threshold = None
+            reached_index = None
 
-            dpo_data = 8192 - data_points_seen # Let's say we have 8192 datapoint budget
-            print(f"[PerplexityCallback] Launching DPO job with data points {dpo_data} at checkpoint {checkpoint_path}")
-            # subprocess.run(["sbatch", "/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/slurm/run_dpo.sh", self.model_name, "tuluif", str(dpo_data), checkpoint_path, str(data_points_seen), "ifeval", "dpo"], env=os.environ.copy())
+            for i, threshold in enumerate(self.perplexity_thresholds):
+                if current_perplexity <= threshold:
+                    reached_threshold = threshold
+                    reached_index = i
+                    break
 
-            if threshold == self.perplexity_thresholds[0]:
-                print(f"[PerplexityCallback] Final threshold {threshold} reached! Stopping training.")
-                control.should_training_stop = True
-            else:
-                print(f"[PerplexityCallback] Continuing training to next threshold...")
-            break  # Only handle one threshold per evaluation (which is the hardest )
+            if reached_threshold is not None:
+                print(f"[PerplexityCallback] Sweetspot threshold {reached_threshold} reached!")
+
+                checkpoint_path = self._save_sweetspot_checkpoint(model, reached_threshold, state, args)
+
+                dpo_data = 8192 - data_points_seen  # Let's say we have 8192 datapoint budget
+                print(f"[PerplexityCallback] Launching DPO job with data points {dpo_data} at checkpoint {checkpoint_path}")
+                # subprocess.run(["sbatch", "/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/slurm/run_dpo.sh", self.model_name, "tuluif", str(dpo_data), checkpoint_path, str(data_points_seen), "ifeval", "dpo"], env=os.environ.copy())
+
+                self.perplexity_thresholds = self.perplexity_thresholds[:reached_index]
+                print(f"[PerplexityCallback] Remaining thresholds: {self.perplexity_thresholds}")
+
+                if len(self.perplexity_thresholds) == 0:
+                    print(f"[PerplexityCallback] All thresholds reached! Stopping training.")
+                    control.should_training_stop = True
+                else:
+                    print(f"[PerplexityCallback] Continuing training to next threshold: {self.perplexity_thresholds[0]}")
         
         if self.prevWindow:
             if len(self.prevResults) > self.prevWindow:
