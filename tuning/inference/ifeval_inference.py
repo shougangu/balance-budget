@@ -3,6 +3,9 @@ from tuning.config import IFEVAL_OUTPUTS_DIR, RESPONSES_FILENAME
 from tuning.inference.vllm_utils import generate_responses_vllm, load_vlm_model
 from tuning.utils.gpt_utils import save_responses
 from typing import List, Dict, Optional
+import gc
+from vllm.distributed.parallel_state import destroy_model_parallel         
+
 
 def run_inference_ifeval(model_name: str, n_samples: int = 1, temperature: float = 0.5, 
                          save_results: bool = True, num_examples: Optional[int] = None) -> List[Dict]:
@@ -31,6 +34,15 @@ def run_inference_ifeval(model_name: str, n_samples: int = 1, temperature: float
         dataset=test_dataset["messages"]
     )
     
+     # ADD CLEANUP                                                               
+     
+    destroy_model_parallel()                                                    
+    del llm                                                                     
+    gc.collect()                                                                
+    torch.cuda.empty_cache()                                                    
+    if torch.cuda.is_available():                                               
+        torch.cuda.synchronize()                                                
+
     # Format results for pass@k evaluation
     # [{prompt: "", response: ""}, 
     #  {prompt: "", response:""}, ...]
