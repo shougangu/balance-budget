@@ -56,6 +56,8 @@ class PerplexityStoppingCallback(TrainerCallback):
 
         # Use data_points_seen as the checkpoint name suffix (e.g., llama3-8B_sft-tuluif-500)
         checkpoint_name = f"{self.model_name}_ppl-{threshold:.2f}_sft-{data_points_seen}"
+        if self.prevWindow:
+            checkpoint_name = f"{self.model_name}_pplWindow-{self.prevWindow}_sft-{data_points_seen}"
         checkpoint_path = os.path.join(MODELS_DIR, checkpoint_name)
 
         print(f"[PerplexityCallback] Saving sweetspot checkpoint to {checkpoint_path}")
@@ -152,7 +154,7 @@ class PerplexityStoppingCallback(TrainerCallback):
         
         current_perplexity = self.evaluate_perplexity(model)
         wandb.log({"eval/perplexity": current_perplexity, "train/global_step": state.global_step})
-        self.prevWindow.append(current_perplexity)
+        self.prevResults.append(current_perplexity)
         
         print(f"\n[PerplexityCallback] Step {state.global_step}, Data Points {data_points_seen}: PPL = {current_perplexity:.4f}")
         
@@ -182,5 +184,6 @@ class PerplexityStoppingCallback(TrainerCallback):
             if len(self.prevResults) > self.prevWindow:
                 if self.prevResults[-self.prevWindow] == min(self.prevResults[-self.prevWindow:]):
                     print(f"[PerplexityCallback] No improvement in last {self.prevWindow} evaluations. Stopping training.")
+                    self._save_sweetspot_checkpoint(model, threshold, state, args)
                     control.should_training_stop = True
         return control

@@ -167,6 +167,7 @@ cython_debug/
 
 
 /tuning/models/
+/tuning/models_metadata
 /tuning/outputs/
 /instruction_following_eval/
 /tuning/data/datasets/

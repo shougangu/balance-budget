@@ -131,8 +131,8 @@ class PassAtKStoppingCallback(TrainerCallback):
             "strict": self.strict,
         }
         
-        with open(self.metadata_path, "w") as f:
-            json.dump(metadata, f, indent=2)
+        with open(self.metadata_path, "a") as f:
+            f.write(json.dumps(metadata)+"\n")
         
         print(f"[PassAtKCallback] Sweetspot checkpoint saved with metadata at {self.metadata_path}")
         return checkpoint_path
@@ -148,7 +148,7 @@ class PassAtKStoppingCallback(TrainerCallback):
 
         llm = LLM(
             model=model_path,
-            gpu_memory_utilization=0.8,
+            gpu_memory_utilization=0.7,
             trust_remote_code=True,
         )
         
@@ -287,11 +287,11 @@ class PassAtKStoppingCallback(TrainerCallback):
         print(f"\n[PassAtKCallback] Step {state.global_step}, Data Points {data_points_seen}: "
               f"{scores_str} ({eval_type}, {scores['num_prompts_evaluated']} prompts)")
         
-        for threshold in self.target_pass_at_k_thresholds:
+        for i,threshold in enumerate(self.target_pass_at_k_thresholds):
             if self.prevWindow: continue
             if threshold in self.completed_thresholds or scores[f"pass_at_{self.stopping_k}"] < threshold:
                 continue  # Already handled this threshold
-
+            ## self.target_pass_at_k_thresholds = self.target_pass_at_k_thresholds[:i] check i =0 # Remove handled thresholds
             print(f"[PassAtKCallback] Checking threshold: pass@{self.stopping_k} >= {threshold:.4f}")
             self.completed_thresholds.add(threshold)
 
@@ -300,7 +300,7 @@ class PassAtKStoppingCallback(TrainerCallback):
 
             print(f"[PassAtKCallback] Sweetspot threshold {threshold} reached! ")
 
-            if threshold == self.target_pass_at_k_thresholds[-1]:
+            if threshold == self.target_pass_at_k_thresholds[0]:
                 print(f"[PassAtKCallback] Final threshold reached, stopping training.")
                 control.should_training_stop = True
             break

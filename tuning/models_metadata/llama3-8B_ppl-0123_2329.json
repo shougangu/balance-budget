@@ -1,2 +1,0 @@
-{"threshold_type": "perplexity", "threshold_value": 4.5, "global_step": 40, "checkpoint_path": "/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/models/llama3-8B_ppl-4.50_sft-640", "data_points_seen": 640}
-{"threshold_type": "perplexity", "threshold_value": 3.9, "global_step": 60, "checkpoint_path": "/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/models/llama3-8B_ppl-3.90_sft-960", "data_points_seen": 960}

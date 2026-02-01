@@ -1,0 +1,1066 @@
+🦥 Unsloth: Will patch your computer to enable 2x faster free finetuning.
+INFO 01-26 03:30:05 [__init__.py:244] Automatically detected platform cuda.
+🦥 Unsloth Zoo will now patch everything to make training faster!
+/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/pydantic/_internal/_generate_schema.py:2249: UnsupportedFieldAttributeWarning: The 'repr' attribute with value False was provided to the `Field()` function, which has no effect in the context it was used. 'repr' is field-specific metadata, and can only be attached to a model field using `Annotated` metadata or by assignment. This may have happened because an `Annotated` type alias using the `type` statement was used, or if the `Field()` function was attached to a single member of a union type.
+  warnings.warn(
+/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/pydantic/_internal/_generate_schema.py:2249: UnsupportedFieldAttributeWarning: The 'frozen' attribute with value True was provided to the `Field()` function, which has no effect in the context it was used. 'frozen' is field-specific metadata, and can only be attached to a model field using `Annotated` metadata or by assignment. This may have happened because an `Annotated` type alias using the `type` statement was used, or if the `Field()` function was attached to a single member of a union type.
+  warnings.warn(
+/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning
+Getting train dataset for run config: llama3-8B_sft-tuluif-8192
+Checking for dataset at /home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/data/datasets/sft-tuluif-8192
+Dataset already exists at /home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/data/datasets/sft-tuluif-8192
+Sampled dataset: DatasetDict({
+    train: Dataset({
+        features: ['id', 'prompt', 'messages', 'constraints'],
+        num_rows: 8192
+    })
+    test: Dataset({
+        features: ['id', 'prompt', 'messages', 'constraints'],
+        num_rows: 200
+    })
+})
+Example training row: {'id': 'personas_IF_9u3mcrurksv7hypq3xlppyba', 'prompt': 'Compile a detailed summary of the most recent case discussed on the podcast. Include the title of the episode wrapped in double angular brackets, i.e. <<title>>, and quote at least one statement made by the host during the discussion.', 'messages': [{'content': 'You are a helpful assistant who is an expert at responding to prompts by carefully following the given instructions', 'role': 'system'}, {'content': 'Compile a detailed summary of the most recent case discussed on the podcast. Include the title of the episode wrapped in double angular brackets, i.e. <<title>>, and quote at least one statement made by the host during the discussion.', 'role': 'user'}, {'content': "I'm sorry, but I don't have access to real-time data, including the most recent episodes of podcasts. If you provide me with some details from the episode, I'd be happy to help you compile a summary based on that information.", 'role': 'assistant'}], 'constraints': ['format:title', 'use quotation']}
+Example evaluation row: {'id': 'personas_IF_o3dewf33wk895zom2dbfye5u', 'prompt': 'I want to create a podcast where I explore the themes and motifs found in surreal dystopian literature, both mine and others. This podcast will dive deep into the artistic and philosophical underpinnings of this genre, aiming to become a leading voice in literary criticism. Can you guide me on how to effectively launch and grow this podcast? Include at least 3 **bold text** sections such as: **bold text 1**, **bold text 2**, etc., and incorporate a famous quote about dystopian literature.', 'messages': [{'content': 'You are a helpful assistant who is an expert at responding to prompts by carefully following the given instructions', 'role': 'system'}, {'content': 'I want to create a podcast where I explore the themes and motifs found in surreal dystopian literature, both mine and others. This podcast will dive deep into the artistic and philosophical underpinnings of this genre, aiming to become a leading voice in literary criticism. Can you guide me on how to effectively launch and grow this podcast? Include at least 3 **bold text** sections such as: **bold text 1**, **bold text 2**, etc., and incorporate a famous quote about dystopian literature.', 'role': 'user'}, {'content': 'Launching a podcast on surreal dystopian literature is a fascinating endeavor that requires a combination of passion, strategic planning, and thoughtful execution. Here\'s a guide to help you effectively launch and grow your podcast:\n\n**Identify Your Niche and Audience:** Begin by clearly defining what makes your podcast unique in the realm of dystopian literature. Consider focusing on specific sub-genres, authors, or themes that resonate with you. Understanding your target audience will help tailor your content to their interests and needs.\n\n**Develop Compelling Content:** Plan your episodes around intriguing themes and motifs found in surreal dystopian literature. Consider including analyses of classic works, like George Orwell\'s "1984" or Aldous Huxley\'s "Brave New World," alongside contemporary pieces. A quote to inspire your discussions might be Margaret Atwood\'s reflection: "A dystopia is a utopia that\'s gone wrong," which can serve as a launching point for exploring the thin line between utopian ideals and dystopian realities.\n\n**Leverage Expertise and Connections:** To establish credibility, invite authors, literary critics, and professors as guests to provide diverse perspectives. Your own insights as a writer can create a rich dialogue, blending personal experiences with broader literary critiques.\n\n**Invest in Quality Production:** Ensure high-quality audio and editing to maintain a professional standard. Consider investing in a good microphone and editing software. This attention to detail will enhance listener experience and retention.\n\n**Engage Your Audience:** Create a community around your podcast by encouraging listener interaction. Use social media platforms to engage with your audience, gather feedback, and promote upcoming episodes. Consider hosting live Q&A sessions or discussions to deepen listener involvement.\n\n**Market Strategically:** Utilize SEO techniques to make your podcast more discoverable. Write detailed show notes and transcriptions for each episode, including relevant keywords about the literature discussed. Collaborate with other podcasters or bloggers in the literary space to expand your reach.\n\n**Monitor and Adapt:** Regularly review analytics to understand which episodes resonate most with your audience. Be ready to adapt your content strategy based on listener feedback and trends in the literary world.\n\nBy focusing on these key areas, you can launch a podcast that not only explores the depths of surreal dystopian literature but also becomes a leading voice in literary criticism. Remember, consistency and authenticity are crucial to building a loyal listener base.', 'role': 'assistant'}], 'constraints': ['use quotation', 'format:number of highlighted sections']}
+==((====))==  Unsloth 2025.10.1: Fast Llama patching. Transformers: 4.56.1. vLLM: 0.9.2+computecanada.
+   \\   /|    NVIDIA L40S. Num GPUs = 1. Max memory: 44.403 GB. Platform: Linux.
+O^O/ \_/ \    Torch: 2.7.0. CUDA: 8.9. CUDA Toolkit: 12.6. Triton: 3.3.1
+\        /    Bfloat16 = TRUE. FA [Xformers = 0.0.30. FA2 = False]
+ "-____-"     Free license: http://github.com/unslothai/unsloth
+Unsloth: Fast downloading is enabled - ignore downloading bars which are red colored!
+Loading checkpoint shards:   0%|          | 0/4 [00:00<?, ?it/s]Loading checkpoint shards:  25%|██▌       | 1/4 [00:18<00:56, 18.73s/it]Loading checkpoint shards:  50%|█████     | 2/4 [00:37<00:37, 18.82s/it]Loading checkpoint shards:  75%|███████▌  | 3/4 [00:55<00:18, 18.52s/it]Loading checkpoint shards: 100%|██████████| 4/4 [01:00<00:00, 12.91s/it]Loading checkpoint shards: 100%|██████████| 4/4 [01:00<00:00, 15.02s/it]
+Unsloth: Will map <|im_end|> to EOS = <|end_of_text|>.
+DatasetDict({
+    train: Dataset({
+        features: ['id', 'prompt', 'messages', 'constraints', 'text'],
+        num_rows: 8192
+    })
+    test: Dataset({
+        features: ['id', 'prompt', 'messages', 'constraints', 'text'],
+        num_rows: 200
+    })
+})
+{'id': 'personas_IF_9u3mcrurksv7hypq3xlppyba', 'prompt': 'Compile a detailed summary of the most recent case discussed on the podcast. Include the title of the episode wrapped in double angular brackets, i.e. <<title>>, and quote at least one statement made by the host during the discussion.', 'messages': [{'content': 'You are a helpful assistant who is an expert at responding to prompts by carefully following the given instructions', 'role': 'system'}, {'content': 'Compile a detailed summary of the most recent case discussed on the podcast. Include the title of the episode wrapped in double angular brackets, i.e. <<title>>, and quote at least one statement made by the host during the discussion.', 'role': 'user'}, {'content': "I'm sorry, but I don't have access to real-time data, including the most recent episodes of podcasts. If you provide me with some details from the episode, I'd be happy to help you compile a summary based on that information.", 'role': 'assistant'}], 'constraints': ['format:title', 'use quotation'], 'text': "<|im_start|>system\nYou are a helpful assistant who is an expert at responding to prompts by carefully following the given instructions<|im_end|>\n<|im_start|>user\nCompile a detailed summary of the most recent case discussed on the podcast. Include the title of the episode wrapped in double angular brackets, i.e. <<title>>, and quote at least one statement made by the host during the discussion.<|im_end|>\n<|im_start|>assistant\nI'm sorry, but I don't have access to real-time data, including the most recent episodes of podcasts. If you provide me with some details from the episode, I'd be happy to help you compile a summary based on that information.<|im_end|>\n"}
+Unsloth 2025.10.1 patched 32 layers with 32 QKV layers, 32 O layers and 32 MLP layers.
+[PerplexityCallback] Initialized with perplexity_thresholds=[3.0, 3.25, 3.5, 3.75, 4.0, 5.0, 6.0]
+[PerplexityCallback] Training will stop at final threshold: 6.0
+[PerplexityCallback] num_samples=200
+[PerplexityCallback] Test dataset size: 200
+Dataset sample 1st one: {'id': 'personas_IF_o3dewf33wk895zom2dbfye5u', 'prompt': 'I want to create a podcast where I explore the themes and motifs found in surreal dystopian literature, both mine and others. This podcast will dive deep into the artistic and philosophical underpinnings of this genre, aiming to become a leading voice in literary criticism. Can you guide me on how to effectively launch and grow this podcast? Include at least 3 **bold text** sections such as: **bold text 1**, **bold text 2**, etc., and incorporate a famous quote about dystopian literature.', 'messages': [{'content': 'You are a helpful assistant who is an expert at responding to prompts by carefully following the given instructions', 'role': 'system'}, {'content': 'I want to create a podcast where I explore the themes and motifs found in surreal dystopian literature, both mine and others. This podcast will dive deep into the artistic and philosophical underpinnings of this genre, aiming to become a leading voice in literary criticism. Can you guide me on how to effectively launch and grow this podcast? Include at least 3 **bold text** sections such as: **bold text 1**, **bold text 2**, etc., and incorporate a famous quote about dystopian literature.', 'role': 'user'}, {'content': 'Launching a podcast on surreal dystopian literature is a fascinating endeavor that requires a combination of passion, strategic planning, and thoughtful execution. Here\'s a guide to help you effectively launch and grow your podcast:\n\n**Identify Your Niche and Audience:** Begin by clearly defining what makes your podcast unique in the realm of dystopian literature. Consider focusing on specific sub-genres, authors, or themes that resonate with you. Understanding your target audience will help tailor your content to their interests and needs.\n\n**Develop Compelling Content:** Plan your episodes around intriguing themes and motifs found in surreal dystopian literature. Consider including analyses of classic works, like George Orwell\'s "1984" or Aldous Huxley\'s "Brave New World," alongside contemporary pieces. A quote to inspire your discussions might be Margaret Atwood\'s reflection: "A dystopia is a utopia that\'s gone wrong," which can serve as a launching point for exploring the thin line between utopian ideals and dystopian realities.\n\n**Leverage Expertise and Connections:** To establish credibility, invite authors, literary critics, and professors as guests to provide diverse perspectives. Your own insights as a writer can create a rich dialogue, blending personal experiences with broader literary critiques.\n\n**Invest in Quality Production:** Ensure high-quality audio and editing to maintain a professional standard. Consider investing in a good microphone and editing software. This attention to detail will enhance listener experience and retention.\n\n**Engage Your Audience:** Create a community around your podcast by encouraging listener interaction. Use social media platforms to engage with your audience, gather feedback, and promote upcoming episodes. Consider hosting live Q&A sessions or discussions to deepen listener involvement.\n\n**Market Strategically:** Utilize SEO techniques to make your podcast more discoverable. Write detailed show notes and transcriptions for each episode, including relevant keywords about the literature discussed. Collaborate with other podcasters or bloggers in the literary space to expand your reach.\n\n**Monitor and Adapt:** Regularly review analytics to understand which episodes resonate most with your audience. Be ready to adapt your content strategy based on listener feedback and trends in the literary world.\n\nBy focusing on these key areas, you can launch a podcast that not only explores the depths of surreal dystopian literature but also becomes a leading voice in literary criticism. Remember, consistency and authenticity are crucial to building a loyal listener base.', 'role': 'assistant'}], 'constraints': ['use quotation', 'format:number of highlighted sections'], 'text': '<|im_start|>system\nYou are a helpful assistant who is an expert at responding to prompts by carefully following the given instructions<|im_end|>\n<|im_start|>user\nI want to create a podcast where I explore the themes and motifs found in surreal dystopian literature, both mine and others. This podcast will dive deep into the artistic and philosophical underpinnings of this genre, aiming to become a leading voice in literary criticism. Can you guide me on how to effectively launch and grow this podcast? Include at least 3 **bold text** sections such as: **bold text 1**, **bold text 2**, etc., and incorporate a famous quote about dystopian literature.<|im_end|>\n<|im_start|>assistant\nLaunching a podcast on surreal dystopian literature is a fascinating endeavor that requires a combination of passion, strategic planning, and thoughtful execution. Here\'s a guide to help you effectively launch and grow your podcast:\n\n**Identify Your Niche and Audience:** Begin by clearly defining what makes your podcast unique in the realm of dystopian literature. Consider focusing on specific sub-genres, authors, or themes that resonate with you. Understanding your target audience will help tailor your content to their interests and needs.\n\n**Develop Compelling Content:** Plan your episodes around intriguing themes and motifs found in surreal dystopian literature. Consider including analyses of classic works, like George Orwell\'s "1984" or Aldous Huxley\'s "Brave New World," alongside contemporary pieces. A quote to inspire your discussions might be Margaret Atwood\'s reflection: "A dystopia is a utopia that\'s gone wrong," which can serve as a launching point for exploring the thin line between utopian ideals and dystopian realities.\n\n**Leverage Expertise and Connections:** To establish credibility, invite authors, literary critics, and professors as guests to provide diverse perspectives. Your own insights as a writer can create a rich dialogue, blending personal experiences with broader literary critiques.\n\n**Invest in Quality Production:** Ensure high-quality audio and editing to maintain a professional standard. Consider investing in a good microphone and editing software. This attention to detail will enhance listener experience and retention.\n\n**Engage Your Audience:** Create a community around your podcast by encouraging listener interaction. Use social media platforms to engage with your audience, gather feedback, and promote upcoming episodes. Consider hosting live Q&A sessions or discussions to deepen listener involvement.\n\n**Market Strategically:** Utilize SEO techniques to make your podcast more discoverable. Write detailed show notes and transcriptions for each episode, including relevant keywords about the literature discussed. Collaborate with other podcasters or bloggers in the literary space to expand your reach.\n\n**Monitor and Adapt:** Regularly review analytics to understand which episodes resonate most with your audience. Be ready to adapt your content strategy based on listener feedback and trends in the literary world.\n\nBy focusing on these key areas, you can launch a podcast that not only explores the depths of surreal dystopian literature but also becomes a leading voice in literary criticism. Remember, consistency and authenticity are crucial to building a loyal listener base.<|im_end|>\n'}
+[SFT] Perplexity thresholds: [6.0, 5.0, 4.0, 3.75, 3.5, 3.25, 3.0]
+[SFT] Will checkpoint at each threshold and stop at final: 3.0
+{'output_dir': '/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/models/llama3-8B_sft-tuluif-8192', 'overwrite_output_dir': False, 'do_train': False, 'do_eval': True, 'do_predict': False, 'eval_strategy': 'steps', 'prediction_loss_only': False, 'per_device_train_batch_size': 1, 'per_device_eval_batch_size': 1, 'per_gpu_train_batch_size': None, 'per_gpu_eval_batch_size': None, 'gradient_accumulation_steps': 16, 'eval_accumulation_steps': 16, 'eval_delay': 0, 'torch_empty_cache_steps': None, 'learning_rate': 5e-05, 'weight_decay': 0.01, 'adam_beta1': 0.9, 'adam_beta2': 0.999, 'adam_epsilon': 1e-08, 'max_grad_norm': 1.0, 'num_train_epochs': 2, 'max_steps': -1, 'lr_scheduler_type': 'cosine', 'lr_scheduler_kwargs': {}, 'warmup_ratio': 0.1, 'warmup_steps': 0, 'log_level': 'passive', 'log_level_replica': 'warning', 'log_on_each_node': True, 'logging_dir': '/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/models/llama3-8B_sft-tuluif-8192/runs/Jan26_03-31-34_kn111', 'logging_strategy': 'steps', 'logging_first_step': False, 'logging_steps': 1, 'logging_nan_inf_filter': True, 'save_strategy': 'no', 'save_steps': 20, 'save_total_limit': 1, 'save_safetensors': True, 'save_on_each_node': False, 'save_only_model': False, 'restore_callback_states_from_checkpoint': False, 'no_cuda': False, 'use_cpu': False, 'use_mps_device': False, 'seed': 42, 'data_seed': None, 'jit_mode_eval': False, 'use_ipex': False, 'bf16': True, 'fp16': False, 'fp16_opt_level': 'O1', 'half_precision_backend': 'auto', 'bf16_full_eval': True, 'fp16_full_eval': False, 'tf32': None, 'local_rank': 0, 'ddp_backend': None, 'tpu_num_cores': None, 'tpu_metrics_debug': False, 'debug': [], 'dataloader_drop_last': False, 'eval_steps': 20, 'dataloader_num_workers': 0, 'dataloader_prefetch_factor': None, 'past_index': -1, 'run_name': None, 'disable_tqdm': False, 'remove_unused_columns': True, 'label_names': None, 'load_best_model_at_end': False, 'metric_for_best_model': None, 'greater_is_better': None, 'ignore_data_skip': False, 'fsdp': [], 'fsdp_min_num_params': 0, 'fsdp_config': {'min_num_params': 0, 'xla': False, 'xla_fsdp_v2': False, 'xla_fsdp_grad_ckpt': False}, 'fsdp_transformer_layer_cls_to_wrap': None, 'accelerator_config': {'split_batches': False, 'dispatch_batches': None, 'even_batches': True, 'use_seedable_sampler': True, 'non_blocking': False, 'gradient_accumulation_kwargs': None}, 'parallelism_config': None, 'deepspeed': None, 'label_smoothing_factor': 0.0, 'optim': 'adamw_8bit', 'optim_args': None, 'adafactor': False, 'group_by_length': False, 'length_column_name': 'length', 'report_to': ['wandb'], 'ddp_find_unused_parameters': None, 'ddp_bucket_cap_mb': None, 'ddp_broadcast_buffers': None, 'dataloader_pin_memory': True, 'dataloader_persistent_workers': False, 'skip_memory_metrics': True, 'use_legacy_prediction_loop': False, 'push_to_hub': False, 'resume_from_checkpoint': None, 'hub_model_id': None, 'hub_strategy': 'every_save', 'hub_token': '<HUB_TOKEN>', 'hub_private_repo': None, 'hub_always_push': False, 'hub_revision': None, 'gradient_checkpointing': False, 'gradient_checkpointing_kwargs': None, 'include_inputs_for_metrics': False, 'include_for_metrics': [], 'eval_do_concat_batches': True, 'fp16_backend': 'auto', 'push_to_hub_model_id': None, 'push_to_hub_organization': None, 'push_to_hub_token': '<PUSH_TO_HUB_TOKEN>', 'mp_parameters': '', 'auto_find_batch_size': False, 'full_determinism': False, 'torchdynamo': None, 'ray_scope': 'last', 'ddp_timeout': 1800, 'torch_compile': False, 'torch_compile_backend': None, 'torch_compile_mode': None, 'include_tokens_per_second': False, 'include_num_input_tokens_seen': False, 'neftune_noise_alpha': None, 'optim_target_modules': None, 'batch_eval_metrics': False, 'eval_on_start': False, 'use_liger_kernel': False, 'liger_kernel_config': None, 'eval_use_gather_object': False, 'average_tokens_across_devices': False, 'model_init_kwargs': None, 'chat_template_path': None, 'dataset_text_field': 'text', 'dataset_kwargs': None, 'dataset_num_proc': None, 'eos_token': '<EOS_TOKEN>', 'pad_token': '<PAD_TOKEN>', 'max_length': 1024, 'packing': False, 'packing_strategy': 'bfd', 'padding_free': False, 'pad_to_multiple_of': None, 'eval_packing': None, 'completion_only_loss': None, 'assistant_only_loss': False, 'loss_type': 'nll', 'activation_offloading': False}
+==((====))==  Unsloth - 2x faster free finetuning | Num GPUs used = 1
+   \\   /|    Num examples = 8,192 | Num Epochs = 2 | Total steps = 1,024
+O^O/ \_/ \    Batch size per device = 1 | Gradient accumulation steps = 16
+\        /    Data Parallel GPUs = 1 | Total batch size (1 x 16 x 1) = 16
+ "-____-"     Trainable parameters = 83,886,080 of 8,114,147,328 (1.03% trained)
+wandb: Currently logged in as: shougan (shougan-university-of-waterloo) to https://api.wandb.ai. Use `wandb login --relogin` to force relogin
+wandb: Tracking run with wandb version 0.21.0
+wandb: Run data is saved locally in /project/6105902/shougan/balance-budget/wandb/run-20260126_033137-wab6zm88
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run elated-galaxy-63
+wandb: ⭐️ View project at https://wandb.ai/shougan-university-of-waterloo/huggingface
+wandb: 🚀 View run at https://wandb.ai/shougan-university-of-waterloo/huggingface/runs/wab6zm88
+[PerplexityCallback] on_train_begin: model_name=llama3-8B
+  0%|          | 0/1024 [00:00<?, ?it/s]Unsloth: Will smartly offload gradients to save VRAM!
+  0%|          | 1/1024 [00:06<1:47:20,  6.30s/it]                                                  {'loss': 2.0671, 'grad_norm': 1.3179045915603638, 'learning_rate': 0.0, 'epoch': 0.0}
+  0%|          | 1/1024 [00:06<1:47:20,  6.30s/it]  0%|          | 2/1024 [00:10<1:31:04,  5.35s/it]                                                  {'loss': 1.7509, 'grad_norm': 1.0592836141586304, 'learning_rate': 4.854368932038835e-07, 'epoch': 0.0}
+  0%|          | 2/1024 [00:10<1:31:04,  5.35s/it]  0%|          | 3/1024 [00:15<1:25:21,  5.02s/it]                                                  {'loss': 1.7528, 'grad_norm': 1.0608100891113281, 'learning_rate': 9.70873786407767e-07, 'epoch': 0.01}
+  0%|          | 3/1024 [00:15<1:25:21,  5.02s/it]  0%|          | 4/1024 [00:20<1:21:27,  4.79s/it]                                                  {'loss': 1.8808, 'grad_norm': 1.1759058237075806, 'learning_rate': 1.4563106796116506e-06, 'epoch': 0.01}
+  0%|          | 4/1024 [00:20<1:21:27,  4.79s/it]  0%|          | 5/1024 [00:24<1:19:43,  4.69s/it]                                                  {'loss': 1.6236, 'grad_norm': 1.0981770753860474, 'learning_rate': 1.941747572815534e-06, 'epoch': 0.01}
+  0%|          | 5/1024 [00:24<1:19:43,  4.69s/it]  1%|          | 6/1024 [00:29<1:19:09,  4.67s/it]                                                  {'loss': 1.6245, 'grad_norm': 0.9282349348068237, 'learning_rate': 2.4271844660194174e-06, 'epoch': 0.01}
+  1%|          | 6/1024 [00:29<1:19:09,  4.67s/it]  1%|          | 7/1024 [00:33<1:18:39,  4.64s/it]                                                  {'loss': 1.6456, 'grad_norm': 1.0022984743118286, 'learning_rate': 2.912621359223301e-06, 'epoch': 0.01}
+  1%|          | 7/1024 [00:33<1:18:39,  4.64s/it]  1%|          | 8/1024 [00:38<1:17:18,  4.57s/it]                                                  {'loss': 1.9257, 'grad_norm': 1.4004312753677368, 'learning_rate': 3.3980582524271844e-06, 'epoch': 0.02}
+  1%|          | 8/1024 [00:38<1:17:18,  4.57s/it]  1%|          | 9/1024 [00:42<1:16:50,  4.54s/it]                                                  {'loss': 1.8669, 'grad_norm': 1.102808952331543, 'learning_rate': 3.883495145631068e-06, 'epoch': 0.02}
+  1%|          | 9/1024 [00:42<1:16:50,  4.54s/it]  1%|          | 10/1024 [00:47<1:16:15,  4.51s/it]                                                   {'loss': 2.0093, 'grad_norm': 1.4665908813476562, 'learning_rate': 4.368932038834952e-06, 'epoch': 0.02}
+  1%|          | 10/1024 [00:47<1:16:15,  4.51s/it]  1%|          | 11/1024 [00:51<1:15:58,  4.50s/it]                                                   {'loss': 1.7077, 'grad_norm': 1.1855374574661255, 'learning_rate': 4.854368932038835e-06, 'epoch': 0.02}
+  1%|          | 11/1024 [00:51<1:15:58,  4.50s/it]  1%|          | 12/1024 [00:56<1:15:33,  4.48s/it]                                                   {'loss': 1.9837, 'grad_norm': 1.3295162916183472, 'learning_rate': 5.3398058252427185e-06, 'epoch': 0.02}
+  1%|          | 12/1024 [00:56<1:15:33,  4.48s/it]  1%|▏         | 13/1024 [01:00<1:16:03,  4.51s/it]                                                   {'loss': 1.8537, 'grad_norm': 1.2931373119354248, 'learning_rate': 5.825242718446602e-06, 'epoch': 0.03}
+  1%|▏         | 13/1024 [01:00<1:16:03,  4.51s/it]  1%|▏         | 14/1024 [01:05<1:15:25,  4.48s/it]                                                   {'loss': 1.8809, 'grad_norm': 1.3097862005233765, 'learning_rate': 6.310679611650486e-06, 'epoch': 0.03}
+  1%|▏         | 14/1024 [01:05<1:15:25,  4.48s/it]  1%|▏         | 15/1024 [01:09<1:14:55,  4.45s/it]                                                   {'loss': 1.9105, 'grad_norm': 1.3480321168899536, 'learning_rate': 6.796116504854369e-06, 'epoch': 0.03}
+  1%|▏         | 15/1024 [01:09<1:14:55,  4.45s/it]  2%|▏         | 16/1024 [01:13<1:14:50,  4.45s/it]                                                   {'loss': 1.8157, 'grad_norm': 1.2618911266326904, 'learning_rate': 7.281553398058253e-06, 'epoch': 0.03}
+  2%|▏         | 16/1024 [01:13<1:14:50,  4.45s/it]  2%|▏         | 17/1024 [01:18<1:16:01,  4.53s/it]                                                   {'loss': 1.5202, 'grad_norm': 0.945288896560669, 'learning_rate': 7.766990291262136e-06, 'epoch': 0.03}
+  2%|▏         | 17/1024 [01:18<1:16:01,  4.53s/it]  2%|▏         | 18/1024 [01:23<1:15:55,  4.53s/it]                                                   {'loss': 1.7175, 'grad_norm': 1.0555577278137207, 'learning_rate': 8.25242718446602e-06, 'epoch': 0.04}
+  2%|▏         | 18/1024 [01:23<1:15:55,  4.53s/it]  2%|▏         | 19/1024 [01:27<1:15:09,  4.49s/it]                                                   {'loss': 1.9287, 'grad_norm': 1.5313795804977417, 'learning_rate': 8.737864077669904e-06, 'epoch': 0.04}
+  2%|▏         | 19/1024 [01:27<1:15:09,  4.49s/it]  2%|▏         | 20/1024 [01:32<1:15:43,  4.53s/it]                                                   {'loss': 1.5459, 'grad_norm': 0.925865888595581, 'learning_rate': 9.223300970873788e-06, 'epoch': 0.04}
+  2%|▏         | 20/1024 [01:32<1:15:43,  4.53s/it]Unsloth: Not an error, but LlamaForCausalLM does not accept `num_items_in_batch`.
+Using gradient accumulation will be very slightly less accurate.
+Read more on gradient accumulation issues here: https://unsloth.ai/blog/gradient
+
+  0%|          | 0/200 [00:00<?, ?it/s][A
+  2%|▏         | 3/200 [00:00<00:10, 19.30it/s][A
+  2%|▎         | 5/200 [00:00<00:12, 15.30it/s][A
+  4%|▎         | 7/200 [00:00<00:13, 14.84it/s][A
+  4%|▍         | 9/200 [00:00<00:13, 14.43it/s][A
+  6%|▌         | 11/200 [00:00<00:13, 14.21it/s][A
+  6%|▋         | 13/200 [00:00<00:13, 14.18it/s][A
+  8%|▊         | 15/200 [00:01<00:14, 13.13it/s][A
+  8%|▊         | 17/200 [00:01<00:14, 12.36it/s][A
+ 10%|▉         | 19/200 [00:01<00:14, 12.82it/s][A
+ 10%|█         | 21/200 [00:01<00:13, 13.31it/s][A
+ 12%|█▏        | 23/200 [00:01<00:13, 13.45it/s][A
+ 12%|█▎        | 25/200 [00:01<00:14, 12.34it/s][A
+ 14%|█▎        | 27/200 [00:02<00:14, 11.54it/s][A
+ 14%|█▍        | 29/200 [00:02<00:14, 11.83it/s][A
+ 16%|█▌        | 31/200 [00:02<00:13, 12.45it/s][A
+ 16%|█▋        | 33/200 [00:02<00:14, 11.30it/s][A
+ 18%|█▊        | 35/200 [00:02<00:14, 11.65it/s][A
+ 18%|█▊        | 37/200 [00:02<00:13, 12.25it/s][A
+ 20%|█▉        | 39/200 [00:03<00:12, 12.77it/s][A
+ 20%|██        | 41/200 [00:03<00:12, 13.24it/s][A
+ 22%|██▏       | 43/200 [00:03<00:11, 13.56it/s][A
+ 22%|██▎       | 45/200 [00:03<00:11, 13.78it/s][A
+ 24%|██▎       | 47/200 [00:03<00:11, 13.47it/s][A
+ 24%|██▍       | 49/200 [00:03<00:12, 12.53it/s][A
+ 26%|██▌       | 51/200 [00:03<00:11, 12.84it/s][A
+ 26%|██▋       | 53/200 [00:04<00:11, 12.96it/s][A
+ 28%|██▊       | 55/200 [00:04<00:10, 13.32it/s][A
+ 28%|██▊       | 57/200 [00:04<00:10, 13.65it/s][A
+ 30%|██▉       | 59/200 [00:04<00:10, 13.86it/s][A
+ 30%|███       | 61/200 [00:04<00:10, 13.08it/s][A
+ 32%|███▏      | 63/200 [00:04<00:10, 13.41it/s][A
+ 32%|███▎      | 65/200 [00:04<00:10, 12.78it/s][A
+ 34%|███▎      | 67/200 [00:05<00:10, 13.01it/s][A
+ 34%|███▍      | 69/200 [00:05<00:09, 13.26it/s][A
+ 36%|███▌      | 71/200 [00:05<00:10, 12.03it/s][A
+ 36%|███▋      | 73/200 [00:05<00:10, 12.39it/s][A
+ 38%|███▊      | 75/200 [00:05<00:09, 12.66it/s][A
+ 38%|███▊      | 77/200 [00:05<00:09, 13.10it/s][A
+ 40%|███▉      | 79/200 [00:06<00:08, 13.49it/s][A
+ 40%|████      | 81/200 [00:06<00:09, 12.69it/s][A
+ 42%|████▏     | 83/200 [00:06<00:08, 13.13it/s][A
+ 42%|████▎     | 85/200 [00:06<00:08, 13.51it/s][A
+ 44%|████▎     | 87/200 [00:06<00:08, 13.60it/s][A
+ 44%|████▍     | 89/200 [00:06<00:08, 13.62it/s][A
+ 46%|████▌     | 91/200 [00:06<00:07, 13.80it/s][A
+ 46%|████▋     | 93/200 [00:07<00:07, 13.90it/s][A
+ 48%|████▊     | 95/200 [00:07<00:07, 13.84it/s][A
+ 48%|████▊     | 97/200 [00:07<00:08, 12.36it/s][A
+ 50%|████▉     | 99/200 [00:07<00:07, 12.71it/s][A
+ 50%|█████     | 101/200 [00:07<00:07, 13.10it/s][A
+ 52%|█████▏    | 103/200 [00:07<00:07, 13.46it/s][A
+ 52%|█████▎    | 105/200 [00:08<00:08, 10.68it/s][A
+ 54%|█████▎    | 107/200 [00:08<00:08, 11.13it/s][A
+ 55%|█████▍    | 109/200 [00:08<00:07, 11.94it/s][A
+ 56%|█████▌    | 111/200 [00:08<00:07, 12.56it/s][A
+ 56%|█████▋    | 113/200 [00:08<00:07, 11.85it/s][A
+ 57%|█████▊    | 115/200 [00:08<00:06, 12.30it/s][A
+ 58%|█████▊    | 117/200 [00:09<00:07, 11.81it/s][A
+ 60%|█████▉    | 119/200 [00:09<00:06, 12.44it/s][A
+ 60%|██████    | 121/200 [00:09<00:06, 12.86it/s][A
+ 62%|██████▏   | 123/200 [00:09<00:05, 13.27it/s][A
+ 62%|██████▎   | 125/200 [00:09<00:05, 13.21it/s][A
+ 64%|██████▎   | 127/200 [00:09<00:05, 13.47it/s][A
+ 64%|██████▍   | 129/200 [00:10<00:05, 12.62it/s][A
+ 66%|██████▌   | 131/200 [00:10<00:07,  8.70it/s][A
+ 66%|██████▋   | 133/200 [00:10<00:06,  9.61it/s][A
+ 68%|██████▊   | 135/200 [00:10<00:06, 10.62it/s][A
+ 68%|██████▊   | 137/200 [00:10<00:05, 11.53it/s][A
+ 70%|██████▉   | 139/200 [00:10<00:04, 12.30it/s][A
+ 70%|███████   | 141/200 [00:11<00:04, 12.88it/s][A
+ 72%|███████▏  | 143/200 [00:11<00:04, 12.90it/s][A
+ 72%|███████▎  | 145/200 [00:11<00:04, 12.56it/s][A
+ 74%|███████▎  | 147/200 [00:11<00:05,  9.73it/s][A
+ 74%|███████▍  | 149/200 [00:11<00:04, 10.80it/s][A
+ 76%|███████▌  | 151/200 [00:12<00:04, 11.35it/s][A
+ 76%|███████▋  | 153/200 [00:12<00:03, 12.07it/s][A
+ 78%|███████▊  | 155/200 [00:12<00:03, 12.69it/s][A
+ 78%|███████▊  | 157/200 [00:12<00:03, 13.25it/s][A
+ 80%|███████▉  | 159/200 [00:12<00:02, 13.69it/s][A
+ 80%|████████  | 161/200 [00:12<00:02, 13.08it/s][A
+ 82%|████████▏ | 163/200 [00:12<00:02, 12.49it/s][A
+ 82%|████████▎ | 165/200 [00:13<00:02, 12.99it/s][A
+ 84%|████████▎ | 167/200 [00:13<00:02, 13.46it/s][A
+ 84%|████████▍ | 169/200 [00:13<00:02, 13.82it/s][A
+ 86%|████████▌ | 171/200 [00:13<00:02, 13.94it/s][A
+ 86%|████████▋ | 173/200 [00:13<00:01, 14.10it/s][A
+ 88%|████████▊ | 175/200 [00:13<00:01, 14.17it/s][A
+ 88%|████████▊ | 177/200 [00:13<00:01, 12.78it/s][A
+ 90%|████████▉ | 179/200 [00:14<00:01, 13.19it/s][A
+ 90%|█████████ | 181/200 [00:14<00:01, 12.17it/s][A
+ 92%|█████████▏| 183/200 [00:14<00:01, 12.61it/s][A
+ 92%|█████████▎| 185/200 [00:14<00:01, 13.10it/s][A
+ 94%|█████████▎| 187/200 [00:14<00:00, 13.48it/s][A
+ 94%|█████████▍| 189/200 [00:14<00:00, 13.69it/s][A
+ 96%|█████████▌| 191/200 [00:15<00:00, 13.71it/s][A
+ 96%|█████████▋| 193/200 [00:15<00:00, 12.95it/s][A
+ 98%|█████████▊| 195/200 [00:15<00:00, 12.62it/s][A
+ 98%|█████████▊| 197/200 [00:15<00:00, 13.06it/s][A
+100%|█████████▉| 199/200 [00:15<00:00, 12.98it/s][A                                                   
+                                                 [A{'eval_loss': 1.988945484161377, 'eval_runtime': 15.892, 'eval_samples_per_second': 12.585, 'eval_steps_per_second': 12.585, 'epoch': 0.04}
+  2%|▏         | 20/1024 [01:48<1:15:43,  4.53s/it]
+100%|██████████| 200/200 [00:15<00:00, 12.98it/s][A
+100%|██████████| 200/200 [00:29<00:00, 12.98it/s][A/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/numpy/core/fromnumeric.py:3504: RuntimeWarning: Mean of empty slice.
+  return _methods._mean(a, axis=axis, dtype=dtype,
+/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/numpy/core/_methods.py:129: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+
+[PerplexityCallback] Step 20, Data Points 320: PPL = nan
+[PerplexityCallback] Sweetspot threshold 3.0 reached!
+[PerplexityCallback] Saving sweetspot checkpoint to /home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/models/llama3-8B_ppl-3.00_sft-320
+Found HuggingFace hub cache directory: /home/shougan/.cache/huggingface/hub
+
+
+Fetching 1 files:   0%|          | 0/1 [00:00<?, ?it/s][A[A
+
+Fetching 1 files: 100%|██████████| 1/1 [00:00<00:00,  3.50it/s][A[AFetching 1 files: 100%|██████████| 1/1 [00:00<00:00,  3.48it/s]
+Checking cache directory for required files...
+
+
+Unsloth: Copying 4 files from cache to `/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/models/llama3-8B_ppl-3.00_sft-320`:   0%|          | 0/4 [00:00<?, ?it/s][A[A
+
+Unsloth: Copying 4 files from cache to `/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/models/llama3-8B_ppl-3.00_sft-320`:  25%|██▌       | 1/4 [00:05<00:16,  5.37s/it][A[A
+
+Unsloth: Copying 4 files from cache to `/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/models/llama3-8B_ppl-3.00_sft-320`:  50%|█████     | 2/4 [00:10<00:10,  5.21s/it][A[A
+
+Unsloth: Copying 4 files from cache to `/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/models/llama3-8B_ppl-3.00_sft-320`:  75%|███████▌  | 3/4 [00:15<00:05,  5.26s/it][A[A
+
+Unsloth: Copying 4 files from cache to `/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/models/llama3-8B_ppl-3.00_sft-320`: 100%|██████████| 4/4 [00:16<00:00,  3.65s/it][A[AUnsloth: Copying 4 files from cache to `/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/models/llama3-8B_ppl-3.00_sft-320`: 100%|██████████| 4/4 [00:16<00:00,  4.24s/it]
+Successfully copied all 4 files from cache to `/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/models/llama3-8B_ppl-3.00_sft-320`
+
+
+Unsloth: Preparing safetensor model files:   0%|          | 0/4 [00:00<?, ?it/s][A[AUnsloth: Preparing safetensor model files: 100%|██████████| 4/4 [00:00<00:00, 25731.93it/s]
+
+
+Unsloth: Merging weights into 16bit:   0%|          | 0/4 [00:00<?, ?it/s][A[A
+
+Unsloth: Merging weights into 16bit:  25%|██▌       | 1/4 [00:21<01:05, 21.86s/it][A[A
+
+Unsloth: Merging weights into 16bit:  50%|█████     | 2/4 [00:44<00:44, 22.20s/it][A[A
+
+Unsloth: Merging weights into 16bit:  75%|███████▌  | 3/4 [01:08<00:23, 23.01s/it][A[A
+
+Unsloth: Merging weights into 16bit: 100%|██████████| 4/4 [01:12<00:00, 15.70s/it][A[AUnsloth: Merging weights into 16bit: 100%|██████████| 4/4 [01:12<00:00, 18.20s/it]
+Unsloth: Merge process complete. Saved to `/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/models/llama3-8B_ppl-3.00_sft-320`
+[PerplexityCallback] Sweetspot checkpoint saved with metadata at /home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/models_metadata/llama3-8B_ppl-0126_0331.json
+[PerplexityCallback] Launching DPO job with data points 7872 at checkpoint /home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/models/llama3-8B_ppl-3.00_sft-320
+[PerplexityCallback] Final threshold 3.0 reached! Stopping training.
+
+                                                 [A                                                   {'train_runtime': 219.6005, 'train_samples_per_second': 74.608, 'train_steps_per_second': 4.663, 'train_loss': 1.8005758762359618, 'epoch': 0.04}
+  2%|▏         | 20/1024 [03:37<1:15:43,  4.53s/it]  2%|▏         | 20/1024 [03:37<3:02:05, 10.88s/it]
+Found HuggingFace hub cache directory: /home/shougan/.cache/huggingface/hub
+Fetching 1 files:   0%|          | 0/1 [00:00<?, ?it/s]Fetching 1 files: 100%|██████████| 1/1 [00:00<00:00, 60.83it/s]
+Checking cache directory for required files...
+Unsloth: Copying 4 files from cache to `/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/models/llama3-8B_sft-tuluif-8192`:   0%|          | 0/4 [00:00<?, ?it/s]Unsloth: Copying 4 files from cache to `/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/models/llama3-8B_sft-tuluif-8192`:  25%|██▌       | 1/4 [00:05<00:16,  5.54s/it]Unsloth: Copying 4 files from cache to `/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/models/llama3-8B_sft-tuluif-8192`:  50%|█████     | 2/4 [00:10<00:10,  5.38s/it]Unsloth: Copying 4 files from cache to `/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/models/llama3-8B_sft-tuluif-8192`:  75%|███████▌  | 3/4 [00:15<00:05,  5.15s/it]Unsloth: Copying 4 files from cache to `/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/models/llama3-8B_sft-tuluif-8192`: 100%|██████████| 4/4 [00:16<00:00,  3.56s/it]Unsloth: Copying 4 files from cache to `/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/models/llama3-8B_sft-tuluif-8192`: 100%|██████████| 4/4 [00:16<00:00,  4.20s/it]
+Successfully copied all 4 files from cache to `/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/models/llama3-8B_sft-tuluif-8192`
+Unsloth: Preparing safetensor model files:   0%|          | 0/4 [00:00<?, ?it/s]Unsloth: Preparing safetensor model files: 100%|██████████| 4/4 [00:00<00:00, 26132.74it/s]
+Unsloth: Merging weights into 16bit:   0%|          | 0/4 [00:00<?, ?it/s]Unsloth: Merging weights into 16bit:  25%|██▌       | 1/4 [00:20<01:02, 20.75s/it]Unsloth: Merging weights into 16bit:  50%|█████     | 2/4 [00:45<00:46, 23.05s/it]Unsloth: Merging weights into 16bit:  75%|███████▌  | 3/4 [01:09<00:23, 23.32s/it]Unsloth: Merging weights into 16bit: 100%|██████████| 4/4 [01:13<00:00, 15.94s/it]Unsloth: Merging weights into 16bit: 100%|██████████| 4/4 [01:13<00:00, 18.42s/it]
+Unsloth: Merge process complete. Saved to `/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/models/llama3-8B_sft-tuluif-8192`
+[{'threshold_type': 'perplexity', 'threshold_value': 3.0, 'global_step': 20, 'checkpoint_path': '/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/models/llama3-8B_ppl-3.00_sft-320', 'data_points_seen': 320}]
+Per device train batch size: 1
+Getting train dataset for run config: llama3-8B_llama3-8B_ppl-3.00_sft-320_pt-tuluif-7872
+Checking for dataset at /home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/data/datasets/pt-tuluif-7872
+Loading dataset from /home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/data/datasets/pt-tuluif
+Full dataset: DatasetDict({
+    train: Dataset({
+        features: ['id', 'prompt', 'constraints', 'chosen', 'rejected', 'chonsen_model', 'rejected_model', 'system_message'],
+        num_rows: 19434
+    })
+    test: Dataset({
+        features: ['id', 'prompt', 'constraints', 'chosen', 'rejected', 'chonsen_model', 'rejected_model', 'system_message'],
+        num_rows: 200
+    })
+})
+Sampled dataset: DatasetDict({
+    train: Dataset({
+        features: ['id', 'prompt', 'constraints', 'chosen', 'rejected', 'chonsen_model', 'rejected_model', 'system_message'],
+        num_rows: 7872
+    })
+    test: Dataset({
+        features: ['id', 'prompt', 'constraints', 'chosen', 'rejected', 'chonsen_model', 'rejected_model', 'system_message'],
+        num_rows: 200
+    })
+})
+Example training row: {'id': 'personas_IF_dqxglsux2n8jeu59qktlnesh', 'prompt': 'Name two famous equestrian events that are part of the international jumping circuit, and format your answer by choosing one from these options: lowercase, UPPERCASE, Title Case.', 'constraints': ['punctuation:use no comma', 'format:choose one from options'], 'chosen': 'LONGINES GLOBAL CHAMPIONS TOUR, ROLEX GRAND SLAM OF SHOW JUMPING', 'rejected': '- longines global champions tour\n- FEI WORLD CUP JUMPING', 'chonsen_model': 'gpt-4o', 'rejected_model': 'gpt-4o', 'system_message': 'You are a helpful assistant who is an expert at responding to prompts by carefully following the given instructions'}
+Example evaluation row: {'id': 'personas_IF_kvn9ms052ydm1n10j2zs7c90', 'prompt': 'As a high school student with a passion for astronomy, create a list of reliable sources to learn about the solar system. Each source description should contain the keywords "planet" and "orbit" at least twice. Provide two separate lists: one for online resources and another for books. Each list should contain exactly 5 bullet points.', 'constraints': ['keywords:letter frequency', ' give two responses', 'format:number of bullet lists'], 'chosen': '**Online Resources:**\n\n1. **NASA\'s Solar System Exploration Website**  \n   This comprehensive online resource offers detailed information about each planet in our solar system and their unique orbits. With interactive features, you can explore how each planet\'s orbit affects its climate and visibility.\n\n2. **The Planetary Society\'s Guide to the Solar System**  \n   This guide provides insights into the planets and their orbits, allowing users to understand the dynamic nature of planetary orbits. Learn how each planet\'s orbit influences its interaction with other celestial bodies.\n\n3. **National Geographic\'s Solar System 101**  \n   An engaging online article that covers the basics of each planet, including their orbits around the Sun. Discover how the orbit of each planet contributes to phenomena like seasons and eclipses.\n\n4. **BBC\'s Planets and Orbits Webpage**  \n   This webpage is part of the BBC\'s educational content, focusing on the planets and their orbits. It explains the intricacies of how each planet maintains its orbit and the historical context of orbit discoveries.\n\n5. **Khan Academy\'s Astronomy Course**  \n   This free, educational platform offers a series of videos on the solar system, emphasizing the planets and their orbits. Learn about the gravitational forces that govern each planet\'s orbit and their effects on the solar system\'s stability.\n\n**Books:**\n\n1. **"The Planets: An Illustrated History of Our Solar System" by Carole Stott**  \n   This book provides an in-depth look at each planet, with a special focus on their orbits. It explains how the orbit of each planet was discovered and how it affects the solar system.\n\n2. **"The Solar System: An Astronomer\'s Guide" by David A. Rothery**  \n   This guide explores the planets and their orbits, highlighting the science behind orbital mechanics. Learn how each planet\'s orbit is influenced by gravitational forces.\n\n3. **"Planetary Science: The Science of Planets around Stars" by George H. A. Cole and Michael M. Woolfson**  \n   This textbook covers the planets in our solar system and the orbits they follow. It provides a detailed analysis of how each planet\'s orbit affects its environment and evolution.\n\n4. **"The Orbits of Planets: A Journey Through the Solar System" by John E. Chambers**  \n   Focused on the paths that planets take, this book explores the orbits of each planet. It delves into the history and science of how planetary orbits were understood.\n\n5. **"Planets and Life: The Emerging Science of Astrobiology" by Woodruff T. Sullivan III and John Baross**  \n   This book examines the planets and their orbits, discussing how orbital patterns can influence the potential for life. Understand how each planet\'s orbit affects its climate and habitability.', 'rejected': '### Online Resources\n\n- **NASA Solar System Exploration**: This official NASA website provides comprehensive information about each planet in our solar system, detailing their orbits, characteristics, and exploration missions. It includes interactive features to visualize the orbits of planets and their positions in the solar system, making it an excellent resource for understanding planetary orbits.\n\n- **National Geographic\'s Solar System 101**: An informative section on National Geographic\'s website that covers the basics of each planet, their unique features, and how they orbit the Sun. With rich visual content, it helps users grasp the concept of planetary orbits and how each planet\'s orbit affects its climate and environment.\n\n- **European Space Agency (ESA) Solar System and Beyond**: The ESA website offers detailed articles and videos about the planets and their orbits, focusing on the latest scientific discoveries. It explains how the orbits of planets are studied using various space missions and the impact of these orbits on solar system dynamics.\n\n- **BBC\'s The Planets**: This online series explores the planets of our solar system, emphasizing their orbits and how they have evolved over time. It features engaging multimedia content that discusses the unique orbital paths of each planet and how these orbits contribute to their characteristics.\n\n- **Space.com Solar System Guide**: Space.com provides articles and infographics about the planets and their orbits, offering a user-friendly approach to learning about the solar system. The guide explains the significance of a planet\'s orbit, how it is calculated, and its relevance to astronomical studies.\n\n### Books\n\n- **"The Planets" by Dava Sobel**: This book offers a captivating journey through the solar system, exploring each planet and its orbit in detail. It delves into the history of how the orbits of planets were discovered and the impact of these orbits on our understanding of the cosmos.\n\n- **"National Geographic Kids: First Big Book of Space" by Catherine D. Hughes**: Aimed at younger readers, this book introduces the planets and their orbits with colorful illustrations and simple explanations. It highlights how each planet\'s orbit affects its position in the solar system and its relationship with other planets.\n\n- **"The Solar System: A Visual Exploration of the Planets, Moons, and Other Heavenly Bodies that Orbit Our Sun" by Marcus Chown**: This visually stunning book provides in-depth information about the planets and their orbits. It discusses the science behind planetary orbits and how these orbits influence the solar system\'s structure.\n\n- **"Astronomy for Kids: How to Explore Outer Space with Binoculars, a Telescope, or Just Your Eyes!" by Bruce Betts**: This educational book encourages young astronomers to observe the planets and their orbits. It explains how to track the orbits of planets using simple tools and understand their movement across the sky.\n\n- **"Planetarium" by Raman Prinja**: Part of the Welcome to the Museum series, this book offers a detailed look at the planets and their orbits. It includes illustrations and explanations of how the orbits of planets are studied and why these orbits are crucial for understanding the solar system\'s mechanics.', 'chonsen_model': 'gpt-4o', 'rejected_model': 'gpt-4o', 'system_message': 'You are a helpful assistant who is an expert at responding to prompts by carefully following the given instructions'}
+Saving the dataset (0/1 shards):   0%|          | 0/7872 [00:00<?, ? examples/s]Saving the dataset (0/1 shards):  13%|█▎        | 1000/7872 [00:00<00:03, 1890.68 examples/s]Saving the dataset (0/1 shards):  25%|██▌       | 2000/7872 [00:00<00:01, 3065.04 examples/s]Saving the dataset (0/1 shards):  64%|██████▎   | 5000/7872 [00:00<00:00, 8190.98 examples/s]Saving the dataset (1/1 shards): 100%|██████████| 7872/7872 [00:00<00:00, 8190.98 examples/s]Saving the dataset (1/1 shards): 100%|██████████| 7872/7872 [00:00<00:00, 8569.24 examples/s]
+Saving the dataset (0/1 shards):   0%|          | 0/200 [00:00<?, ? examples/s]Saving the dataset (1/1 shards): 100%|██████████| 200/200 [00:00<00:00, 28673.12 examples/s]Saving the dataset (1/1 shards): 100%|██████████| 200/200 [00:00<00:00, 26791.25 examples/s]
+Loading model from /home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/models/llama3-8B_ppl-3.00_sft-320
+==((====))==  Unsloth 2025.10.1: Fast Llama patching. Transformers: 4.56.1. vLLM: 0.9.2+computecanada.
+   \\   /|    NVIDIA L40S. Num GPUs = 1. Max memory: 44.403 GB. Platform: Linux.
+O^O/ \_/ \    Torch: 2.7.0. CUDA: 8.9. CUDA Toolkit: 12.6. Triton: 3.3.1
+\        /    Bfloat16 = TRUE. FA [Xformers = 0.0.30. FA2 = False]
+ "-____-"     Free license: http://github.com/unslothai/unsloth
+Unsloth: Fast downloading is enabled - ignore downloading bars which are red colored!
+Loading checkpoint shards:   0%|          | 0/4 [00:00<?, ?it/s]Loading checkpoint shards:  25%|██▌       | 1/4 [00:13<00:39, 13.08s/it]Loading checkpoint shards:  50%|█████     | 2/4 [00:26<00:25, 13.00s/it]Loading checkpoint shards:  75%|███████▌  | 3/4 [00:36<00:12, 12.04s/it]Loading checkpoint shards: 100%|██████████| 4/4 [00:39<00:00,  8.29s/it]Loading checkpoint shards: 100%|██████████| 4/4 [00:39<00:00,  9.87s/it]
+Unsloth: Will map <|im_end|> to EOS = <|im_end|>.
+Map:   0%|          | 0/7872 [00:00<?, ? examples/s]Map:   4%|▍         | 349/7872 [00:00<00:02, 3444.69 examples/s]Map:   9%|▉         | 712/7872 [00:00<00:02, 3547.31 examples/s]Map:  15%|█▍        | 1175/7872 [00:00<00:02, 3123.89 examples/s]Map:  20%|█▉        | 1539/7872 [00:00<00:01, 3292.05 examples/s]Map:  24%|██▍       | 1901/7872 [00:00<00:01, 3395.69 examples/s]Map:  30%|██▉       | 2352/7872 [00:00<00:01, 3162.93 examples/s]Map:  34%|███▍      | 2714/7872 [00:00<00:01, 3287.47 examples/s]Map:  40%|████      | 3176/7872 [00:00<00:01, 3140.66 examples/s]Map:  45%|████▍     | 3538/7872 [00:01<00:01, 3260.58 examples/s]Map:  50%|████▉     | 3901/7872 [00:01<00:01, 3356.46 examples/s]Map:  55%|█████▌    | 4359/7872 [00:01<00:01, 3200.55 examples/s]Map:  60%|█████▉    | 4714/7872 [00:01<00:00, 3286.98 examples/s]Map:  66%|██████▌   | 5165/7872 [00:01<00:00, 3157.70 examples/s]Map:  70%|███████   | 5527/7872 [00:01<00:00, 3272.75 examples/s]Map:  75%|███████▍  | 5891/7872 [00:01<00:00, 3367.66 examples/s]Map:  81%|████████  | 6356/7872 [00:01<00:00, 3221.31 examples/s]Map:  85%|████████▌ | 6718/7872 [00:02<00:00, 3320.52 examples/s]Map:  91%|█████████ | 7175/7872 [00:02<00:00, 3186.57 examples/s]Map:  96%|█████████▌| 7537/7872 [00:02<00:00, 3291.04 examples/s]Map: 100%|██████████| 7872/7872 [00:02<00:00, 3206.41 examples/s]
+{'chonsen_model': 'gpt-4o',
+ 'chosen': '<|im_start|>assistant\n'
+           'LONGINES GLOBAL CHAMPIONS TOUR, ROLEX GRAND SLAM OF SHOW '
+           'JUMPING<|im_end|>\n',
+ 'constraints': ['punctuation:use no comma', 'format:choose one from options'],
+ 'id': 'personas_IF_dqxglsux2n8jeu59qktlnesh',
+ 'prompt': '<|im_start|>system\n'
+           'You are a helpful assistant who is an expert at responding to '
+           'prompts by carefully following the given instructions<|im_end|>\n'
+           '<|im_start|>user\n'
+           'Name two famous equestrian events that are part of the '
+           'international jumping circuit, and format your answer by choosing '
+           'one from these options: lowercase, UPPERCASE, Title '
+           'Case.<|im_end|>\n'
+           '<|im_start|>assistant\n',
+ 'rejected': '<|im_start|>assistant\n'
+             '- longines global champions tour\n'
+             '- FEI WORLD CUP JUMPING<|im_end|>\n',
+ 'rejected_model': 'gpt-4o',
+ 'system_message': 'You are a helpful assistant who is an expert at responding '
+                   'to prompts by carefully following the given instructions'}
+DatasetDict({
+    train: Dataset({
+        features: ['id', 'prompt', 'constraints', 'chosen', 'rejected', 'chonsen_model', 'rejected_model', 'system_message'],
+        num_rows: 7872
+    })
+    test: Dataset({
+        features: ['id', 'prompt', 'constraints', 'chosen', 'rejected', 'chonsen_model', 'rejected_model', 'system_message'],
+        num_rows: 200
+    })
+})
+Using LORA with config: ['q_proj', 'k_proj', 'v_proj', 'o_proj', 'gate_proj', 'up_proj', 'down_proj']
+Model loaded - <class 'peft.peft_model.PeftModelForCausalLM'>
+Allocated: 30.78 GB
+Cached: 30.79 GB
+[PassAtKCallback] Initialized with pass@1 thresholds=[1.2]
+[PassAtKCallback] Training will stop at final threshold: 1.2
+[PassAtKCallback] k_values=[1] (stopping on k=1)
+[PassAtKCallback] n_samples=1, temperature=0.7, strict=True
+[PassAtKCallback] IFEval prompts loaded: 541, num_prompts=50
+[PassAtKCallback] Using vLLM with model save/load (replicating run_inference_ifeval)
+[DPO] Will stop training when pass@1 >= [1.2]
+Extracting prompt in train dataset (num_proc=68):   0%|          | 0/7872 [00:00<?, ? examples/s]Extracting prompt in train dataset (num_proc=68):   0%|          | 30/7872 [00:00<00:43, 180.15 examples/s]Extracting prompt in train dataset (num_proc=68):   7%|▋         | 547/7872 [00:00<00:02, 2472.62 examples/s]Extracting prompt in train dataset (num_proc=68):  11%|█         | 877/7872 [00:00<00:02, 2682.42 examples/s]Extracting prompt in train dataset (num_proc=68):  15%|█▌        | 1185/7872 [00:00<00:02, 2780.99 examples/s]Extracting prompt in train dataset (num_proc=68):  28%|██▊       | 2217/7872 [00:00<00:01, 5128.89 examples/s]Extracting prompt in train dataset (num_proc=68):  39%|███▉      | 3084/7872 [00:00<00:00, 6011.44 examples/s]Extracting prompt in train dataset (num_proc=68):  51%|█████▏    | 4044/7872 [00:00<00:00, 7083.01 examples/s]Extracting prompt in train dataset (num_proc=68):  66%|██████▌   | 5182/7872 [00:00<00:00, 8259.03 examples/s]Extracting prompt in train dataset (num_proc=68):  77%|███████▋  | 6052/7872 [00:01<00:00, 7806.30 examples/s]Extracting prompt in train dataset (num_proc=68): 100%|██████████| 7872/7872 [00:01<00:00, 6615.47 examples/s]
+Applying chat template to train dataset (num_proc=68):   0%|          | 0/7872 [00:00<?, ? examples/s]Applying chat template to train dataset (num_proc=68):   1%|▏         | 116/7872 [00:01<01:35, 81.29 examples/s]Applying chat template to train dataset (num_proc=68):   4%|▍         | 348/7872 [00:01<00:28, 267.90 examples/s]Applying chat template to train dataset (num_proc=68):   6%|▌         | 464/7872 [00:01<00:25, 287.90 examples/s]Applying chat template to train dataset (num_proc=68):   7%|▋         | 580/7872 [00:02<00:22, 321.07 examples/s]Applying chat template to train dataset (num_proc=68):   9%|▉         | 693/7872 [00:02<00:21, 333.79 examples/s]Applying chat template to train dataset (num_proc=68):  10%|█         | 812/7872 [00:02<00:20, 349.45 examples/s]Applying chat template to train dataset (num_proc=68):  12%|█▏        | 928/7872 [00:03<00:23, 300.65 examples/s]Applying chat template to train dataset (num_proc=68):  13%|█▎        | 1044/7872 [00:03<00:19, 343.59 examples/s]Applying chat template to train dataset (num_proc=68):  15%|█▍        | 1160/7872 [00:03<00:20, 330.98 examples/s]Applying chat template to train dataset (num_proc=68):  16%|█▌        | 1276/7872 [00:04<00:17, 369.48 examples/s]Applying chat template to train dataset (num_proc=68):  19%|█▉        | 1508/7872 [00:04<00:13, 472.36 examples/s]Applying chat template to train dataset (num_proc=68):  21%|██        | 1624/7872 [00:04<00:13, 449.17 examples/s]Applying chat template to train dataset (num_proc=68):  22%|██▏       | 1740/7872 [00:05<00:13, 440.83 examples/s]Applying chat template to train dataset (num_proc=68):  24%|██▎       | 1856/7872 [00:05<00:13, 451.16 examples/s]Applying chat template to train dataset (num_proc=68):  25%|██▌       | 1972/7872 [00:05<00:14, 414.94 examples/s]Applying chat template to train dataset (num_proc=68):  27%|██▋       | 2088/7872 [00:05<00:14, 404.93 examples/s]Applying chat template to train dataset (num_proc=68):  27%|██▋       | 2138/7872 [00:06<00:21, 271.22 examples/s]Applying chat template to train dataset (num_proc=68):  31%|███       | 2436/7872 [00:06<00:11, 455.73 examples/s]Applying chat template to train dataset (num_proc=68):  32%|███▏      | 2552/7872 [00:07<00:16, 314.28 examples/s]Applying chat template to train dataset (num_proc=68):  35%|███▍      | 2726/7872 [00:08<00:18, 285.59 examples/s]Applying chat template to train dataset (num_proc=68):  38%|███▊      | 2990/7872 [00:08<00:14, 336.07 examples/s]Applying chat template to train dataset (num_proc=68):  41%|████▏     | 3248/7872 [00:09<00:10, 436.21 examples/s]Applying chat template to train dataset (num_proc=68):  43%|████▎     | 3364/7872 [00:09<00:12, 352.27 examples/s]Applying chat template to train dataset (num_proc=68):  46%|████▌     | 3596/7872 [00:10<00:09, 436.45 examples/s]Applying chat template to train dataset (num_proc=68):  47%|████▋     | 3706/7872 [00:10<00:10, 395.79 examples/s]Applying chat template to train dataset (num_proc=68):  49%|████▊     | 3828/7872 [00:10<00:09, 409.70 examples/s]Applying chat template to train dataset (num_proc=68):  50%|█████     | 3936/7872 [00:11<00:12, 304.42 examples/s]Applying chat template to train dataset (num_proc=68):  53%|█████▎    | 4176/7872 [00:11<00:10, 344.90 examples/s]Applying chat template to train dataset (num_proc=68):  55%|█████▍    | 4292/7872 [00:12<00:10, 340.62 examples/s]Applying chat template to train dataset (num_proc=68):  56%|█████▌    | 4402/7872 [00:12<00:09, 357.61 examples/s]Applying chat template to train dataset (num_proc=68):  59%|█████▉    | 4640/7872 [00:12<00:06, 510.69 examples/s]Applying chat template to train dataset (num_proc=68):  60%|██████    | 4756/7872 [00:12<00:06, 500.56 examples/s]Applying chat template to train dataset (num_proc=68):  62%|██████▏   | 4872/7872 [00:13<00:07, 398.39 examples/s]Applying chat template to train dataset (num_proc=68):  65%|██████▍   | 5104/7872 [00:13<00:05, 493.92 examples/s]Applying chat template to train dataset (num_proc=68):  66%|██████▌   | 5176/7872 [00:14<00:09, 287.43 examples/s]Applying chat template to train dataset (num_proc=68):  68%|██████▊   | 5320/7872 [00:15<00:08, 290.31 examples/s]Applying chat template to train dataset (num_proc=68):  71%|███████   | 5568/7872 [00:15<00:07, 299.70 examples/s]Applying chat template to train dataset (num_proc=68):  74%|███████▎  | 5800/7872 [00:16<00:05, 359.10 examples/s]Applying chat template to train dataset (num_proc=68):  77%|███████▋  | 6027/7872 [00:16<00:04, 441.42 examples/s]Applying chat template to train dataset (num_proc=68):  78%|███████▊  | 6147/7872 [00:16<00:04, 406.64 examples/s]Applying chat template to train dataset (num_proc=68):  80%|███████▉  | 6262/7872 [00:17<00:04, 397.63 examples/s]Applying chat template to train dataset (num_proc=68):  81%|████████  | 6377/7872 [00:17<00:03, 385.42 examples/s]Applying chat template to train dataset (num_proc=68):  82%|████████▏ | 6492/7872 [00:17<00:03, 384.27 examples/s]Applying chat template to train dataset (num_proc=68):  84%|████████▍ | 6607/7872 [00:18<00:03, 403.18 examples/s]Applying chat template to train dataset (num_proc=68):  85%|████████▌ | 6722/7872 [00:18<00:02, 428.98 examples/s]Applying chat template to train dataset (num_proc=68):  87%|████████▋ | 6837/7872 [00:18<00:02, 416.86 examples/s]Applying chat template to train dataset (num_proc=68):  88%|████████▊ | 6952/7872 [00:19<00:02, 341.49 examples/s]Applying chat template to train dataset (num_proc=68):  91%|█████████ | 7163/7872 [00:19<00:01, 433.61 examples/s]Applying chat template to train dataset (num_proc=68):  93%|█████████▎| 7297/7872 [00:20<00:01, 348.89 examples/s]Applying chat template to train dataset (num_proc=68):  96%|█████████▌| 7527/7872 [00:20<00:00, 464.73 examples/s]Applying chat template to train dataset (num_proc=68):  99%|█████████▊| 7757/7872 [00:20<00:00, 498.35 examples/s]Applying chat template to train dataset (num_proc=68): 100%|██████████| 7872/7872 [00:20<00:00, 512.45 examples/s]Applying chat template to train dataset (num_proc=68): 100%|██████████| 7872/7872 [00:21<00:00, 374.10 examples/s]
+Tokenizing train dataset (num_proc=68):   0%|          | 0/7872 [00:00<?, ? examples/s]Tokenizing train dataset (num_proc=68):   0%|          | 9/7872 [00:01<17:04,  7.68 examples/s]Tokenizing train dataset (num_proc=68):   0%|          | 15/7872 [00:01<12:11, 10.74 examples/s]Tokenizing train dataset (num_proc=68):   1%|▏         | 100/7872 [00:01<01:32, 84.40 examples/s]Tokenizing train dataset (num_proc=68):   3%|▎         | 206/7872 [00:01<00:41, 183.12 examples/s]Tokenizing train dataset (num_proc=68):   4%|▍         | 301/7872 [00:02<00:32, 234.01 examples/s]Tokenizing train dataset (num_proc=68):   6%|▌         | 448/7872 [00:02<00:24, 306.48 examples/s]Tokenizing train dataset (num_proc=68):   6%|▌         | 490/7872 [00:02<00:30, 242.87 examples/s]Tokenizing train dataset (num_proc=68):   7%|▋         | 545/7872 [00:03<00:33, 219.39 examples/s]Tokenizing train dataset (num_proc=68):   9%|▊         | 681/7872 [00:03<00:26, 270.88 examples/s]Tokenizing train dataset (num_proc=68):  11%|█         | 847/7872 [00:03<00:21, 328.08 examples/s]Tokenizing train dataset (num_proc=68):  12%|█▏        | 965/7872 [00:04<00:21, 320.33 examples/s]Tokenizing train dataset (num_proc=68):  14%|█▎        | 1076/7872 [00:04<00:22, 307.42 examples/s]Tokenizing train dataset (num_proc=68):  15%|█▌        | 1215/7872 [00:05<00:20, 325.55 examples/s]Tokenizing train dataset (num_proc=68):  17%|█▋        | 1367/7872 [00:05<00:19, 336.53 examples/s]Tokenizing train dataset (num_proc=68):  19%|█▉        | 1533/7872 [00:05<00:16, 390.20 examples/s]Tokenizing train dataset (num_proc=68):  21%|██▏       | 1675/7872 [00:06<00:16, 381.94 examples/s]Tokenizing train dataset (num_proc=68):  22%|██▏       | 1750/7872 [00:06<00:16, 362.56 examples/s]Tokenizing train dataset (num_proc=68):  23%|██▎       | 1806/7872 [00:06<00:21, 288.38 examples/s]Tokenizing train dataset (num_proc=68):  25%|██▍       | 1955/7872 [00:07<00:18, 316.17 examples/s]Tokenizing train dataset (num_proc=68):  27%|██▋       | 2152/7872 [00:07<00:12, 440.87 examples/s]Tokenizing train dataset (num_proc=68):  28%|██▊       | 2208/7872 [00:07<00:16, 346.27 examples/s]Tokenizing train dataset (num_proc=68):  29%|██▉       | 2319/7872 [00:08<00:17, 326.42 examples/s]Tokenizing train dataset (num_proc=68):  31%|███▏      | 2478/7872 [00:08<00:15, 356.93 examples/s]Tokenizing train dataset (num_proc=68):  34%|███▍      | 2668/7872 [00:08<00:11, 441.98 examples/s]Tokenizing train dataset (num_proc=68):  35%|███▍      | 2731/7872 [00:09<00:15, 340.13 examples/s]Tokenizing train dataset (num_proc=68):  37%|███▋      | 2918/7872 [00:09<00:12, 397.80 examples/s]Tokenizing train dataset (num_proc=68):  39%|███▊      | 3046/7872 [00:09<00:12, 394.94 examples/s]Tokenizing train dataset (num_proc=68):  40%|███▉      | 3140/7872 [00:10<00:13, 355.15 examples/s]Tokenizing train dataset (num_proc=68):  41%|████      | 3197/7872 [00:10<00:15, 293.39 examples/s]Tokenizing train dataset (num_proc=68):  42%|████▏     | 3303/7872 [00:11<00:15, 302.39 examples/s]Tokenizing train dataset (num_proc=68):  44%|████▍     | 3482/7872 [00:11<00:12, 361.90 examples/s]Tokenizing train dataset (num_proc=68):  46%|████▌     | 3606/7872 [00:11<00:12, 333.03 examples/s]Tokenizing train dataset (num_proc=68):  46%|████▋     | 3647/7872 [00:12<00:16, 253.89 examples/s]Tokenizing train dataset (num_proc=68):  48%|████▊     | 3769/7872 [00:12<00:15, 259.94 examples/s]Tokenizing train dataset (num_proc=68):  51%|█████     | 3983/7872 [00:13<00:10, 365.13 examples/s]Tokenizing train dataset (num_proc=68):  52%|█████▏    | 4070/7872 [00:13<00:10, 369.53 examples/s]Tokenizing train dataset (num_proc=68):  52%|█████▏    | 4111/7872 [00:13<00:14, 268.60 examples/s]Tokenizing train dataset (num_proc=68):  53%|█████▎    | 4161/7872 [00:14<00:15, 239.62 examples/s]Tokenizing train dataset (num_proc=68):  54%|█████▎    | 4218/7872 [00:14<00:17, 205.54 examples/s]Tokenizing train dataset (num_proc=68):  55%|█████▌    | 4332/7872 [00:14<00:15, 229.64 examples/s]Tokenizing train dataset (num_proc=68):  57%|█████▋    | 4503/7872 [00:15<00:11, 291.52 examples/s]Tokenizing train dataset (num_proc=68):  58%|█████▊    | 4564/7872 [00:15<00:13, 246.68 examples/s]Tokenizing train dataset (num_proc=68):  60%|█████▉    | 4705/7872 [00:16<00:12, 261.65 examples/s]Tokenizing train dataset (num_proc=68):  61%|██████    | 4802/7872 [00:16<00:11, 256.47 examples/s]Tokenizing train dataset (num_proc=68):  63%|██████▎   | 4998/7872 [00:16<00:07, 382.95 examples/s]Tokenizing train dataset (num_proc=68):  65%|██████▍   | 5084/7872 [00:17<00:07, 349.34 examples/s]Tokenizing train dataset (num_proc=68):  66%|██████▋   | 5228/7872 [00:17<00:10, 259.55 examples/s]Tokenizing train dataset (num_proc=68):  68%|██████▊   | 5347/7872 [00:18<00:09, 259.76 examples/s]Tokenizing train dataset (num_proc=68):  69%|██████▉   | 5447/7872 [00:18<00:09, 251.19 examples/s]Tokenizing train dataset (num_proc=68):  70%|███████   | 5541/7872 [00:19<00:09, 233.95 examples/s]Tokenizing train dataset (num_proc=68):  73%|███████▎  | 5739/7872 [00:19<00:07, 299.64 examples/s]Tokenizing train dataset (num_proc=68):  74%|███████▍  | 5842/7872 [00:20<00:07, 284.65 examples/s]Tokenizing train dataset (num_proc=68):  76%|███████▌  | 5987/7872 [00:20<00:06, 301.25 examples/s]Tokenizing train dataset (num_proc=68):  77%|███████▋  | 6036/7872 [00:20<00:07, 246.90 examples/s]Tokenizing train dataset (num_proc=68):  78%|███████▊  | 6123/7872 [00:21<00:07, 238.30 examples/s]Tokenizing train dataset (num_proc=68):  80%|████████  | 6324/7872 [00:21<00:05, 307.91 examples/s]Tokenizing train dataset (num_proc=68):  83%|████████▎ | 6503/7872 [00:22<00:03, 345.72 examples/s]Tokenizing train dataset (num_proc=68):  84%|████████▍ | 6596/7872 [00:22<00:03, 330.27 examples/s]Tokenizing train dataset (num_proc=68):  86%|████████▋ | 6793/7872 [00:22<00:02, 384.75 examples/s]Tokenizing train dataset (num_proc=68):  87%|████████▋ | 6887/7872 [00:23<00:02, 344.24 examples/s]Tokenizing train dataset (num_proc=68):  89%|████████▉ | 7012/7872 [00:23<00:02, 357.35 examples/s]Tokenizing train dataset (num_proc=68):  90%|████████▉ | 7084/7872 [00:23<00:02, 302.09 examples/s]Tokenizing train dataset (num_proc=68):  92%|█████████▏| 7253/7872 [00:24<00:01, 352.42 examples/s]Tokenizing train dataset (num_proc=68):  95%|█████████▍| 7463/7872 [00:24<00:00, 526.41 examples/s]Tokenizing train dataset (num_proc=68):  96%|█████████▌| 7544/7872 [00:24<00:00, 426.16 examples/s]Tokenizing train dataset (num_proc=68):  97%|█████████▋| 7619/7872 [00:25<00:00, 413.54 examples/s]Tokenizing train dataset (num_proc=68):  98%|█████████▊| 7682/7872 [00:25<00:00, 430.15 examples/s]Tokenizing train dataset (num_proc=68):  98%|█████████▊| 7742/7872 [00:25<00:00, 426.26 examples/s]Tokenizing train dataset (num_proc=68):  99%|█████████▉| 7817/7872 [00:25<00:00, 480.77 examples/s]Tokenizing train dataset (num_proc=68): 100%|██████████| 7872/7872 [00:25<00:00, 306.83 examples/s]
+==((====))==  Unsloth - 2x faster free finetuning | Num GPUs used = 1
+   \\   /|    Num examples = 7,872 | Num Epochs = 2 | Total steps = 984
+O^O/ \_/ \    Batch size per device = 1 | Gradient accumulation steps = 16
+\        /    Data Parallel GPUs = 1 | Total batch size (1 x 16 x 1) = 16
+ "-____-"     Trainable parameters = 83,886,080 of 8,114,147,328 (1.03% trained)
+[PassAtKCallback] on_train_begin: model_name=PeftModelForCausalLM(
+  (base_model): LoraModel(
+    (model): LlamaForCausalLM(
+      (model): LlamaModel(
+        (embed_tokens): Embedding(128256, 4096, padding_idx=128004)
+        (layers): ModuleList(
+          (0-31): 32 x LlamaDecoderLayer(
+            (self_attn): LlamaAttention(
+              (q_proj): lora.Linear(
+                (base_layer): Linear(in_features=4096, out_features=4096, bias=False)
+                (lora_dropout): ModuleDict(
+                  (default): Identity()
+                )
+                (lora_A): ModuleDict(
+                  (default): Linear(in_features=4096, out_features=32, bias=False)
+                )
+                (lora_B): ModuleDict(
+                  (default): Linear(in_features=32, out_features=4096, bias=False)
+                )
+                (lora_embedding_A): ParameterDict()
+                (lora_embedding_B): ParameterDict()
+                (lora_magnitude_vector): ModuleDict()
+              )
+              (k_proj): lora.Linear(
+                (base_layer): Linear(in_features=4096, out_features=1024, bias=False)
+                (lora_dropout): ModuleDict(
+                  (default): Identity()
+                )
+                (lora_A): ModuleDict(
+                  (default): Linear(in_features=4096, out_features=32, bias=False)
+                )
+                (lora_B): ModuleDict(
+                  (default): Linear(in_features=32, out_features=1024, bias=False)
+                )
+                (lora_embedding_A): ParameterDict()
+                (lora_embedding_B): ParameterDict()
+                (lora_magnitude_vector): ModuleDict()
+              )
+              (v_proj): lora.Linear(
+                (base_layer): Linear(in_features=4096, out_features=1024, bias=False)
+                (lora_dropout): ModuleDict(
+                  (default): Identity()
+                )
+                (lora_A): ModuleDict(
+                  (default): Linear(in_features=4096, out_features=32, bias=False)
+                )
+                (lora_B): ModuleDict(
+                  (default): Linear(in_features=32, out_features=1024, bias=False)
+                )
+                (lora_embedding_A): ParameterDict()
+                (lora_embedding_B): ParameterDict()
+                (lora_magnitude_vector): ModuleDict()
+              )
+              (o_proj): lora.Linear(
+                (base_layer): Linear(in_features=4096, out_features=4096, bias=False)
+                (lora_dropout): ModuleDict(
+                  (default): Identity()
+                )
+                (lora_A): ModuleDict(
+                  (default): Linear(in_features=4096, out_features=32, bias=False)
+                )
+                (lora_B): ModuleDict(
+                  (default): Linear(in_features=32, out_features=4096, bias=False)
+                )
+                (lora_embedding_A): ParameterDict()
+                (lora_embedding_B): ParameterDict()
+                (lora_magnitude_vector): ModuleDict()
+              )
+              (rotary_emb): LlamaRotaryEmbedding()
+            )
+            (mlp): LlamaMLP(
+              (gate_proj): lora.Linear(
+                (base_layer): Linear(in_features=4096, out_features=14336, bias=False)
+                (lora_dropout): ModuleDict(
+                  (default): Identity()
+                )
+                (lora_A): ModuleDict(
+                  (default): Linear(in_features=4096, out_features=32, bias=False)
+                )
+                (lora_B): ModuleDict(
+                  (default): Linear(in_features=32, out_features=14336, bias=False)
+                )
+                (lora_embedding_A): ParameterDict()
+                (lora_embedding_B): ParameterDict()
+                (lora_magnitude_vector): ModuleDict()
+              )
+              (up_proj): lora.Linear(
+                (base_layer): Linear(in_features=4096, out_features=14336, bias=False)
+                (lora_dropout): ModuleDict(
+                  (default): Identity()
+                )
+                (lora_A): ModuleDict(
+                  (default): Linear(in_features=4096, out_features=32, bias=False)
+                )
+                (lora_B): ModuleDict(
+                  (default): Linear(in_features=32, out_features=14336, bias=False)
+                )
+                (lora_embedding_A): ParameterDict()
+                (lora_embedding_B): ParameterDict()
+                (lora_magnitude_vector): ModuleDict()
+              )
+              (down_proj): lora.Linear(
+                (base_layer): Linear(in_features=14336, out_features=4096, bias=False)
+                (lora_dropout): ModuleDict(
+                  (default): Identity()
+                )
+                (lora_A): ModuleDict(
+                  (default): Linear(in_features=14336, out_features=32, bias=False)
+                )
+                (lora_B): ModuleDict(
+                  (default): Linear(in_features=32, out_features=4096, bias=False)
+                )
+                (lora_embedding_A): ParameterDict()
+                (lora_embedding_B): ParameterDict()
+                (lora_magnitude_vector): ModuleDict()
+              )
+              (act_fn): SiLU()
+            )
+            (input_layernorm): LlamaRMSNorm((4096,), eps=1e-05)
+            (post_attention_layernorm): LlamaRMSNorm((4096,), eps=1e-05)
+          )
+        )
+        (norm): LlamaRMSNorm((4096,), eps=1e-05)
+        (rotary_emb): LlamaRotaryEmbedding()
+      )
+      (lm_head): Linear(in_features=4096, out_features=128256, bias=False)
+    )
+  )
+)
+  0%|          | 0/984 [00:00<?, ?it/s]  0%|          | 1/984 [00:10<2:55:11, 10.69s/it]                                                 {'loss': 0.6931, 'grad_norm': 5.495274066925049, 'learning_rate': 0.0, 'rewards/chosen': 0.0, 'rewards/rejected': 0.0, 'rewards/accuracies': 0.0, 'rewards/margins': 0.0, 'logps/chosen': -368.5430603027344, 'logps/rejected': -433.1307373046875, 'logits/chosen': -1.3727316856384277, 'logits/rejected': -1.3551054000854492, 'epoch': 0.0}
+  0%|          | 1/984 [00:10<2:55:11, 10.69s/it]  0%|          | 2/984 [00:18<2:30:41,  9.21s/it]                                                 {'loss': 0.6931, 'grad_norm': 5.043416976928711, 'learning_rate': 5.050505050505051e-08, 'rewards/chosen': 0.0, 'rewards/rejected': 0.0, 'rewards/accuracies': 0.0, 'rewards/margins': 0.0, 'logps/chosen': -345.8123779296875, 'logps/rejected': -357.02984619140625, 'logits/chosen': -1.461477279663086, 'logits/rejected': -1.4402861595153809, 'epoch': 0.0}
+  0%|          | 2/984 [00:18<2:30:41,  9.21s/it]  0%|          | 3/984 [00:27<2:24:45,  8.85s/it]                                                 {'loss': 0.6955, 'grad_norm': 4.676211357116699, 'learning_rate': 1.0101010101010103e-07, 'rewards/chosen': -0.012342310510575771, 'rewards/rejected': -0.009644889272749424, 'rewards/accuracies': 0.4375, 'rewards/margins': -0.0026974203065037727, 'logps/chosen': -372.1167907714844, 'logps/rejected': -412.97119140625, 'logits/chosen': -1.3476300239562988, 'logits/rejected': -1.4092209339141846, 'epoch': 0.01}
+  0%|          | 3/984 [00:27<2:24:45,  8.85s/it]  0%|          | 4/984 [00:36<2:27:06,  9.01s/it]                                                 {'loss': 0.6878, 'grad_norm': 5.511795520782471, 'learning_rate': 1.5151515151515152e-07, 'rewards/chosen': 0.004412890411913395, 'rewards/rejected': -0.008665800094604492, 'rewards/accuracies': 0.5625, 'rewards/margins': 0.013078692369163036, 'logps/chosen': -535.7542724609375, 'logps/rejected': -473.36138916015625, 'logits/chosen': -1.4654672145843506, 'logits/rejected': -1.4467504024505615, 'epoch': 0.01}
+  0%|          | 4/984 [00:36<2:27:06,  9.01s/it]  1%|          | 5/984 [00:45<2:24:40,  8.87s/it]                                                 {'loss': 0.7091, 'grad_norm': 8.547508239746094, 'learning_rate': 2.0202020202020205e-07, 'rewards/chosen': -0.01027669943869114, 'rewards/rejected': 0.019351530820131302, 'rewards/accuracies': 0.375, 'rewards/margins': -0.02962823212146759, 'logps/chosen': -314.2489013671875, 'logps/rejected': -466.319580078125, 'logits/chosen': -1.2339329719543457, 'logits/rejected': -1.3301142454147339, 'epoch': 0.01}
+  1%|          | 5/984 [00:45<2:24:40,  8.87s/it]  1%|          | 6/984 [00:54<2:24:29,  8.86s/it]                                                 {'loss': 0.6833, 'grad_norm': 4.533144950866699, 'learning_rate': 2.525252525252525e-07, 'rewards/chosen': 0.0033708098344504833, 'rewards/rejected': -0.018171072006225586, 'rewards/accuracies': 0.6875, 'rewards/margins': 0.021541882306337357, 'logps/chosen': -387.18389892578125, 'logps/rejected': -453.63861083984375, 'logits/chosen': -1.3765928745269775, 'logits/rejected': -1.4081010818481445, 'epoch': 0.01}
+  1%|          | 6/984 [00:54<2:24:29,  8.86s/it]  1%|          | 7/984 [01:01<2:19:29,  8.57s/it]                                                 {'loss': 0.6707, 'grad_norm': 4.78650426864624, 'learning_rate': 3.0303030303030305e-07, 'rewards/chosen': 0.01625652238726616, 'rewards/rejected': -0.03139965608716011, 'rewards/accuracies': 0.625, 'rewards/margins': 0.04765617847442627, 'logps/chosen': -325.40142822265625, 'logps/rejected': -367.04205322265625, 'logits/chosen': -1.407362461090088, 'logits/rejected': -1.4578825235366821, 'epoch': 0.01}
+  1%|          | 7/984 [01:01<2:19:29,  8.57s/it]  1%|          | 8/984 [01:09<2:13:24,  8.20s/it]                                                 {'loss': 0.706, 'grad_norm': 4.133290767669678, 'learning_rate': 3.535353535353536e-07, 'rewards/chosen': 0.0025314809754490852, 'rewards/rejected': 0.027054503560066223, 'rewards/accuracies': 0.3125, 'rewards/margins': -0.024523019790649414, 'logps/chosen': -252.236572265625, 'logps/rejected': -284.6069641113281, 'logits/chosen': -1.2668843269348145, 'logits/rejected': -1.2881169319152832, 'epoch': 0.02}
+  1%|          | 8/984 [01:09<2:13:24,  8.20s/it]  1%|          | 9/984 [01:17<2:14:07,  8.25s/it]                                                 {'loss': 0.6868, 'grad_norm': 4.288339138031006, 'learning_rate': 4.040404040404041e-07, 'rewards/chosen': 0.015366651117801666, 'rewards/rejected': 0.0019524090457707644, 'rewards/accuracies': 0.5625, 'rewards/margins': 0.013414241373538971, 'logps/chosen': -270.8128356933594, 'logps/rejected': -316.98016357421875, 'logits/chosen': -1.2421810626983643, 'logits/rejected': -1.297526240348816, 'epoch': 0.02}
+  1%|          | 9/984 [01:17<2:14:07,  8.25s/it]  1%|          | 10/984 [01:26<2:15:24,  8.34s/it]                                                  {'loss': 0.6945, 'grad_norm': 5.52637243270874, 'learning_rate': 4.5454545454545457e-07, 'rewards/chosen': -0.012272121384739876, 'rewards/rejected': -0.011178112588822842, 'rewards/accuracies': 0.5625, 'rewards/margins': -0.001094006816856563, 'logps/chosen': -275.442626953125, 'logps/rejected': -318.4149169921875, 'logits/chosen': -1.052865982055664, 'logits/rejected': -1.1619778871536255, 'epoch': 0.02}
+  1%|          | 10/984 [01:26<2:15:24,  8.34s/it]  1%|          | 11/984 [01:34<2:15:54,  8.38s/it]                                                  {'loss': 0.6997, 'grad_norm': 4.734184741973877, 'learning_rate': 5.05050505050505e-07, 'rewards/chosen': 0.023374702781438828, 'rewards/rejected': 0.03556244447827339, 'rewards/accuracies': 0.4375, 'rewards/margins': -0.012187742628157139, 'logps/chosen': -334.79180908203125, 'logps/rejected': -340.1899108886719, 'logits/chosen': -1.2943289279937744, 'logits/rejected': -1.2969975471496582, 'epoch': 0.02}
+  1%|          | 11/984 [01:34<2:15:54,  8.38s/it]  1%|          | 12/984 [01:43<2:15:19,  8.35s/it]                                                  {'loss': 0.6888, 'grad_norm': 5.910841464996338, 'learning_rate': 5.555555555555555e-07, 'rewards/chosen': 0.002356050070375204, 'rewards/rejected': -0.008638142608106136, 'rewards/accuracies': 0.6875, 'rewards/margins': 0.010994194075465202, 'logps/chosen': -375.8026123046875, 'logps/rejected': -417.2560119628906, 'logits/chosen': -1.3319413661956787, 'logits/rejected': -1.3326570987701416, 'epoch': 0.02}
+  1%|          | 12/984 [01:43<2:15:19,  8.35s/it]  1%|▏         | 13/984 [01:51<2:16:06,  8.41s/it]                                                  {'loss': 0.6981, 'grad_norm': 4.821210861206055, 'learning_rate': 6.060606060606061e-07, 'rewards/chosen': 0.0067781927064061165, 'rewards/rejected': 0.014850069768726826, 'rewards/accuracies': 0.375, 'rewards/margins': -0.00807187706232071, 'logps/chosen': -400.1636657714844, 'logps/rejected': -394.74346923828125, 'logits/chosen': -1.4351974725723267, 'logits/rejected': -1.4431692361831665, 'epoch': 0.03}
+  1%|▏         | 13/984 [01:51<2:16:06,  8.41s/it]  1%|▏         | 14/984 [01:59<2:12:45,  8.21s/it]                                                  {'loss': 0.7023, 'grad_norm': 5.472985744476318, 'learning_rate': 6.565656565656567e-07, 'rewards/chosen': 0.00020632753148674965, 'rewards/rejected': 0.01686871238052845, 'rewards/accuracies': 0.3125, 'rewards/margins': -0.01666238345205784, 'logps/chosen': -320.23919677734375, 'logps/rejected': -345.68939208984375, 'logits/chosen': -1.3240350484848022, 'logits/rejected': -1.3279423713684082, 'epoch': 0.03}
+  1%|▏         | 14/984 [01:59<2:12:45,  8.21s/it]  2%|▏         | 15/984 [02:08<2:17:06,  8.49s/it]                                                  {'loss': 0.6968, 'grad_norm': 5.886185169219971, 'learning_rate': 7.070707070707071e-07, 'rewards/chosen': -0.025002431124448776, 'rewards/rejected': -0.020078256726264954, 'rewards/accuracies': 0.5625, 'rewards/margins': -0.004924178123474121, 'logps/chosen': -397.3226318359375, 'logps/rejected': -421.77532958984375, 'logits/chosen': -1.340835452079773, 'logits/rejected': -1.343692421913147, 'epoch': 0.03}
+  2%|▏         | 15/984 [02:08<2:17:06,  8.49s/it]  2%|▏         | 16/984 [02:17<2:21:13,  8.75s/it]                                                  {'loss': 0.6661, 'grad_norm': 5.027347087860107, 'learning_rate': 7.575757575757576e-07, 'rewards/chosen': 0.04290580749511719, 'rewards/rejected': -0.01582784578204155, 'rewards/accuracies': 0.625, 'rewards/margins': 0.058733657002449036, 'logps/chosen': -465.65521240234375, 'logps/rejected': -449.177734375, 'logits/chosen': -1.3272743225097656, 'logits/rejected': -1.3675965070724487, 'epoch': 0.03}
+  2%|▏         | 16/984 [02:17<2:21:13,  8.75s/it]  2%|▏         | 17/984 [02:26<2:20:39,  8.73s/it]                                                  {'loss': 0.702, 'grad_norm': 5.834958076477051, 'learning_rate': 8.080808080808082e-07, 'rewards/chosen': 0.002932548988610506, 'rewards/rejected': 0.01850280724465847, 'rewards/accuracies': 0.375, 'rewards/margins': -0.0155702605843544, 'logps/chosen': -338.9522399902344, 'logps/rejected': -400.22491455078125, 'logits/chosen': -1.1617764234542847, 'logits/rejected': -1.3196079730987549, 'epoch': 0.03}
+  2%|▏         | 17/984 [02:26<2:20:39,  8.73s/it]  2%|▏         | 18/984 [02:34<2:14:34,  8.36s/it]                                                  {'loss': 0.7118, 'grad_norm': 4.117079734802246, 'learning_rate': 8.585858585858587e-07, 'rewards/chosen': -0.0112809669226408, 'rewards/rejected': 0.02376561053097248, 'rewards/accuracies': 0.3125, 'rewards/margins': -0.03504657745361328, 'logps/chosen': -254.11651611328125, 'logps/rejected': -283.713623046875, 'logits/chosen': -1.370568871498108, 'logits/rejected': -1.3534321784973145, 'epoch': 0.04}
+  2%|▏         | 18/984 [02:34<2:14:34,  8.36s/it]  2%|▏         | 19/984 [02:41<2:10:30,  8.11s/it]                                                  {'loss': 0.7048, 'grad_norm': 4.221571922302246, 'learning_rate': 9.090909090909091e-07, 'rewards/chosen': -0.005276966840028763, 'rewards/rejected': 0.01627163775265217, 'rewards/accuracies': 0.3125, 'rewards/margins': -0.02154860459268093, 'logps/chosen': -284.0041198730469, 'logps/rejected': -324.6036071777344, 'logits/chosen': -1.3408288955688477, 'logits/rejected': -1.4075943231582642, 'epoch': 0.04}
+  2%|▏         | 19/984 [02:41<2:10:30,  8.11s/it]  2%|▏         | 20/984 [02:50<2:12:18,  8.24s/it]                                                  {'loss': 0.7184, 'grad_norm': 5.099874496459961, 'learning_rate': 9.595959595959596e-07, 'rewards/chosen': 0.004990005400031805, 'rewards/rejected': 0.050847530364990234, 'rewards/accuracies': 0.4375, 'rewards/margins': -0.04585752636194229, 'logps/chosen': -291.8614501953125, 'logps/rejected': -359.3768005371094, 'logits/chosen': -1.2806025743484497, 'logits/rejected': -1.2817124128341675, 'epoch': 0.04}
+  2%|▏         | 20/984 [02:50<2:12:18,  8.24s/it]  2%|▏         | 21/984 [02:58<2:12:57,  8.28s/it]                                                  {'loss': 0.6986, 'grad_norm': 6.427513599395752, 'learning_rate': 1.01010101010101e-06, 'rewards/chosen': -0.009457850828766823, 'rewards/rejected': -0.0019158846698701382, 'rewards/accuracies': 0.5625, 'rewards/margins': -0.007541965693235397, 'logps/chosen': -367.9380798339844, 'logps/rejected': -384.1748352050781, 'logits/chosen': -1.3207374811172485, 'logits/rejected': -1.4064016342163086, 'epoch': 0.04}
+  2%|▏         | 21/984 [02:58<2:12:57,  8.28s/it]  2%|▏         | 22/984 [03:06<2:12:34,  8.27s/it]                                                  {'loss': 0.6832, 'grad_norm': 4.542322158813477, 'learning_rate': 1.0606060606060608e-06, 'rewards/chosen': 0.02934904210269451, 'rewards/rejected': 0.0083932401612401, 'rewards/accuracies': 0.5625, 'rewards/margins': 0.020955801010131836, 'logps/chosen': -322.31121826171875, 'logps/rejected': -373.00726318359375, 'logits/chosen': -1.4374090433120728, 'logits/rejected': -1.3997303247451782, 'epoch': 0.04}
+  2%|▏         | 22/984 [03:06<2:12:34,  8.27s/it]  2%|▏         | 23/984 [03:15<2:13:37,  8.34s/it]                                                  {'loss': 0.708, 'grad_norm': 4.906679153442383, 'learning_rate': 1.111111111111111e-06, 'rewards/chosen': -0.013943553902208805, 'rewards/rejected': 0.014665033668279648, 'rewards/accuracies': 0.3125, 'rewards/margins': -0.02860858477652073, 'logps/chosen': -291.0801696777344, 'logps/rejected': -341.3605041503906, 'logits/chosen': -1.239794373512268, 'logits/rejected': -1.2863575220108032, 'epoch': 0.05}
+  2%|▏         | 23/984 [03:15<2:13:37,  8.34s/it]  2%|▏         | 24/984 [03:23<2:10:57,  8.18s/it]                                                  {'loss': 0.6848, 'grad_norm': 3.7835490703582764, 'learning_rate': 1.1616161616161617e-06, 'rewards/chosen': 0.017406918108463287, 'rewards/rejected': -0.0006612299475818872, 'rewards/accuracies': 0.5, 'rewards/margins': 0.01806814782321453, 'logps/chosen': -230.41485595703125, 'logps/rejected': -281.021484375, 'logits/chosen': -1.1765528917312622, 'logits/rejected': -1.2411482334136963, 'epoch': 0.05}
+  2%|▏         | 24/984 [03:23<2:10:57,  8.18s/it]  3%|▎         | 25/984 [03:32<2:16:58,  8.57s/it]                                                  {'loss': 0.7127, 'grad_norm': 7.423189640045166, 'learning_rate': 1.2121212121212122e-06, 'rewards/chosen': -0.008094381541013718, 'rewards/rejected': 0.02914590761065483, 'rewards/accuracies': 0.3125, 'rewards/margins': -0.03724028915166855, 'logps/chosen': -457.02752685546875, 'logps/rejected': -492.207275390625, 'logits/chosen': -1.321231722831726, 'logits/rejected': -1.3607748746871948, 'epoch': 0.05}
+  3%|▎         | 25/984 [03:32<2:16:58,  8.57s/it]
+  0%|          | 0/100 [00:00<?, ?it/s][A
+  2%|▏         | 2/100 [00:00<00:38,  2.56it/s][A
+  3%|▎         | 3/100 [00:01<01:02,  1.56it/s][A
+  4%|▍         | 4/100 [00:02<00:46,  2.05it/s][A
+  5%|▌         | 5/100 [00:02<00:42,  2.22it/s][A
+  6%|▌         | 6/100 [00:03<01:12,  1.30it/s][A
+  7%|▋         | 7/100 [00:04<01:05,  1.42it/s][A
+  8%|▊         | 8/100 [00:05<01:05,  1.40it/s][A
+  9%|▉         | 9/100 [00:05<01:08,  1.33it/s][A
+ 10%|█         | 10/100 [00:06<01:09,  1.29it/s][A
+ 11%|█         | 11/100 [00:07<01:14,  1.19it/s][A
+ 12%|█▏        | 12/100 [00:08<01:11,  1.24it/s][A
+ 13%|█▎        | 13/100 [00:09<01:18,  1.12it/s][A
+ 14%|█▍        | 14/100 [00:10<01:13,  1.17it/s][A
+ 15%|█▌        | 15/100 [00:10<01:05,  1.30it/s][A
+ 16%|█▌        | 16/100 [00:11<01:04,  1.31it/s][A
+ 17%|█▋        | 17/100 [00:13<01:18,  1.06it/s][A
+ 18%|█▊        | 18/100 [00:13<01:16,  1.07it/s][A
+ 19%|█▉        | 19/100 [00:15<01:21,  1.01s/it][A
+ 20%|██        | 20/100 [00:16<01:30,  1.13s/it][A
+ 21%|██        | 21/100 [00:17<01:20,  1.02s/it][A
+ 22%|██▏       | 22/100 [00:18<01:25,  1.10s/it][A
+ 23%|██▎       | 23/100 [00:19<01:13,  1.05it/s][A
+ 24%|██▍       | 24/100 [00:20<01:18,  1.03s/it][A
+ 25%|██▌       | 25/100 [00:21<01:23,  1.11s/it][A
+ 26%|██▌       | 26/100 [00:22<01:16,  1.04s/it][A
+ 27%|██▋       | 27/100 [00:23<01:11,  1.02it/s][A
+ 28%|██▊       | 28/100 [00:24<01:02,  1.16it/s][A
+ 29%|██▉       | 29/100 [00:24<01:02,  1.13it/s][A
+ 30%|███       | 30/100 [00:25<00:56,  1.24it/s][A
+ 31%|███       | 31/100 [00:26<00:48,  1.41it/s][A
+ 32%|███▏      | 32/100 [00:26<00:40,  1.69it/s][A
+ 33%|███▎      | 33/100 [00:27<00:55,  1.20it/s][A
+ 34%|███▍      | 34/100 [00:28<00:48,  1.37it/s][A
+ 35%|███▌      | 35/100 [00:28<00:42,  1.52it/s][A
+ 36%|███▌      | 36/100 [00:29<00:41,  1.55it/s][A
+ 37%|███▋      | 37/100 [00:30<00:51,  1.23it/s][A
+ 38%|███▊      | 38/100 [00:31<00:45,  1.37it/s][A
+ 39%|███▉      | 39/100 [00:32<00:57,  1.06it/s][A
+ 40%|████      | 40/100 [00:32<00:43,  1.36it/s][A
+ 41%|████      | 41/100 [00:33<00:39,  1.48it/s][A
+ 42%|████▏     | 42/100 [00:34<00:39,  1.46it/s][A
+ 43%|████▎     | 43/100 [00:34<00:35,  1.61it/s][A
+ 44%|████▍     | 44/100 [00:35<00:44,  1.26it/s][A
+ 45%|████▌     | 45/100 [00:36<00:36,  1.51it/s][A
+ 46%|████▌     | 46/100 [00:36<00:35,  1.53it/s][A
+ 47%|████▋     | 47/100 [00:37<00:31,  1.69it/s][A
+ 48%|████▊     | 48/100 [00:38<00:39,  1.32it/s][A
+ 49%|████▉     | 49/100 [00:39<00:38,  1.32it/s][A
+ 50%|█████     | 50/100 [00:39<00:31,  1.59it/s][A
+ 51%|█████     | 51/100 [00:40<00:39,  1.23it/s][A
+ 52%|█████▏    | 52/100 [00:40<00:32,  1.46it/s][A
+ 53%|█████▎    | 53/100 [00:42<00:39,  1.18it/s][A
+ 54%|█████▍    | 54/100 [00:42<00:38,  1.21it/s][A
+ 55%|█████▌    | 55/100 [00:43<00:33,  1.35it/s][A
+ 56%|█████▌    | 56/100 [00:44<00:29,  1.48it/s][A
+ 57%|█████▋    | 57/100 [00:44<00:29,  1.45it/s][A
+ 58%|█████▊    | 58/100 [00:45<00:32,  1.30it/s][A
+ 59%|█████▉    | 59/100 [00:46<00:36,  1.12it/s][A
+ 60%|██████    | 60/100 [00:48<00:42,  1.05s/it][A
+ 61%|██████    | 61/100 [00:49<00:46,  1.20s/it][A
+ 62%|██████▏   | 62/100 [00:51<00:48,  1.27s/it][A
+ 63%|██████▎   | 63/100 [00:52<00:41,  1.12s/it][A
+ 64%|██████▍   | 64/100 [00:53<00:39,  1.10s/it][A
+ 65%|██████▌   | 65/100 [00:53<00:31,  1.10it/s][A
+ 66%|██████▌   | 66/100 [00:54<00:26,  1.27it/s][A
+ 67%|██████▋   | 67/100 [00:55<00:29,  1.11it/s][A
+ 68%|██████▊   | 68/100 [00:55<00:25,  1.27it/s][A
+ 69%|██████▉   | 69/100 [00:56<00:26,  1.15it/s][A
+ 70%|███████   | 70/100 [00:57<00:26,  1.14it/s][A
+ 71%|███████   | 71/100 [00:58<00:25,  1.15it/s][A
+ 72%|███████▏  | 72/100 [00:59<00:27,  1.01it/s][A
+ 73%|███████▎  | 73/100 [01:00<00:24,  1.09it/s][A
+ 74%|███████▍  | 74/100 [01:01<00:26,  1.00s/it][A
+ 75%|███████▌  | 75/100 [01:02<00:21,  1.16it/s][A
+ 76%|███████▌  | 76/100 [01:03<00:24,  1.04s/it][A
+ 77%|███████▋  | 77/100 [01:04<00:21,  1.09it/s][A
+ 78%|███████▊  | 78/100 [01:04<00:16,  1.30it/s][A
+ 79%|███████▉  | 79/100 [01:05<00:14,  1.46it/s][A
+ 80%|████████  | 80/100 [01:05<00:13,  1.50it/s][A
+ 81%|████████  | 81/100 [01:06<00:14,  1.28it/s][A
+ 82%|████████▏ | 82/100 [01:08<00:17,  1.02it/s][A
+ 83%|████████▎ | 83/100 [01:09<00:14,  1.16it/s][A
+ 84%|████████▍ | 84/100 [01:09<00:13,  1.16it/s][A
+ 85%|████████▌ | 85/100 [01:10<00:13,  1.15it/s][A
+ 86%|████████▌ | 86/100 [01:11<00:10,  1.28it/s][A
+ 87%|████████▋ | 87/100 [01:12<00:12,  1.04it/s][A
+ 88%|████████▊ | 88/100 [01:13<00:09,  1.30it/s][A
+ 89%|████████▉ | 89/100 [01:14<00:11,  1.01s/it][A
+ 90%|█████████ | 90/100 [01:15<00:10,  1.08s/it][A
+ 91%|█████████ | 91/100 [01:16<00:08,  1.10it/s][A
+ 92%|█████████▏| 92/100 [01:17<00:07,  1.09it/s][A
+ 93%|█████████▎| 93/100 [01:17<00:05,  1.23it/s][A
+ 94%|█████████▍| 94/100 [01:18<00:05,  1.16it/s][A
+ 95%|█████████▌| 95/100 [01:19<00:04,  1.18it/s][A
+ 96%|█████████▌| 96/100 [01:21<00:03,  1.01it/s][A
+ 97%|█████████▋| 97/100 [01:21<00:02,  1.19it/s][A
+ 98%|█████████▊| 98/100 [01:22<00:01,  1.34it/s][A
+ 99%|█████████▉| 99/100 [01:22<00:00,  1.42it/s][A
+100%|██████████| 100/100 [01:22<00:00,  1.68it/s][A                                                  
+                                                 [A{'eval_loss': 0.6906434893608093, 'eval_runtime': 84.1268, 'eval_samples_per_second': 2.377, 'eval_steps_per_second': 1.189, 'eval_rewards/chosen': -0.0009704725234769285, 'eval_rewards/rejected': -0.008328369818627834, 'eval_rewards/accuracies': 0.5249999761581421, 'eval_rewards/margins': 0.007357897236943245, 'eval_logps/chosen': -372.08038330078125, 'eval_logps/rejected': -389.8620300292969, 'eval_logits/chosen': -1.3889706134796143, 'eval_logits/rejected': -1.3899844884872437, 'epoch': 0.05}
+  3%|▎         | 25/984 [04:56<2:16:58,  8.57s/it]
+100%|██████████| 100/100 [01:23<00:00,  1.68it/s][A[PassAtKCallback] Saving model to /tmp/tmp_czge3ho...
+Detected local model directory: /home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/models/llama3-8B_ppl-3.00_sft-320
+Found HuggingFace hub cache directory: /home/shougan/.cache/huggingface/hub
+
+
+Unsloth: Preparing safetensor model files:   0%|          | 0/4 [00:00<?, ?it/s][A[ACopied model-00001-of-00004.safetensors from local model directory
+
+
+Unsloth: Preparing safetensor model files:  25%|██▌       | 1/4 [00:06<00:19,  6.35s/it][A[ACopied model-00002-of-00004.safetensors from local model directory
+
+
+Unsloth: Preparing safetensor model files:  50%|█████     | 2/4 [00:09<00:08,  4.45s/it][A[ACopied model-00003-of-00004.safetensors from local model directory
+
+
+Unsloth: Preparing safetensor model files:  75%|███████▌  | 3/4 [00:12<00:03,  3.99s/it][A[ACopied model-00004-of-00004.safetensors from local model directory
+
+
+Unsloth: Preparing safetensor model files: 100%|██████████| 4/4 [00:13<00:00,  2.73s/it][A[AUnsloth: Preparing safetensor model files: 100%|██████████| 4/4 [00:13<00:00,  3.43s/it]
+
+
+Unsloth: Merging weights into 16bit:   0%|          | 0/4 [00:00<?, ?it/s][A[A
+
+Unsloth: Merging weights into 16bit:  25%|██▌       | 1/4 [00:19<00:59, 19.94s/it][A[A
+
+Unsloth: Merging weights into 16bit:  50%|█████     | 2/4 [00:39<00:38, 19.47s/it][A[A
+
+Unsloth: Merging weights into 16bit:  75%|███████▌  | 3/4 [00:58<00:19, 19.37s/it][A[A
+
+Unsloth: Merging weights into 16bit: 100%|██████████| 4/4 [01:02<00:00, 13.30s/it][A[AUnsloth: Merging weights into 16bit: 100%|██████████| 4/4 [01:02<00:00, 15.58s/it]
+Unsloth: Merge process complete. Saved to `/tmp/tmp_czge3ho`
+[PassAtKCallback] Moving training model to CPU...
+[PassAtKCallback] Loading model with vLLM from /tmp/tmp_czge3ho...
+LLM UTILISATION IS 0.8
+INFO 01-26 03:45:41 [config.py:841] This model supports multiple tasks: {'classify', 'embed', 'generate', 'reward'}. Defaulting to 'generate'.
+`torch_dtype` is deprecated! Use `dtype` instead!
+INFO 01-26 03:45:41 [config.py:1472] Using max model len 131072
+INFO 01-26 03:45:44 [config.py:2285] Chunked prefill is enabled with max_num_batched_tokens=8192.
+WARNING 01-26 03:45:45 [__init__.py:2662] We must use the `spawn` multiprocessing start method. Overriding VLLM_WORKER_MULTIPROC_METHOD to 'spawn'. See https://docs.vllm.ai/en/latest/usage/troubleshooting.html#python-multiprocessing for more information. Reason: CUDA is initialized
+🦥 Unsloth: Will patch your computer to enable 2x faster free finetuning.
+INFO 01-26 03:45:59 [__init__.py:244] Automatically detected platform cuda.
+🦥 Unsloth Zoo will now patch everything to make training faster!
+/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/pydantic/_internal/_generate_schema.py:2249: UnsupportedFieldAttributeWarning: The 'repr' attribute with value False was provided to the `Field()` function, which has no effect in the context it was used. 'repr' is field-specific metadata, and can only be attached to a model field using `Annotated` metadata or by assignment. This may have happened because an `Annotated` type alias using the `type` statement was used, or if the `Field()` function was attached to a single member of a union type.
+  warnings.warn(
+/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/pydantic/_internal/_generate_schema.py:2249: UnsupportedFieldAttributeWarning: The 'frozen' attribute with value True was provided to the `Field()` function, which has no effect in the context it was used. 'frozen' is field-specific metadata, and can only be attached to a model field using `Annotated` metadata or by assignment. This may have happened because an `Annotated` type alias using the `type` statement was used, or if the `Field()` function was attached to a single member of a union type.
+  warnings.warn(
+/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning
+Getting train dataset for run config: llama3-8B_sft-tuluif-8192
+Checking for dataset at /home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/data/datasets/sft-tuluif-8192
+Dataset already exists at /home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/data/datasets/sft-tuluif-8192
+Sampled dataset: DatasetDict({
+    train: Dataset({
+        features: ['id', 'prompt', 'messages', 'constraints'],
+        num_rows: 8192
+    })
+    test: Dataset({
+        features: ['id', 'prompt', 'messages', 'constraints'],
+        num_rows: 200
+    })
+})
+Example training row: {'id': 'personas_IF_9u3mcrurksv7hypq3xlppyba', 'prompt': 'Compile a detailed summary of the most recent case discussed on the podcast. Include the title of the episode wrapped in double angular brackets, i.e. <<title>>, and quote at least one statement made by the host during the discussion.', 'messages': [{'content': 'You are a helpful assistant who is an expert at responding to prompts by carefully following the given instructions', 'role': 'system'}, {'content': 'Compile a detailed summary of the most recent case discussed on the podcast. Include the title of the episode wrapped in double angular brackets, i.e. <<title>>, and quote at least one statement made by the host during the discussion.', 'role': 'user'}, {'content': "I'm sorry, but I don't have access to real-time data, including the most recent episodes of podcasts. If you provide me with some details from the episode, I'd be happy to help you compile a summary based on that information.", 'role': 'assistant'}], 'constraints': ['format:title', 'use quotation']}
+Example evaluation row: {'id': 'personas_IF_o3dewf33wk895zom2dbfye5u', 'prompt': 'I want to create a podcast where I explore the themes and motifs found in surreal dystopian literature, both mine and others. This podcast will dive deep into the artistic and philosophical underpinnings of this genre, aiming to become a leading voice in literary criticism. Can you guide me on how to effectively launch and grow this podcast? Include at least 3 **bold text** sections such as: **bold text 1**, **bold text 2**, etc., and incorporate a famous quote about dystopian literature.', 'messages': [{'content': 'You are a helpful assistant who is an expert at responding to prompts by carefully following the given instructions', 'role': 'system'}, {'content': 'I want to create a podcast where I explore the themes and motifs found in surreal dystopian literature, both mine and others. This podcast will dive deep into the artistic and philosophical underpinnings of this genre, aiming to become a leading voice in literary criticism. Can you guide me on how to effectively launch and grow this podcast? Include at least 3 **bold text** sections such as: **bold text 1**, **bold text 2**, etc., and incorporate a famous quote about dystopian literature.', 'role': 'user'}, {'content': 'Launching a podcast on surreal dystopian literature is a fascinating endeavor that requires a combination of passion, strategic planning, and thoughtful execution. Here\'s a guide to help you effectively launch and grow your podcast:\n\n**Identify Your Niche and Audience:** Begin by clearly defining what makes your podcast unique in the realm of dystopian literature. Consider focusing on specific sub-genres, authors, or themes that resonate with you. Understanding your target audience will help tailor your content to their interests and needs.\n\n**Develop Compelling Content:** Plan your episodes around intriguing themes and motifs found in surreal dystopian literature. Consider including analyses of classic works, like George Orwell\'s "1984" or Aldous Huxley\'s "Brave New World," alongside contemporary pieces. A quote to inspire your discussions might be Margaret Atwood\'s reflection: "A dystopia is a utopia that\'s gone wrong," which can serve as a launching point for exploring the thin line between utopian ideals and dystopian realities.\n\n**Leverage Expertise and Connections:** To establish credibility, invite authors, literary critics, and professors as guests to provide diverse perspectives. Your own insights as a writer can create a rich dialogue, blending personal experiences with broader literary critiques.\n\n**Invest in Quality Production:** Ensure high-quality audio and editing to maintain a professional standard. Consider investing in a good microphone and editing software. This attention to detail will enhance listener experience and retention.\n\n**Engage Your Audience:** Create a community around your podcast by encouraging listener interaction. Use social media platforms to engage with your audience, gather feedback, and promote upcoming episodes. Consider hosting live Q&A sessions or discussions to deepen listener involvement.\n\n**Market Strategically:** Utilize SEO techniques to make your podcast more discoverable. Write detailed show notes and transcriptions for each episode, including relevant keywords about the literature discussed. Collaborate with other podcasters or bloggers in the literary space to expand your reach.\n\n**Monitor and Adapt:** Regularly review analytics to understand which episodes resonate most with your audience. Be ready to adapt your content strategy based on listener feedback and trends in the literary world.\n\nBy focusing on these key areas, you can launch a podcast that not only explores the depths of surreal dystopian literature but also becomes a leading voice in literary criticism. Remember, consistency and authenticity are crucial to building a loyal listener base.', 'role': 'assistant'}], 'constraints': ['use quotation', 'format:number of highlighted sections']}
+==((====))==  Unsloth 2025.10.1: Fast Llama patching. Transformers: 4.56.1. vLLM: 0.9.2+computecanada.
+   \\   /|    NVIDIA L40S. Num GPUs = 1. Max memory: 44.403 GB. Platform: Linux.
+O^O/ \_/ \    Torch: 2.7.0. CUDA: 8.9. CUDA Toolkit: 12.6. Triton: 3.3.1
+\        /    Bfloat16 = TRUE. FA [Xformers = 0.0.30. FA2 = False]
+ "-____-"     Free license: http://github.com/unslothai/unsloth
+Unsloth: Fast downloading is enabled - ignore downloading bars which are red colored!
+Loading checkpoint shards:   0%|          | 0/4 [00:00<?, ?it/s]Loading checkpoint shards:  25%|██▌       | 1/4 [00:00<00:02,  1.09it/s]Loading checkpoint shards:  50%|█████     | 2/4 [00:01<00:01,  1.07it/s]Loading checkpoint shards:  75%|███████▌  | 3/4 [00:02<00:00,  1.07it/s]Loading checkpoint shards: 100%|██████████| 4/4 [00:03<00:00,  1.52it/s]Loading checkpoint shards: 100%|██████████| 4/4 [00:03<00:00,  1.32it/s]
+Unsloth: Will map <|im_end|> to EOS = <|end_of_text|>.
+DatasetDict({
+    train: Dataset({
+        features: ['id', 'prompt', 'messages', 'constraints', 'text'],
+        num_rows: 8192
+    })
+    test: Dataset({
+        features: ['id', 'prompt', 'messages', 'constraints', 'text'],
+        num_rows: 200
+    })
+})
+{'id': 'personas_IF_9u3mcrurksv7hypq3xlppyba', 'prompt': 'Compile a detailed summary of the most recent case discussed on the podcast. Include the title of the episode wrapped in double angular brackets, i.e. <<title>>, and quote at least one statement made by the host during the discussion.', 'messages': [{'content': 'You are a helpful assistant who is an expert at responding to prompts by carefully following the given instructions', 'role': 'system'}, {'content': 'Compile a detailed summary of the most recent case discussed on the podcast. Include the title of the episode wrapped in double angular brackets, i.e. <<title>>, and quote at least one statement made by the host during the discussion.', 'role': 'user'}, {'content': "I'm sorry, but I don't have access to real-time data, including the most recent episodes of podcasts. If you provide me with some details from the episode, I'd be happy to help you compile a summary based on that information.", 'role': 'assistant'}], 'constraints': ['format:title', 'use quotation'], 'text': "<|im_start|>system\nYou are a helpful assistant who is an expert at responding to prompts by carefully following the given instructions<|im_end|>\n<|im_start|>user\nCompile a detailed summary of the most recent case discussed on the podcast. Include the title of the episode wrapped in double angular brackets, i.e. <<title>>, and quote at least one statement made by the host during the discussion.<|im_end|>\n<|im_start|>assistant\nI'm sorry, but I don't have access to real-time data, including the most recent episodes of podcasts. If you provide me with some details from the episode, I'd be happy to help you compile a summary based on that information.<|im_end|>\n"}
+Unsloth 2025.10.1 patched 32 layers with 32 QKV layers, 32 O layers and 32 MLP layers.
+[PerplexityCallback] Initialized with perplexity_thresholds=[3.0, 3.25, 3.5, 3.75, 4.0, 5.0, 6.0]
+[PerplexityCallback] Training will stop at final threshold: 6.0
+[PerplexityCallback] num_samples=200
+[PerplexityCallback] Test dataset size: 200
+Dataset sample 1st one: {'id': 'personas_IF_o3dewf33wk895zom2dbfye5u', 'prompt': 'I want to create a podcast where I explore the themes and motifs found in surreal dystopian literature, both mine and others. This podcast will dive deep into the artistic and philosophical underpinnings of this genre, aiming to become a leading voice in literary criticism. Can you guide me on how to effectively launch and grow this podcast? Include at least 3 **bold text** sections such as: **bold text 1**, **bold text 2**, etc., and incorporate a famous quote about dystopian literature.', 'messages': [{'content': 'You are a helpful assistant who is an expert at responding to prompts by carefully following the given instructions', 'role': 'system'}, {'content': 'I want to create a podcast where I explore the themes and motifs found in surreal dystopian literature, both mine and others. This podcast will dive deep into the artistic and philosophical underpinnings of this genre, aiming to become a leading voice in literary criticism. Can you guide me on how to effectively launch and grow this podcast? Include at least 3 **bold text** sections such as: **bold text 1**, **bold text 2**, etc., and incorporate a famous quote about dystopian literature.', 'role': 'user'}, {'content': 'Launching a podcast on surreal dystopian literature is a fascinating endeavor that requires a combination of passion, strategic planning, and thoughtful execution. Here\'s a guide to help you effectively launch and grow your podcast:\n\n**Identify Your Niche and Audience:** Begin by clearly defining what makes your podcast unique in the realm of dystopian literature. Consider focusing on specific sub-genres, authors, or themes that resonate with you. Understanding your target audience will help tailor your content to their interests and needs.\n\n**Develop Compelling Content:** Plan your episodes around intriguing themes and motifs found in surreal dystopian literature. Consider including analyses of classic works, like George Orwell\'s "1984" or Aldous Huxley\'s "Brave New World," alongside contemporary pieces. A quote to inspire your discussions might be Margaret Atwood\'s reflection: "A dystopia is a utopia that\'s gone wrong," which can serve as a launching point for exploring the thin line between utopian ideals and dystopian realities.\n\n**Leverage Expertise and Connections:** To establish credibility, invite authors, literary critics, and professors as guests to provide diverse perspectives. Your own insights as a writer can create a rich dialogue, blending personal experiences with broader literary critiques.\n\n**Invest in Quality Production:** Ensure high-quality audio and editing to maintain a professional standard. Consider investing in a good microphone and editing software. This attention to detail will enhance listener experience and retention.\n\n**Engage Your Audience:** Create a community around your podcast by encouraging listener interaction. Use social media platforms to engage with your audience, gather feedback, and promote upcoming episodes. Consider hosting live Q&A sessions or discussions to deepen listener involvement.\n\n**Market Strategically:** Utilize SEO techniques to make your podcast more discoverable. Write detailed show notes and transcriptions for each episode, including relevant keywords about the literature discussed. Collaborate with other podcasters or bloggers in the literary space to expand your reach.\n\n**Monitor and Adapt:** Regularly review analytics to understand which episodes resonate most with your audience. Be ready to adapt your content strategy based on listener feedback and trends in the literary world.\n\nBy focusing on these key areas, you can launch a podcast that not only explores the depths of surreal dystopian literature but also becomes a leading voice in literary criticism. Remember, consistency and authenticity are crucial to building a loyal listener base.', 'role': 'assistant'}], 'constraints': ['use quotation', 'format:number of highlighted sections'], 'text': '<|im_start|>system\nYou are a helpful assistant who is an expert at responding to prompts by carefully following the given instructions<|im_end|>\n<|im_start|>user\nI want to create a podcast where I explore the themes and motifs found in surreal dystopian literature, both mine and others. This podcast will dive deep into the artistic and philosophical underpinnings of this genre, aiming to become a leading voice in literary criticism. Can you guide me on how to effectively launch and grow this podcast? Include at least 3 **bold text** sections such as: **bold text 1**, **bold text 2**, etc., and incorporate a famous quote about dystopian literature.<|im_end|>\n<|im_start|>assistant\nLaunching a podcast on surreal dystopian literature is a fascinating endeavor that requires a combination of passion, strategic planning, and thoughtful execution. Here\'s a guide to help you effectively launch and grow your podcast:\n\n**Identify Your Niche and Audience:** Begin by clearly defining what makes your podcast unique in the realm of dystopian literature. Consider focusing on specific sub-genres, authors, or themes that resonate with you. Understanding your target audience will help tailor your content to their interests and needs.\n\n**Develop Compelling Content:** Plan your episodes around intriguing themes and motifs found in surreal dystopian literature. Consider including analyses of classic works, like George Orwell\'s "1984" or Aldous Huxley\'s "Brave New World," alongside contemporary pieces. A quote to inspire your discussions might be Margaret Atwood\'s reflection: "A dystopia is a utopia that\'s gone wrong," which can serve as a launching point for exploring the thin line between utopian ideals and dystopian realities.\n\n**Leverage Expertise and Connections:** To establish credibility, invite authors, literary critics, and professors as guests to provide diverse perspectives. Your own insights as a writer can create a rich dialogue, blending personal experiences with broader literary critiques.\n\n**Invest in Quality Production:** Ensure high-quality audio and editing to maintain a professional standard. Consider investing in a good microphone and editing software. This attention to detail will enhance listener experience and retention.\n\n**Engage Your Audience:** Create a community around your podcast by encouraging listener interaction. Use social media platforms to engage with your audience, gather feedback, and promote upcoming episodes. Consider hosting live Q&A sessions or discussions to deepen listener involvement.\n\n**Market Strategically:** Utilize SEO techniques to make your podcast more discoverable. Write detailed show notes and transcriptions for each episode, including relevant keywords about the literature discussed. Collaborate with other podcasters or bloggers in the literary space to expand your reach.\n\n**Monitor and Adapt:** Regularly review analytics to understand which episodes resonate most with your audience. Be ready to adapt your content strategy based on listener feedback and trends in the literary world.\n\nBy focusing on these key areas, you can launch a podcast that not only explores the depths of surreal dystopian literature but also becomes a leading voice in literary criticism. Remember, consistency and authenticity are crucial to building a loyal listener base.<|im_end|>\n'}
+[SFT] Perplexity thresholds: [6.0, 5.0, 4.0, 3.75, 3.5, 3.25, 3.0]
+[SFT] Will checkpoint at each threshold and stop at final: 3.0
+{'output_dir': '/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/models/llama3-8B_sft-tuluif-8192', 'overwrite_output_dir': False, 'do_train': False, 'do_eval': True, 'do_predict': False, 'eval_strategy': 'steps', 'prediction_loss_only': False, 'per_device_train_batch_size': 1, 'per_device_eval_batch_size': 1, 'per_gpu_train_batch_size': None, 'per_gpu_eval_batch_size': None, 'gradient_accumulation_steps': 16, 'eval_accumulation_steps': 16, 'eval_delay': 0, 'torch_empty_cache_steps': None, 'learning_rate': 5e-05, 'weight_decay': 0.01, 'adam_beta1': 0.9, 'adam_beta2': 0.999, 'adam_epsilon': 1e-08, 'max_grad_norm': 1.0, 'num_train_epochs': 2, 'max_steps': -1, 'lr_scheduler_type': 'cosine', 'lr_scheduler_kwargs': {}, 'warmup_ratio': 0.1, 'warmup_steps': 0, 'log_level': 'passive', 'log_level_replica': 'warning', 'log_on_each_node': True, 'logging_dir': '/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/models/llama3-8B_sft-tuluif-8192/runs/Jan26_03-46-29_kn111', 'logging_strategy': 'steps', 'logging_first_step': False, 'logging_steps': 1, 'logging_nan_inf_filter': True, 'save_strategy': 'no', 'save_steps': 20, 'save_total_limit': 1, 'save_safetensors': True, 'save_on_each_node': False, 'save_only_model': False, 'restore_callback_states_from_checkpoint': False, 'no_cuda': False, 'use_cpu': False, 'use_mps_device': False, 'seed': 42, 'data_seed': None, 'jit_mode_eval': False, 'use_ipex': False, 'bf16': True, 'fp16': False, 'fp16_opt_level': 'O1', 'half_precision_backend': 'auto', 'bf16_full_eval': True, 'fp16_full_eval': False, 'tf32': None, 'local_rank': 0, 'ddp_backend': None, 'tpu_num_cores': None, 'tpu_metrics_debug': False, 'debug': [], 'dataloader_drop_last': False, 'eval_steps': 20, 'dataloader_num_workers': 0, 'dataloader_prefetch_factor': None, 'past_index': -1, 'run_name': None, 'disable_tqdm': False, 'remove_unused_columns': True, 'label_names': None, 'load_best_model_at_end': False, 'metric_for_best_model': None, 'greater_is_better': None, 'ignore_data_skip': False, 'fsdp': [], 'fsdp_min_num_params': 0, 'fsdp_config': {'min_num_params': 0, 'xla': False, 'xla_fsdp_v2': False, 'xla_fsdp_grad_ckpt': False}, 'fsdp_transformer_layer_cls_to_wrap': None, 'accelerator_config': {'split_batches': False, 'dispatch_batches': None, 'even_batches': True, 'use_seedable_sampler': True, 'non_blocking': False, 'gradient_accumulation_kwargs': None}, 'parallelism_config': None, 'deepspeed': None, 'label_smoothing_factor': 0.0, 'optim': 'adamw_8bit', 'optim_args': None, 'adafactor': False, 'group_by_length': False, 'length_column_name': 'length', 'report_to': ['wandb'], 'ddp_find_unused_parameters': None, 'ddp_bucket_cap_mb': None, 'ddp_broadcast_buffers': None, 'dataloader_pin_memory': True, 'dataloader_persistent_workers': False, 'skip_memory_metrics': True, 'use_legacy_prediction_loop': False, 'push_to_hub': False, 'resume_from_checkpoint': None, 'hub_model_id': None, 'hub_strategy': 'every_save', 'hub_token': '<HUB_TOKEN>', 'hub_private_repo': None, 'hub_always_push': False, 'hub_revision': None, 'gradient_checkpointing': False, 'gradient_checkpointing_kwargs': None, 'include_inputs_for_metrics': False, 'include_for_metrics': [], 'eval_do_concat_batches': True, 'fp16_backend': 'auto', 'push_to_hub_model_id': None, 'push_to_hub_organization': None, 'push_to_hub_token': '<PUSH_TO_HUB_TOKEN>', 'mp_parameters': '', 'auto_find_batch_size': False, 'full_determinism': False, 'torchdynamo': None, 'ray_scope': 'last', 'ddp_timeout': 1800, 'torch_compile': False, 'torch_compile_backend': None, 'torch_compile_mode': None, 'include_tokens_per_second': False, 'include_num_input_tokens_seen': False, 'neftune_noise_alpha': None, 'optim_target_modules': None, 'batch_eval_metrics': False, 'eval_on_start': False, 'use_liger_kernel': False, 'liger_kernel_config': None, 'eval_use_gather_object': False, 'average_tokens_across_devices': False, 'model_init_kwargs': None, 'chat_template_path': None, 'dataset_text_field': 'text', 'dataset_kwargs': None, 'dataset_num_proc': None, 'eos_token': '<EOS_TOKEN>', 'pad_token': '<PAD_TOKEN>', 'max_length': 1024, 'packing': False, 'packing_strategy': 'bfd', 'padding_free': False, 'pad_to_multiple_of': None, 'eval_packing': None, 'completion_only_loss': None, 'assistant_only_loss': False, 'loss_type': 'nll', 'activation_offloading': False}
+==((====))==  Unsloth - 2x faster free finetuning | Num GPUs used = 1
+   \\   /|    Num examples = 8,192 | Num Epochs = 2 | Total steps = 1,024
+O^O/ \_/ \    Batch size per device = 1 | Gradient accumulation steps = 16
+\        /    Data Parallel GPUs = 1 | Total batch size (1 x 16 x 1) = 16
+ "-____-"     Trainable parameters = 83,886,080 of 8,114,147,328 (1.03% trained)
+wandb: Currently logged in as: shougan (shougan-university-of-waterloo) to https://api.wandb.ai. Use `wandb login --relogin` to force relogin
+wandb: Tracking run with wandb version 0.21.0
+wandb: Run data is saved locally in /project/6105902/shougan/balance-budget/wandb/run-20260126_034632-4ppr614g
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run sunny-haze-66
+wandb: ⭐️ View project at https://wandb.ai/shougan-university-of-waterloo/huggingface
+wandb: 🚀 View run at https://wandb.ai/shougan-university-of-waterloo/huggingface/runs/4ppr614g
+[PerplexityCallback] on_train_begin: model_name=llama3-8B
+  0%|          | 0/1024 [00:00<?, ?it/s]Unsloth: Will smartly offload gradients to save VRAM!
+  0%|          | 1/1024 [00:05<1:38:46,  5.79s/it]                                                  {'loss': 2.0671, 'grad_norm': 1.3178530931472778, 'learning_rate': 0.0, 'epoch': 0.0}
+  0%|          | 1/1024 [00:05<1:38:46,  5.79s/it]  0%|          | 2/1024 [00:10<1:29:03,  5.23s/it]                                                  {'loss': 1.7509, 'grad_norm': 1.0591094493865967, 'learning_rate': 4.854368932038835e-07, 'epoch': 0.0}
+  0%|          | 2/1024 [00:10<1:29:03,  5.23s/it]  0%|          | 3/1024 [00:15<1:23:24,  4.90s/it]                                                  {'loss': 1.7534, 'grad_norm': 1.0601528882980347, 'learning_rate': 9.70873786407767e-07, 'epoch': 0.01}
+  0%|          | 3/1024 [00:15<1:23:24,  4.90s/it]  0%|          | 4/1024 [00:19<1:20:13,  4.72s/it]                                                  {'loss': 1.8807, 'grad_norm': 1.175734281539917, 'learning_rate': 1.4563106796116506e-06, 'epoch': 0.01}
+  0%|          | 4/1024 [00:19<1:20:13,  4.72s/it]  0%|          | 5/1024 [00:24<1:18:49,  4.64s/it]                                                  {'loss': 1.624, 'grad_norm': 1.1031402349472046, 'learning_rate': 1.941747572815534e-06, 'epoch': 0.01}
+  0%|          | 5/1024 [00:24<1:18:49,  4.64s/it]  1%|          | 6/1024 [00:28<1:18:32,  4.63s/it]                                                  {'loss': 1.6248, 'grad_norm': 0.9267405271530151, 'learning_rate': 2.4271844660194174e-06, 'epoch': 0.01}
+  1%|          | 6/1024 [00:28<1:18:32,  4.63s/it]  1%|          | 7/1024 [00:33<1:17:43,  4.59s/it]                                                  {'loss': 1.6456, 'grad_norm': 1.0061700344085693, 'learning_rate': 2.912621359223301e-06, 'epoch': 0.01}
+  1%|          | 7/1024 [00:33<1:17:43,  4.59s/it]  1%|          | 8/1024 [00:37<1:16:40,  4.53s/it]                                                  {'loss': 1.9255, 'grad_norm': 1.397505760192871, 'learning_rate': 3.3980582524271844e-06, 'epoch': 0.02}
+  1%|          | 8/1024 [00:37<1:16:40,  4.53s/it]  1%|          | 9/1024 [00:42<1:16:54,  4.55s/it]                                                  {'loss': 1.8675, 'grad_norm': 1.1054166555404663, 'learning_rate': 3.883495145631068e-06, 'epoch': 0.02}
+  1%|          | 9/1024 [00:42<1:16:54,  4.55s/it]  1%|          | 10/1024 [00:46<1:16:22,  4.52s/it]                                                   {'loss': 2.0101, 'grad_norm': 1.4631407260894775, 'learning_rate': 4.368932038834952e-06, 'epoch': 0.02}
+  1%|          | 10/1024 [00:46<1:16:22,  4.52s/it]  1%|          | 11/1024 [00:51<1:16:13,  4.52s/it]                                                   {'loss': 1.7068, 'grad_norm': 1.1855982542037964, 'learning_rate': 4.854368932038835e-06, 'epoch': 0.02}
+  1%|          | 11/1024 [00:51<1:16:13,  4.52s/it]  1%|          | 12/1024 [00:55<1:15:50,  4.50s/it]                                                   {'loss': 1.9841, 'grad_norm': 1.3300195932388306, 'learning_rate': 5.3398058252427185e-06, 'epoch': 0.02}
+  1%|          | 12/1024 [00:55<1:15:50,  4.50s/it]  1%|▏         | 13/1024 [01:00<1:15:32,  4.48s/it]                                                   {'loss': 1.8539, 'grad_norm': 1.2929859161376953, 'learning_rate': 5.825242718446602e-06, 'epoch': 0.03}
+  1%|▏         | 13/1024 [01:00<1:15:32,  4.48s/it]  1%|▏         | 14/1024 [01:04<1:14:59,  4.46s/it]                                                   {'loss': 1.8805, 'grad_norm': 1.3095417022705078, 'learning_rate': 6.310679611650486e-06, 'epoch': 0.03}
+  1%|▏         | 14/1024 [01:04<1:14:59,  4.46s/it]  1%|▏         | 15/1024 [01:08<1:15:02,  4.46s/it]                                                   {'loss': 1.91, 'grad_norm': 1.348935842514038, 'learning_rate': 6.796116504854369e-06, 'epoch': 0.03}
+  1%|▏         | 15/1024 [01:08<1:15:02,  4.46s/it]  2%|▏         | 16/1024 [01:13<1:15:08,  4.47s/it]                                                   {'loss': 1.8164, 'grad_norm': 1.259256362915039, 'learning_rate': 7.281553398058253e-06, 'epoch': 0.03}
+  2%|▏         | 16/1024 [01:13<1:15:08,  4.47s/it]  2%|▏         | 17/1024 [01:18<1:16:14,  4.54s/it]                                                   {'loss': 1.5202, 'grad_norm': 0.9442360997200012, 'learning_rate': 7.766990291262136e-06, 'epoch': 0.03}
+  2%|▏         | 17/1024 [01:18<1:16:14,  4.54s/it]  2%|▏         | 18/1024 [01:22<1:16:21,  4.55s/it]                                                   {'loss': 1.7179, 'grad_norm': 1.0559146404266357, 'learning_rate': 8.25242718446602e-06, 'epoch': 0.04}
+  2%|▏         | 18/1024 [01:22<1:16:21,  4.55s/it]  2%|▏         | 19/1024 [01:27<1:15:36,  4.51s/it]                                                   {'loss': 1.9279, 'grad_norm': 1.5315332412719727, 'learning_rate': 8.737864077669904e-06, 'epoch': 0.04}
+  2%|▏         | 19/1024 [01:27<1:15:36,  4.51s/it]  2%|▏         | 20/1024 [01:31<1:16:04,  4.55s/it]                                                   {'loss': 1.5456, 'grad_norm': 0.9219989776611328, 'learning_rate': 9.223300970873788e-06, 'epoch': 0.04}
+  2%|▏         | 20/1024 [01:31<1:16:04,  4.55s/it]Unsloth: Not an error, but LlamaForCausalLM does not accept `num_items_in_batch`.
+Using gradient accumulation will be very slightly less accurate.
+Read more on gradient accumulation issues here: https://unsloth.ai/blog/gradient
+
+  0%|          | 0/200 [00:00<?, ?it/s][A
+  2%|▏         | 3/200 [00:00<00:10, 19.48it/s][A
+  2%|▎         | 5/200 [00:00<00:12, 15.42it/s][A
+  4%|▎         | 7/200 [00:00<00:12, 15.07it/s][A
+  4%|▍         | 9/200 [00:00<00:13, 14.64it/s][A
+  6%|▌         | 11/200 [00:00<00:13, 14.46it/s][A
+  6%|▋         | 13/200 [00:00<00:12, 14.45it/s][A
+  8%|▊         | 15/200 [00:01<00:13, 13.35it/s][A
+  8%|▊         | 17/200 [00:01<00:14, 12.63it/s][A
+ 10%|▉         | 19/200 [00:01<00:13, 13.16it/s][A
+ 10%|█         | 21/200 [00:01<00:13, 13.66it/s][A
+ 12%|█▏        | 23/200 [00:01<00:12, 13.74it/s][A
+ 12%|█▎        | 25/200 [00:01<00:14, 12.48it/s][A
+ 14%|█▎        | 27/200 [00:02<00:14, 11.62it/s][A
+ 14%|█▍        | 29/200 [00:02<00:14, 11.93it/s][A
+ 16%|█▌        | 31/200 [00:02<00:13, 12.62it/s][A
+ 16%|█▋        | 33/200 [00:02<00:14, 11.47it/s][A
+ 18%|█▊        | 35/200 [00:02<00:13, 11.82it/s][A
+ 18%|█▊        | 37/200 [00:02<00:13, 12.39it/s][A
+ 20%|█▉        | 39/200 [00:02<00:12, 12.95it/s][A
+ 20%|██        | 41/200 [00:03<00:11, 13.42it/s][A
+ 22%|██▏       | 43/200 [00:03<00:11, 13.80it/s][A
+ 22%|██▎       | 45/200 [00:03<00:11, 14.07it/s][A
+ 24%|██▎       | 47/200 [00:03<00:11, 13.72it/s][A
+ 24%|██▍       | 49/200 [00:03<00:11, 13.01it/s][A
+ 26%|██▌       | 51/200 [00:03<00:11, 13.22it/s][A
+ 26%|██▋       | 53/200 [00:04<00:11, 13.23it/s][A
+ 28%|██▊       | 55/200 [00:04<00:10, 13.56it/s][A
+ 28%|██▊       | 57/200 [00:04<00:10, 13.86it/s][A
+ 30%|██▉       | 59/200 [00:04<00:10, 14.07it/s][A
+ 30%|███       | 61/200 [00:04<00:10, 13.21it/s][A
+ 32%|███▏      | 63/200 [00:04<00:10, 13.59it/s][A
+ 32%|███▎      | 65/200 [00:04<00:10, 12.70it/s][A
+ 34%|███▎      | 67/200 [00:05<00:10, 13.01it/s][A
+ 34%|███▍      | 69/200 [00:05<00:09, 13.31it/s][A
+ 36%|███▌      | 71/200 [00:05<00:10, 12.05it/s][A
+ 36%|███▋      | 73/200 [00:05<00:10, 12.41it/s][A
+ 38%|███▊      | 75/200 [00:05<00:09, 12.67it/s][A
+ 38%|███▊      | 77/200 [00:05<00:09, 13.19it/s][A
+ 40%|███▉      | 79/200 [00:05<00:08, 13.64it/s][A
+ 40%|████      | 81/200 [00:06<00:09, 12.56it/s][A
+ 42%|████▏     | 83/200 [00:06<00:08, 13.07it/s][A
+ 42%|████▎     | 85/200 [00:06<00:08, 13.53it/s][A
+ 44%|████▎     | 87/200 [00:06<00:08, 13.63it/s][A
+ 44%|████▍     | 89/200 [00:06<00:08, 13.68it/s][A
+ 46%|████▌     | 91/200 [00:06<00:07, 13.94it/s][A
+ 46%|████▋     | 93/200 [00:07<00:07, 14.10it/s][A
+ 48%|████▊     | 95/200 [00:07<00:07, 14.02it/s][A
+ 48%|████▊     | 97/200 [00:07<00:08, 12.55it/s][A
+ 50%|████▉     | 99/200 [00:07<00:07, 12.89it/s][A
+ 50%|█████     | 101/200 [00:07<00:07, 13.34it/s][A
+ 52%|█████▏    | 103/200 [00:07<00:07, 13.69it/s][A
+ 52%|█████▎    | 105/200 [00:07<00:06, 13.84it/s][A
+ 54%|█████▎    | 107/200 [00:08<00:06, 13.29it/s][A
+ 55%|█████▍    | 109/200 [00:08<00:06, 13.66it/s][A
+ 56%|█████▌    | 111/200 [00:08<00:06, 13.96it/s][A
+ 56%|█████▋    | 113/200 [00:08<00:06, 12.71it/s][A
+ 57%|█████▊    | 115/200 [00:08<00:06, 13.06it/s][A
+ 58%|█████▊    | 117/200 [00:08<00:06, 12.33it/s][A
+ 60%|█████▉    | 119/200 [00:08<00:06, 12.93it/s][A
+ 60%|██████    | 121/200 [00:09<00:05, 13.25it/s][A
+ 62%|██████▏   | 123/200 [00:09<00:05, 13.62it/s][A
+ 62%|██████▎   | 125/200 [00:09<00:05, 13.50it/s][A
+ 64%|██████▎   | 127/200 [00:09<00:05, 13.72it/s][A
+ 64%|██████▍   | 129/200 [00:09<00:05, 12.79it/s][A
+ 66%|██████▌   | 131/200 [00:09<00:05, 12.90it/s][A
+ 66%|██████▋   | 133/200 [00:10<00:05, 12.87it/s][A
+ 68%|██████▊   | 135/200 [00:10<00:04, 13.27it/s][A
+ 68%|██████▊   | 137/200 [00:10<00:04, 13.64it/s][A
+ 70%|██████▉   | 139/200 [00:10<00:04, 13.96it/s][A
+ 70%|███████   | 141/200 [00:10<00:04, 14.19it/s][A
+ 72%|███████▏  | 143/200 [00:10<00:04, 13.80it/s][A
+ 72%|███████▎  | 145/200 [00:10<00:04, 13.12it/s][A
+ 74%|███████▎  | 147/200 [00:11<00:04, 12.62it/s][A
+ 74%|███████▍  | 149/200 [00:11<00:03, 13.22it/s][A
+ 76%|███████▌  | 151/200 [00:11<00:03, 13.17it/s][A
+ 76%|███████▋  | 153/200 [00:11<00:03, 13.54it/s][A
+ 78%|███████▊  | 155/200 [00:11<00:03, 13.86it/s][A
+ 78%|███████▊  | 157/200 [00:11<00:03, 14.17it/s][A
+ 80%|███████▉  | 159/200 [00:11<00:02, 14.36it/s][A
+ 80%|████████  | 161/200 [00:12<00:02, 13.46it/s][A
+ 82%|████████▏ | 163/200 [00:12<00:02, 12.64it/s][A
+ 82%|████████▎ | 165/200 [00:12<00:02, 13.08it/s][A
+ 84%|████████▎ | 167/200 [00:12<00:02, 13.50it/s][A
+ 84%|████████▍ | 169/200 [00:12<00:02, 13.91it/s][A
+ 86%|████████▌ | 171/200 [00:12<00:02, 14.10it/s][A
+ 86%|████████▋ | 173/200 [00:12<00:01, 14.27it/s][A
+ 88%|████████▊ | 175/200 [00:13<00:01, 14.35it/s][A
+ 88%|████████▊ | 177/200 [00:13<00:01, 12.91it/s][A
+ 90%|████████▉ | 179/200 [00:13<00:01, 13.39it/s][A
+ 90%|█████████ | 181/200 [00:13<00:01, 12.32it/s][A
+ 92%|█████████▏| 183/200 [00:13<00:01, 12.77it/s][A
+ 92%|█████████▎| 185/200 [00:13<00:01, 13.26it/s][A
+ 94%|█████████▎| 187/200 [00:14<00:00, 13.66it/s][A
+ 94%|█████████▍| 189/200 [00:14<00:00, 13.89it/s][A
+ 96%|█████████▌| 191/200 [00:14<00:00, 13.89it/s][A
+ 96%|█████████▋| 193/200 [00:14<00:00, 12.24it/s][A
+ 98%|█████████▊| 195/200 [00:14<00:00, 12.15it/s][A
+ 98%|█████████▊| 197/200 [00:14<00:00, 12.80it/s][A
+100%|█████████▉| 199/200 [00:14<00:00, 12.86it/s][A                                                   
+                                                 [A{'eval_loss': 1.9889863729476929, 'eval_runtime': 15.2396, 'eval_samples_per_second': 13.124, 'eval_steps_per_second': 13.124, 'epoch': 0.04}
+  2%|▏         | 20/1024 [01:47<1:16:04,  4.55s/it]
+100%|██████████| 200/200 [00:15<00:00, 12.86it/s][A
+100%|██████████| 200/200 [00:27<00:00, 12.86it/s][A/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/numpy/core/fromnumeric.py:3504: RuntimeWarning: Mean of empty slice.
+  return _methods._mean(a, axis=axis, dtype=dtype,
+/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/numpy/core/_methods.py:129: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+
+[PerplexityCallback] Step 20, Data Points 320: PPL = nan
+[PerplexityCallback] Sweetspot threshold 3.0 reached!
+[PerplexityCallback] Saving sweetspot checkpoint to /home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/models/llama3-8B_ppl-3.00_sft-320
+Found HuggingFace hub cache directory: /home/shougan/.cache/huggingface/hub
+Checking cache directory for required files...
+
+
+Unsloth: Copying 4 files from cache to `/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/models/llama3-8B_ppl-3.00_sft-320`:   0%|          | 0/4 [00:00<?, ?it/s][A[A
+
+Unsloth: Copying 4 files from cache to `/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/models/llama3-8B_ppl-3.00_sft-320`:  25%|██▌       | 1/4 [00:05<00:16,  5.57s/it][A[A
+
+Unsloth: Copying 4 files from cache to `/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/models/llama3-8B_ppl-3.00_sft-320`:  50%|█████     | 2/4 [00:11<00:11,  5.60s/it][A[A
+
+Unsloth: Copying 4 files from cache to `/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/models/llama3-8B_ppl-3.00_sft-320`:  75%|███████▌  | 3/4 [00:17<00:05,  5.78s/it][A[A
+
+Unsloth: Copying 4 files from cache to `/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/models/llama3-8B_ppl-3.00_sft-320`: 100%|██████████| 4/4 [00:18<00:00,  4.04s/it][A[AUnsloth: Copying 4 files from cache to `/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/models/llama3-8B_ppl-3.00_sft-320`: 100%|██████████| 4/4 [00:18<00:00,  4.64s/it]
+Successfully copied all 4 files from cache to `/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/models/llama3-8B_ppl-3.00_sft-320`
+
+
+Unsloth: Preparing safetensor model files:   0%|          | 0/4 [00:00<?, ?it/s][A[AUnsloth: Preparing safetensor model files: 100%|██████████| 4/4 [00:00<00:00, 25930.78it/s]
+
+
+Unsloth: Merging weights into 16bit:   0%|          | 0/4 [00:00<?, ?it/s][A[A
+
+Unsloth: Merging weights into 16bit:  25%|██▌       | 1/4 [00:20<01:00, 20.27s/it][A[A
+
+Unsloth: Merging weights into 16bit:  50%|█████     | 2/4 [00:43<00:44, 22.03s/it][A[A
+
+Unsloth: Merging weights into 16bit:  75%|███████▌  | 3/4 [01:05<00:21, 21.96s/it][A[A
+
+Unsloth: Merging weights into 16bit: 100%|██████████| 4/4 [01:09<00:00, 14.73s/it][A[AUnsloth: Merging weights into 16bit: 100%|██████████| 4/4 [01:09<00:00, 17.26s/it]
+Unsloth: Merge process complete. Saved to `/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/models/llama3-8B_ppl-3.00_sft-320`
+[PerplexityCallback] Sweetspot checkpoint saved with metadata at /home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/models_metadata/llama3-8B_ppl-0126_0346.json
+[PerplexityCallback] Launching DPO job with data points 7872 at checkpoint /home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/models/llama3-8B_ppl-3.00_sft-320
+[PerplexityCallback] Final threshold 3.0 reached! Stopping training.
+
+                                                 [A                                                   {'train_runtime': 215.0763, 'train_samples_per_second': 76.178, 'train_steps_per_second': 4.761, 'train_loss': 1.800646221637726, 'epoch': 0.04}
+  2%|▏         | 20/1024 [03:33<1:16:04,  4.55s/it]  2%|▏         | 20/1024 [03:33<2:58:46, 10.68s/it]
+Found HuggingFace hub cache directory: /home/shougan/.cache/huggingface/hub
+Checking cache directory for required files...
+Unsloth: Copying 4 files from cache to `/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/models/llama3-8B_sft-tuluif-8192`:   0%|          | 0/4 [00:00<?, ?it/s]Unsloth: Copying 4 files from cache to `/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/models/llama3-8B_sft-tuluif-8192`:  25%|██▌       | 1/4 [00:05<00:17,  5.72s/it]Unsloth: Copying 4 files from cache to `/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/models/llama3-8B_sft-tuluif-8192`:  50%|█████     | 2/4 [00:11<00:11,  5.87s/it]Unsloth: Copying 4 files from cache to `/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/models/llama3-8B_sft-tuluif-8192`:  75%|███████▌  | 3/4 [00:17<00:05,  5.78s/it]Unsloth: Copying 4 files from cache to `/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/models/llama3-8B_sft-tuluif-8192`: 100%|██████████| 4/4 [00:18<00:00,  4.02s/it]Unsloth: Copying 4 files from cache to `/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/models/llama3-8B_sft-tuluif-8192`: 100%|██████████| 4/4 [00:18<00:00,  4.67s/it]
+Successfully copied all 4 files from cache to `/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/models/llama3-8B_sft-tuluif-8192`
+Unsloth: Preparing safetensor model files:   0%|          | 0/4 [00:00<?, ?it/s]Unsloth: Preparing safetensor model files: 100%|██████████| 4/4 [00:00<00:00, 25614.07it/s]
+Unsloth: Merging weights into 16bit:   0%|          | 0/4 [00:00<?, ?it/s]Unsloth: Merging weights into 16bit:  25%|██▌       | 1/4 [00:19<00:59, 19.85s/it]Unsloth: Merging weights into 16bit:  50%|█████     | 2/4 [00:41<00:41, 20.72s/it]Unsloth: Merging weights into 16bit:  75%|███████▌  | 3/4 [01:02<00:20, 20.80s/it]Unsloth: Merging weights into 16bit: 100%|██████████| 4/4 [01:06<00:00, 14.24s/it]Unsloth: Merging weights into 16bit: 100%|██████████| 4/4 [01:06<00:00, 16.56s/it]
+Unsloth: Merge process complete. Saved to `/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/models/llama3-8B_sft-tuluif-8192`
+[{'threshold_type': 'perplexity', 'threshold_value': 3.0, 'global_step': 20, 'checkpoint_path': '/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/models/llama3-8B_ppl-3.00_sft-320', 'data_points_seen': 320}]
+Per device train batch size: 1
+Getting train dataset for run config: llama3-8B_llama3-8B_ppl-3.00_sft-320_pt-tuluif-7872
+Checking for dataset at /home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/data/datasets/pt-tuluif-7872
+Dataset already exists at /home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/data/datasets/pt-tuluif-7872
+Sampled dataset: DatasetDict({
+    train: Dataset({
+        features: ['id', 'prompt', 'constraints', 'chosen', 'rejected', 'chonsen_model', 'rejected_model', 'system_message'],
+        num_rows: 7872
+    })
+    test: Dataset({
+        features: ['id', 'prompt', 'constraints', 'chosen', 'rejected', 'chonsen_model', 'rejected_model', 'system_message'],
+        num_rows: 200
+    })
+})
+Example training row: {'id': 'personas_IF_dqxglsux2n8jeu59qktlnesh', 'prompt': 'Name two famous equestrian events that are part of the international jumping circuit, and format your answer by choosing one from these options: lowercase, UPPERCASE, Title Case.', 'constraints': ['punctuation:use no comma', 'format:choose one from options'], 'chosen': 'LONGINES GLOBAL CHAMPIONS TOUR, ROLEX GRAND SLAM OF SHOW JUMPING', 'rejected': '- longines global champions tour\n- FEI WORLD CUP JUMPING', 'chonsen_model': 'gpt-4o', 'rejected_model': 'gpt-4o', 'system_message': 'You are a helpful assistant who is an expert at responding to prompts by carefully following the given instructions'}
+Example evaluation row: {'id': 'personas_IF_kvn9ms052ydm1n10j2zs7c90', 'prompt': 'As a high school student with a passion for astronomy, create a list of reliable sources to learn about the solar system. Each source description should contain the keywords "planet" and "orbit" at least twice. Provide two separate lists: one for online resources and another for books. Each list should contain exactly 5 bullet points.', 'constraints': ['keywords:letter frequency', ' give two responses', 'format:number of bullet lists'], 'chosen': '**Online Resources:**\n\n1. **NASA\'s Solar System Exploration Website**  \n   This comprehensive online resource offers detailed information about each planet in our solar system and their unique orbits. With interactive features, you can explore how each planet\'s orbit affects its climate and visibility.\n\n2. **The Planetary Society\'s Guide to the Solar System**  \n   This guide provides insights into the planets and their orbits, allowing users to understand the dynamic nature of planetary orbits. Learn how each planet\'s orbit influences its interaction with other celestial bodies.\n\n3. **National Geographic\'s Solar System 101**  \n   An engaging online article that covers the basics of each planet, including their orbits around the Sun. Discover how the orbit of each planet contributes to phenomena like seasons and eclipses.\n\n4. **BBC\'s Planets and Orbits Webpage**  \n   This webpage is part of the BBC\'s educational content, focusing on the planets and their orbits. It explains the intricacies of how each planet maintains its orbit and the historical context of orbit discoveries.\n\n5. **Khan Academy\'s Astronomy Course**  \n   This free, educational platform offers a series of videos on the solar system, emphasizing the planets and their orbits. Learn about the gravitational forces that govern each planet\'s orbit and their effects on the solar system\'s stability.\n\n**Books:**\n\n1. **"The Planets: An Illustrated History of Our Solar System" by Carole Stott**  \n   This book provides an in-depth look at each planet, with a special focus on their orbits. It explains how the orbit of each planet was discovered and how it affects the solar system.\n\n2. **"The Solar System: An Astronomer\'s Guide" by David A. Rothery**  \n   This guide explores the planets and their orbits, highlighting the science behind orbital mechanics. Learn how each planet\'s orbit is influenced by gravitational forces.\n\n3. **"Planetary Science: The Science of Planets around Stars" by George H. A. Cole and Michael M. Woolfson**  \n   This textbook covers the planets in our solar system and the orbits they follow. It provides a detailed analysis of how each planet\'s orbit affects its environment and evolution.\n\n4. **"The Orbits of Planets: A Journey Through the Solar System" by John E. Chambers**  \n   Focused on the paths that planets take, this book explores the orbits of each planet. It delves into the history and science of how planetary orbits were understood.\n\n5. **"Planets and Life: The Emerging Science of Astrobiology" by Woodruff T. Sullivan III and John Baross**  \n   This book examines the planets and their orbits, discussing how orbital patterns can influence the potential for life. Understand how each planet\'s orbit affects its climate and habitability.', 'rejected': '### Online Resources\n\n- **NASA Solar System Exploration**: This official NASA website provides comprehensive information about each planet in our solar system, detailing their orbits, characteristics, and exploration missions. It includes interactive features to visualize the orbits of planets and their positions in the solar system, making it an excellent resource for understanding planetary orbits.\n\n- **National Geographic\'s Solar System 101**: An informative section on National Geographic\'s website that covers the basics of each planet, their unique features, and how they orbit the Sun. With rich visual content, it helps users grasp the concept of planetary orbits and how each planet\'s orbit affects its climate and environment.\n\n- **European Space Agency (ESA) Solar System and Beyond**: The ESA website offers detailed articles and videos about the planets and their orbits, focusing on the latest scientific discoveries. It explains how the orbits of planets are studied using various space missions and the impact of these orbits on solar system dynamics.\n\n- **BBC\'s The Planets**: This online series explores the planets of our solar system, emphasizing their orbits and how they have evolved over time. It features engaging multimedia content that discusses the unique orbital paths of each planet and how these orbits contribute to their characteristics.\n\n- **Space.com Solar System Guide**: Space.com provides articles and infographics about the planets and their orbits, offering a user-friendly approach to learning about the solar system. The guide explains the significance of a planet\'s orbit, how it is calculated, and its relevance to astronomical studies.\n\n### Books\n\n- **"The Planets" by Dava Sobel**: This book offers a captivating journey through the solar system, exploring each planet and its orbit in detail. It delves into the history of how the orbits of planets were discovered and the impact of these orbits on our understanding of the cosmos.\n\n- **"National Geographic Kids: First Big Book of Space" by Catherine D. Hughes**: Aimed at younger readers, this book introduces the planets and their orbits with colorful illustrations and simple explanations. It highlights how each planet\'s orbit affects its position in the solar system and its relationship with other planets.\n\n- **"The Solar System: A Visual Exploration of the Planets, Moons, and Other Heavenly Bodies that Orbit Our Sun" by Marcus Chown**: This visually stunning book provides in-depth information about the planets and their orbits. It discusses the science behind planetary orbits and how these orbits influence the solar system\'s structure.\n\n- **"Astronomy for Kids: How to Explore Outer Space with Binoculars, a Telescope, or Just Your Eyes!" by Bruce Betts**: This educational book encourages young astronomers to observe the planets and their orbits. It explains how to track the orbits of planets using simple tools and understand their movement across the sky.\n\n- **"Planetarium" by Raman Prinja**: Part of the Welcome to the Museum series, this book offers a detailed look at the planets and their orbits. It includes illustrations and explanations of how the orbits of planets are studied and why these orbits are crucial for understanding the solar system\'s mechanics.', 'chonsen_model': 'gpt-4o', 'rejected_model': 'gpt-4o', 'system_message': 'You are a helpful assistant who is an expert at responding to prompts by carefully following the given instructions'}
+Loading model from /home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/models/llama3-8B_ppl-3.00_sft-320
+==((====))==  Unsloth 2025.10.1: Fast Llama patching. Transformers: 4.56.1. vLLM: 0.9.2+computecanada.
+   \\   /|    NVIDIA L40S. Num GPUs = 1. Max memory: 44.403 GB. Platform: Linux.
+O^O/ \_/ \    Torch: 2.7.0. CUDA: 8.9. CUDA Toolkit: 12.6. Triton: 3.3.1
+\        /    Bfloat16 = TRUE. FA [Xformers = 0.0.30. FA2 = False]
+ "-____-"     Free license: http://github.com/unslothai/unsloth
+Unsloth: Fast downloading is enabled - ignore downloading bars which are red colored!
+Loading checkpoint shards:   0%|          | 0/4 [00:00<?, ?it/s]Loading checkpoint shards:  25%|██▌       | 1/4 [00:10<00:30, 10.18s/it]Loading checkpoint shards:  50%|█████     | 2/4 [00:19<00:19,  9.71s/it]Loading checkpoint shards:  75%|███████▌  | 3/4 [00:20<00:05,  5.56s/it]Loading checkpoint shards: 100%|██████████| 4/4 [00:20<00:00,  3.42s/it]Loading checkpoint shards: 100%|██████████| 4/4 [00:20<00:00,  5.08s/it]
+Some parameters are on the meta device because they were offloaded to the cpu.
+Unsloth: Will map <|im_end|> to EOS = <|im_end|>.
+Map:   0%|          | 0/7872 [00:00<?, ? examples/s]Map:   5%|▌         | 394/7872 [00:00<00:01, 3895.41 examples/s]Map:  10%|█         | 809/7872 [00:00<00:01, 4039.20 examples/s]Map:  18%|█▊        | 1408/7872 [00:00<00:01, 3669.71 examples/s]Map:  23%|██▎       | 1823/7872 [00:00<00:01, 3823.59 examples/s]Map:  31%|███       | 2402/7872 [00:00<00:01, 3669.71 examples/s]Map:  36%|███▌      | 2816/7872 [00:00<00:01, 3795.53 examples/s]Map:  43%|████▎     | 3389/7872 [00:00<00:01, 3641.72 examples/s]Map:  48%|████▊     | 3804/7872 [00:01<00:01, 3766.83 examples/s]Map:  53%|█████▎    | 4190/7872 [00:01<00:01, 3608.43 examples/s]Map:  59%|█████▊    | 4606/7872 [00:01<00:00, 3751.93 examples/s]Map:  64%|██████▎   | 5000/7872 [00:01<00:00, 3630.92 examples/s]Map:  68%|██████▊   | 5387/7872 [00:01<00:00, 3692.65 examples/s]Map:  74%|███████▎  | 5799/7872 [00:01<00:00, 3808.61 examples/s]Map:  79%|███████▊  | 6185/7872 [00:01<00:00, 3602.38 examples/s]Map:  84%|████████▍ | 6596/7872 [00:01<00:00, 3741.23 examples/s]Map:  89%|████████▉ | 7000/7872 [00:01<00:00, 3609.13 examples/s]Map:  94%|█████████▍| 7388/7872 [00:01<00:00, 3681.20 examples/s]Map:  99%|█████████▉| 7802/7872 [00:02<00:00, 3808.56 examples/s]Map: 100%|██████████| 7872/7872 [00:02<00:00, 3652.79 examples/s]
+Map:   0%|          | 0/200 [00:00<?, ? examples/s]Map: 100%|██████████| 200/200 [00:00<00:00, 2920.21 examples/s]
+{'chonsen_model': 'gpt-4o',
+ 'chosen': '<|im_start|>assistant\n'
+           'LONGINES GLOBAL CHAMPIONS TOUR, ROLEX GRAND SLAM OF SHOW '
+           'JUMPING<|im_end|>\n',
+ 'constraints': ['punctuation:use no comma', 'format:choose one from options'],
+ 'id': 'personas_IF_dqxglsux2n8jeu59qktlnesh',
+ 'prompt': '<|im_start|>system\n'
+           'You are a helpful assistant who is an expert at responding to '
+           'prompts by carefully following the given instructions<|im_end|>\n'
+           '<|im_start|>user\n'
+           'Name two famous equestrian events that are part of the '
+           'international jumping circuit, and format your answer by choosing '
+           'one from these options: lowercase, UPPERCASE, Title '
+           'Case.<|im_end|>\n'
+           '<|im_start|>assistant\n',
+ 'rejected': '<|im_start|>assistant\n'
+             '- longines global champions tour\n'
+             '- FEI WORLD CUP JUMPING<|im_end|>\n',
+ 'rejected_model': 'gpt-4o',
+ 'system_message': 'You are a helpful assistant who is an expert at responding '
+                   'to prompts by carefully following the given instructions'}
+DatasetDict({
+    train: Dataset({
+        features: ['id', 'prompt', 'constraints', 'chosen', 'rejected', 'chonsen_model', 'rejected_model', 'system_message'],
+        num_rows: 7872
+    })
+    test: Dataset({
+        features: ['id', 'prompt', 'constraints', 'chosen', 'rejected', 'chonsen_model', 'rejected_model', 'system_message'],
+        num_rows: 200
+    })
+})
+Using LORA with config: ['q_proj', 'k_proj', 'v_proj', 'o_proj', 'gate_proj', 'up_proj', 'down_proj']
+Model loaded - <class 'peft.peft_model.PeftModelForCausalLM'>
+Allocated: 24.80 GB
+Cached: 24.82 GB
+[PassAtKCallback] Initialized with pass@1 thresholds=[1.2]
+[PassAtKCallback] Training will stop at final threshold: 1.2
+[PassAtKCallback] k_values=[1] (stopping on k=1)
+[PassAtKCallback] n_samples=1, temperature=0.7, strict=True
+[PassAtKCallback] IFEval prompts loaded: 541, num_prompts=50
+[PassAtKCallback] Using vLLM with model save/load (replicating run_inference_ifeval)
+[DPO] Will stop training when pass@1 >= [1.2]
+Extracting prompt in train dataset (num_proc=68):   0%|          | 0/7872 [00:00<?, ? examples/s]Extracting prompt in train dataset (num_proc=68):   0%|          | 21/7872 [00:00<01:12, 108.66 examples/s]Extracting prompt in train dataset (num_proc=68):   4%|▍         | 319/7872 [00:00<00:05, 1317.54 examples/s]Extracting prompt in train dataset (num_proc=68):  14%|█▎        | 1082/7872 [00:00<00:01, 3512.39 examples/s]Extracting prompt in train dataset (num_proc=68):  25%|██▍       | 1930/7872 [00:00<00:01, 5136.21 examples/s]Extracting prompt in train dataset (num_proc=68):  32%|███▏      | 2500/7872 [00:00<00:01, 4927.21 examples/s]Extracting prompt in train dataset (num_proc=68):  41%|████      | 3217/7872 [00:00<00:00, 5588.86 examples/s]Extracting prompt in train dataset (num_proc=68):  49%|████▉     | 3862/7872 [00:00<00:00, 5825.75 examples/s]Extracting prompt in train dataset (num_proc=68):  59%|█████▊    | 4619/7872 [00:00<00:00, 6344.79 examples/s]Extracting prompt in train dataset (num_proc=68):  71%|███████   | 5559/7872 [00:01<00:00, 7200.36 examples/s]Extracting prompt in train dataset (num_proc=68):  95%|█████████▌| 7497/7872 [00:01<00:00, 10824.35 examples/s]Extracting prompt in train dataset (num_proc=68): 100%|██████████| 7872/7872 [00:01<00:00, 6250.59 examples/s] 
+Applying chat template to train dataset (num_proc=68):   0%|          | 0/7872 [00:00<?, ? examples/s]Applying chat template to train dataset (num_proc=68):   1%|▏         | 110/7872 [00:01<01:27, 89.19 examples/s]Applying chat template to train dataset (num_proc=68):   3%|▎         | 232/7872 [00:01<00:42, 181.69 examples/s]Applying chat template to train dataset (num_proc=68):   6%|▌         | 464/7872 [00:01<00:25, 287.87 examples/s]Applying chat template to train dataset (num_proc=68):   9%|▉         | 696/7872 [00:02<00:16, 431.74 examples/s]Applying chat template to train dataset (num_proc=68):  10%|█         | 812/7872 [00:02<00:18, 386.68 examples/s]Applying chat template to train dataset (num_proc=68):  12%|█▏        | 922/7872 [00:02<00:18, 374.63 examples/s]Applying chat template to train dataset (num_proc=68):  13%|█▎        | 1044/7872 [00:03<00:17, 397.06 examples/s]Applying chat template to train dataset (num_proc=68):  16%|█▌        | 1276/7872 [00:03<00:17, 379.90 examples/s]Applying chat template to train dataset (num_proc=68):  18%|█▊        | 1392/7872 [00:04<00:15, 414.12 examples/s]Applying chat template to train dataset (num_proc=68):  21%|██        | 1624/7872 [00:04<00:10, 580.81 examples/s]Applying chat template to train dataset (num_proc=68):  22%|██▏       | 1740/7872 [00:04<00:11, 546.34 examples/s]Applying chat template to train dataset (num_proc=68):  24%|██▎       | 1856/7872 [00:04<00:14, 420.80 examples/s]Applying chat template to train dataset (num_proc=68):  27%|██▋       | 2088/7872 [00:05<00:14, 402.49 examples/s]Applying chat template to train dataset (num_proc=68):  29%|██▉       | 2320/7872 [00:05<00:10, 520.87 examples/s]Applying chat template to train dataset (num_proc=68):  31%|███       | 2432/7872 [00:06<00:14, 388.35 examples/s]Applying chat template to train dataset (num_proc=68):  34%|███▍      | 2668/7872 [00:06<00:10, 508.60 examples/s]Applying chat template to train dataset (num_proc=68):  35%|███▌      | 2784/7872 [00:06<00:11, 453.50 examples/s]Applying chat template to train dataset (num_proc=68):  36%|███▋      | 2854/7872 [00:07<00:12, 405.82 examples/s]Applying chat template to train dataset (num_proc=68):  38%|███▊      | 3016/7872 [00:07<00:10, 477.73 examples/s]Applying chat template to train dataset (num_proc=68):  40%|███▉      | 3132/7872 [00:08<00:13, 353.90 examples/s]Applying chat template to train dataset (num_proc=68):  41%|████▏     | 3248/7872 [00:08<00:11, 390.32 examples/s]Applying chat template to train dataset (num_proc=68):  43%|████▎     | 3364/7872 [00:08<00:11, 378.78 examples/s]Applying chat template to train dataset (num_proc=68):  44%|████▍     | 3480/7872 [00:08<00:12, 355.75 examples/s]Applying chat template to train dataset (num_proc=68):  46%|████▌     | 3596/7872 [00:09<00:10, 423.45 examples/s]Applying chat template to train dataset (num_proc=68):  47%|████▋     | 3712/7872 [00:09<00:09, 441.45 examples/s]Applying chat template to train dataset (num_proc=68):  50%|████▉     | 3927/7872 [00:09<00:10, 389.12 examples/s]Applying chat template to train dataset (num_proc=68):  53%|█████▎    | 4176/7872 [00:10<00:07, 514.33 examples/s]Applying chat template to train dataset (num_proc=68):  55%|█████▍    | 4292/7872 [00:10<00:07, 473.82 examples/s]Applying chat template to train dataset (num_proc=68):  56%|█████▌    | 4408/7872 [00:10<00:06, 507.63 examples/s]Applying chat template to train dataset (num_proc=68):  57%|█████▋    | 4524/7872 [00:10<00:07, 476.02 examples/s]Applying chat template to train dataset (num_proc=68):  59%|█████▉    | 4640/7872 [00:11<00:08, 373.11 examples/s]Applying chat template to train dataset (num_proc=68):  60%|██████    | 4741/7872 [00:11<00:08, 353.14 examples/s]Applying chat template to train dataset (num_proc=68):  63%|██████▎   | 4982/7872 [00:12<00:06, 478.92 examples/s]Applying chat template to train dataset (num_proc=68):  65%|██████▍   | 5104/7872 [00:12<00:05, 469.16 examples/s]Applying chat template to train dataset (num_proc=68):  66%|██████▋   | 5220/7872 [00:12<00:05, 489.47 examples/s]Applying chat template to train dataset (num_proc=68):  68%|██████▊   | 5336/7872 [00:13<00:06, 381.94 examples/s]Applying chat template to train dataset (num_proc=68):  69%|██████▉   | 5452/7872 [00:13<00:06, 399.06 examples/s]Applying chat template to train dataset (num_proc=68):  72%|███████▏  | 5684/7872 [00:13<00:03, 548.02 examples/s]Applying chat template to train dataset (num_proc=68):  74%|███████▎  | 5800/7872 [00:13<00:04, 498.94 examples/s]Applying chat template to train dataset (num_proc=68):  75%|███████▌  | 5916/7872 [00:14<00:04, 410.00 examples/s]Applying chat template to train dataset (num_proc=68):  77%|███████▋  | 6032/7872 [00:14<00:04, 389.85 examples/s]Applying chat template to train dataset (num_proc=68):  80%|███████▉  | 6262/7872 [00:14<00:03, 508.99 examples/s]Applying chat template to train dataset (num_proc=68):  81%|████████  | 6377/7872 [00:15<00:03, 480.93 examples/s]Applying chat template to train dataset (num_proc=68):  82%|████████▏ | 6492/7872 [00:15<00:02, 511.84 examples/s]Applying chat template to train dataset (num_proc=68):  84%|████████▍ | 6607/7872 [00:15<00:02, 492.66 examples/s]Applying chat template to train dataset (num_proc=68):  85%|████████▌ | 6722/7872 [00:15<00:02, 438.43 examples/s]Applying chat template to train dataset (num_proc=68):  87%|████████▋ | 6837/7872 [00:16<00:02, 475.62 examples/s]Applying chat template to train dataset (num_proc=68):  88%|████████▊ | 6952/7872 [00:16<00:01, 467.20 examples/s]Applying chat template to train dataset (num_proc=68):  90%|████████▉ | 7067/7872 [00:16<00:02, 333.45 examples/s]Applying chat template to train dataset (num_proc=68):  93%|█████████▎| 7297/7872 [00:17<00:01, 381.51 examples/s]Applying chat template to train dataset (num_proc=68):  96%|█████████▌| 7527/7872 [00:17<00:00, 448.90 examples/s]Applying chat template to train dataset (num_proc=68):  97%|█████████▋| 7642/7872 [00:17<00:00, 498.05 examples/s]Applying chat template to train dataset (num_proc=68):  99%|█████████▊| 7757/7872 [00:18<00:00, 505.62 examples/s]Applying chat template to train dataset (num_proc=68): 100%|██████████| 7872/7872 [00:18<00:00, 532.88 examples/s]Applying chat template to train dataset (num_proc=68): 100%|██████████| 7872/7872 [00:18<00:00, 424.59 examples/s]
+Tokenizing train dataset (num_proc=68):   0%|          | 0/7872 [00:00<?, ? examples/s]Tokenizing train dataset (num_proc=68):   0%|          | 10/7872 [00:01<14:35,  8.98 examples/s]Tokenizing train dataset (num_proc=68):   0%|          | 18/7872 [00:01<09:41, 13.50 examples/s]Tokenizing train dataset (num_proc=68):   2%|▏         | 123/7872 [00:01<01:15, 102.47 examples/s]Tokenizing train dataset (num_proc=68):   4%|▍         | 336/7872 [00:02<00:29, 257.04 examples/s]Tokenizing train dataset (num_proc=68):   5%|▌         | 397/7872 [00:02<00:31, 233.59 examples/s]Tokenizing train dataset (num_proc=68):   6%|▌         | 490/7872 [00:02<00:30, 241.40 examples/s]Tokenizing train dataset (num_proc=68):   9%|▉         | 711/7872 [00:03<00:19, 376.60 examples/s]Tokenizing train dataset (num_proc=68):  10%|█         | 820/7872 [00:03<00:19, 366.19 examples/s]Tokenizing train dataset (num_proc=68):  11%|█         | 867/7872 [00:03<00:22, 310.04 examples/s]Tokenizing train dataset (num_proc=68):  12%|█▏        | 944/7872 [00:04<00:24, 285.48 examples/s]Tokenizing train dataset (num_proc=68):  14%|█▎        | 1078/7872 [00:04<00:20, 325.26 examples/s]Tokenizing train dataset (num_proc=68):  15%|█▍        | 1160/7872 [00:04<00:21, 317.74 examples/s]Tokenizing train dataset (num_proc=68):  16%|█▌        | 1239/7872 [00:05<00:22, 295.93 examples/s]Tokenizing train dataset (num_proc=68):  17%|█▋        | 1350/7872 [00:05<00:20, 310.77 examples/s]Tokenizing train dataset (num_proc=68):  18%|█▊        | 1452/7872 [00:05<00:21, 295.98 examples/s]Tokenizing train dataset (num_proc=68):  20%|██        | 1577/7872 [00:06<00:19, 321.29 examples/s]Tokenizing train dataset (num_proc=68):  22%|██▏       | 1705/7872 [00:06<00:17, 350.36 examples/s]Tokenizing train dataset (num_proc=68):  22%|██▏       | 1768/7872 [00:06<00:18, 322.83 examples/s]Tokenizing train dataset (num_proc=68):  23%|██▎       | 1831/7872 [00:06<00:22, 272.25 examples/s]Tokenizing train dataset (num_proc=68):  25%|██▍       | 1945/7872 [00:07<00:20, 288.80 examples/s]Tokenizing train dataset (num_proc=68):  26%|██▌       | 2055/7872 [00:07<00:19, 291.54 examples/s]Tokenizing train dataset (num_proc=68):  28%|██▊       | 2232/7872 [00:08<00:15, 355.56 examples/s]Tokenizing train dataset (num_proc=68):  30%|██▉       | 2327/7872 [00:08<00:16, 329.11 examples/s]Tokenizing train dataset (num_proc=68):  31%|███       | 2406/7872 [00:08<00:18, 299.34 examples/s]Tokenizing train dataset (num_proc=68):  33%|███▎      | 2574/7872 [00:09<00:13, 380.73 examples/s]Tokenizing train dataset (num_proc=68):  35%|███▍      | 2731/7872 [00:09<00:12, 414.62 examples/s]Tokenizing train dataset (num_proc=68):  35%|███▌      | 2784/7872 [00:09<00:15, 335.29 examples/s]Tokenizing train dataset (num_proc=68):  37%|███▋      | 2904/7872 [00:10<00:14, 336.71 examples/s]Tokenizing train dataset (num_proc=68):  39%|███▊      | 3047/7872 [00:10<00:12, 378.23 examples/s]Tokenizing train dataset (num_proc=68):  40%|███▉      | 3112/7872 [00:10<00:14, 324.57 examples/s]Tokenizing train dataset (num_proc=68):  41%|████      | 3217/7872 [00:11<00:15, 295.49 examples/s]Tokenizing train dataset (num_proc=68):  43%|████▎     | 3359/7872 [00:11<00:14, 320.46 examples/s]Tokenizing train dataset (num_proc=68):  46%|████▌     | 3613/7872 [00:11<00:09, 445.98 examples/s]Tokenizing train dataset (num_proc=68):  47%|████▋     | 3703/7872 [00:12<00:10, 395.05 examples/s]Tokenizing train dataset (num_proc=68):  48%|████▊     | 3778/7872 [00:12<00:11, 350.12 examples/s]Tokenizing train dataset (num_proc=68):  50%|█████     | 3952/7872 [00:12<00:10, 369.33 examples/s]Tokenizing train dataset (num_proc=68):  52%|█████▏    | 4130/7872 [00:13<00:08, 422.41 examples/s]Tokenizing train dataset (num_proc=68):  53%|█████▎    | 4193/7872 [00:13<00:10, 357.79 examples/s]Tokenizing train dataset (num_proc=68):  56%|█████▌    | 4398/7872 [00:13<00:08, 433.94 examples/s]Tokenizing train dataset (num_proc=68):  57%|█████▋    | 4472/7872 [00:14<00:08, 397.78 examples/s]Tokenizing train dataset (num_proc=68):  58%|█████▊    | 4600/7872 [00:14<00:08, 403.70 examples/s]Tokenizing train dataset (num_proc=68):  60%|█████▉    | 4690/7872 [00:14<00:08, 362.63 examples/s]Tokenizing train dataset (num_proc=68):  62%|██████▏   | 4843/7872 [00:15<00:07, 400.84 examples/s]Tokenizing train dataset (num_proc=68):  62%|██████▏   | 4890/7872 [00:15<00:09, 327.03 examples/s]Tokenizing train dataset (num_proc=68):  63%|██████▎   | 4958/7872 [00:15<00:09, 293.11 examples/s]Tokenizing train dataset (num_proc=68):  65%|██████▍   | 5116/7872 [00:15<00:07, 362.88 examples/s]Tokenizing train dataset (num_proc=68):  68%|██████▊   | 5322/7872 [00:16<00:05, 460.26 examples/s]Tokenizing train dataset (num_proc=68):  68%|██████▊   | 5376/7872 [00:16<00:06, 362.43 examples/s]Tokenizing train dataset (num_proc=68):  69%|██████▉   | 5436/7872 [00:16<00:07, 309.30 examples/s]Tokenizing train dataset (num_proc=68):  71%|███████   | 5568/7872 [00:17<00:06, 346.76 examples/s]Tokenizing train dataset (num_proc=68):  71%|███████▏  | 5623/7872 [00:17<00:07, 299.14 examples/s]Tokenizing train dataset (num_proc=68):  74%|███████▍  | 5835/7872 [00:17<00:04, 418.60 examples/s]Tokenizing train dataset (num_proc=68):  75%|███████▌  | 5924/7872 [00:18<00:05, 379.40 examples/s]Tokenizing train dataset (num_proc=68):  77%|███████▋  | 6039/7872 [00:18<00:04, 369.85 examples/s]Tokenizing train dataset (num_proc=68):  78%|███████▊  | 6134/7872 [00:18<00:04, 354.80 examples/s]Tokenizing train dataset (num_proc=68):  79%|███████▊  | 6193/7872 [00:19<00:05, 305.61 examples/s]Tokenizing train dataset (num_proc=68):  80%|███████▉  | 6287/7872 [00:19<00:05, 305.32 examples/s]Tokenizing train dataset (num_proc=68):  82%|████████▏ | 6440/7872 [00:19<00:03, 379.11 examples/s]Tokenizing train dataset (num_proc=68):  84%|████████▎ | 6586/7872 [00:19<00:03, 408.02 examples/s]Tokenizing train dataset (num_proc=68):  85%|████████▍ | 6659/7872 [00:20<00:03, 351.32 examples/s]Tokenizing train dataset (num_proc=68):  86%|████████▌ | 6771/7872 [00:20<00:03, 339.23 examples/s]Tokenizing train dataset (num_proc=68):  88%|████████▊ | 6960/7872 [00:20<00:02, 409.28 examples/s]Tokenizing train dataset (num_proc=68):  89%|████████▉ | 7005/7872 [00:21<00:02, 331.99 examples/s]Tokenizing train dataset (num_proc=68):  90%|█████████ | 7105/7872 [00:21<00:02, 335.75 examples/s]Tokenizing train dataset (num_proc=68):  93%|█████████▎| 7297/7872 [00:21<00:01, 525.31 examples/s]Tokenizing train dataset (num_proc=68):  94%|█████████▍| 7385/7872 [00:22<00:01, 407.87 examples/s]Tokenizing train dataset (num_proc=68):  95%|█████████▍| 7456/7872 [00:22<00:00, 436.23 examples/s]Tokenizing train dataset (num_proc=68):  96%|█████████▌| 7519/7872 [00:22<00:00, 428.89 examples/s]Tokenizing train dataset (num_proc=68):  96%|█████████▋| 7586/7872 [00:22<00:00, 466.05 examples/s]Tokenizing train dataset (num_proc=68):  98%|█████████▊| 7692/7872 [00:22<00:00, 575.54 examples/s]Tokenizing train dataset (num_proc=68):  99%|█████████▉| 7812/7872 [00:22<00:00, 705.92 examples/s]Tokenizing train dataset (num_proc=68): 100%|██████████| 7872/7872 [00:22<00:00, 344.71 examples/s]
+Extracting prompt in eval dataset (num_proc=68):   0%|          | 0/200 [00:00<?, ? examples/s]Extracting prompt in eval dataset (num_proc=68):   2%|▏         | 3/200 [00:00<00:10, 18.94 examples/s]Extracting prompt in eval dataset (num_proc=68):  30%|███       | 61/200 [00:00<00:00, 281.75 examples/s]Extracting prompt in eval dataset (num_proc=68):  51%|█████     | 102/200 [00:00<00:00, 330.03 examples/s]Extracting prompt in eval dataset (num_proc=68):  76%|███████▌  | 151/200 [00:00<00:00, 384.43 examples/s]Extracting prompt in eval dataset (num_proc=68): 100%|██████████| 200/200 [00:00<00:00, 296.74 examples/s]
+Applying chat template to eval dataset (num_proc=68):   0%|          | 0/200 [00:00<?, ? examples/s]Applying chat template to eval dataset (num_proc=68):   2%|▏         | 3/200 [00:01<01:20,  2.43 examples/s]Applying chat template to eval dataset (num_proc=68):   3%|▎         | 6/200 [00:01<00:59,  3.28 examples/s]Applying chat template to eval dataset (num_proc=68):   8%|▊         | 15/200 [00:02<00:19,  9.71 examples/s]Applying chat template to eval dataset (num_proc=68):   9%|▉         | 18/200 [00:02<00:16, 10.92 examples/s]Applying chat template to eval dataset (num_proc=68):  10%|█         | 21/200 [00:02<00:19,  9.39 examples/s]Applying chat template to eval dataset (num_proc=68):  12%|█▏        | 24/200 [00:03<00:19,  9.25 examples/s]Applying chat template to eval dataset (num_proc=68):  14%|█▎        | 27/200 [00:03<00:18,  9.58 examples/s]Applying chat template to eval dataset (num_proc=68):  16%|█▋        | 33/200 [00:03<00:12, 12.92 examples/s]Applying chat template to eval dataset (num_proc=68):  18%|█▊        | 36/200 [00:03<00:13, 11.90 examples/s]Applying chat template to eval dataset (num_proc=68):  20%|█▉        | 39/200 [00:04<00:12, 12.62 examples/s]Applying chat template to eval dataset (num_proc=68):  21%|██        | 42/200 [00:04<00:13, 11.97 examples/s]Applying chat template to eval dataset (num_proc=68):  22%|██▎       | 45/200 [00:04<00:12, 12.55 examples/s]Applying chat template to eval dataset (num_proc=68):  24%|██▍       | 48/200 [00:04<00:12, 12.06 examples/s]Applying chat template to eval dataset (num_proc=68):  26%|██▌       | 51/200 [00:05<00:15,  9.47 examples/s]Applying chat template to eval dataset (num_proc=68):  28%|██▊       | 57/200 [00:05<00:12, 11.66 examples/s]Applying chat template to eval dataset (num_proc=68):  30%|███       | 60/200 [00:06<00:12, 10.78 examples/s]Applying chat template to eval dataset (num_proc=68):  32%|███▏      | 63/200 [00:06<00:13, 10.06 examples/s]Applying chat template to eval dataset (num_proc=68):  33%|███▎      | 66/200 [00:06<00:12, 10.79 examples/s]Applying chat template to eval dataset (num_proc=68):  38%|███▊      | 75/200 [00:07<00:08, 14.41 examples/s]Applying chat template to eval dataset (num_proc=68):  39%|███▉      | 78/200 [00:07<00:08, 13.73 examples/s]Applying chat template to eval dataset (num_proc=68):  40%|████      | 81/200 [00:07<00:08, 13.69 examples/s]Applying chat template to eval dataset (num_proc=68):  42%|████▏     | 84/200 [00:07<00:08, 13.31 examples/s]Applying chat template to eval dataset (num_proc=68):  44%|████▎     | 87/200 [00:08<00:08, 12.94 examples/s]Applying chat template to eval dataset (num_proc=68):  45%|████▌     | 90/200 [00:08<00:07, 13.76 examples/s]Applying chat template to eval dataset (num_proc=68):  46%|████▋     | 93/200 [00:08<00:08, 13.23 examples/s]Applying chat template to eval dataset (num_proc=68):  48%|████▊     | 96/200 [00:09<00:11,  9.45 examples/s]Applying chat template to eval dataset (num_proc=68):  51%|█████     | 102/200 [00:09<00:07, 13.07 examples/s]Applying chat template to eval dataset (num_proc=68):  52%|█████▎    | 105/200 [00:09<00:08, 10.72 examples/s]Applying chat template to eval dataset (num_proc=68):  54%|█████▍    | 108/200 [00:09<00:08, 11.16 examples/s]Applying chat template to eval dataset (num_proc=68):  56%|█████▌    | 111/200 [00:10<00:08, 10.32 examples/s]Applying chat template to eval dataset (num_proc=68):  57%|█████▋    | 114/200 [00:10<00:08,  9.93 examples/s]Applying chat template to eval dataset (num_proc=68):  60%|██████    | 120/200 [00:11<00:06, 11.86 examples/s]Applying chat template to eval dataset (num_proc=68):  62%|██████▏   | 123/200 [00:11<00:06, 12.31 examples/s]Applying chat template to eval dataset (num_proc=68):  63%|██████▎   | 126/200 [00:11<00:05, 13.27 examples/s]Applying chat template to eval dataset (num_proc=68):  64%|██████▍   | 129/200 [00:12<00:07,  8.89 examples/s]Applying chat template to eval dataset (num_proc=68):  68%|██████▊   | 135/200 [00:12<00:05, 11.96 examples/s]Applying chat template to eval dataset (num_proc=68):  72%|███████▏  | 144/200 [00:13<00:05, 11.17 examples/s]Applying chat template to eval dataset (num_proc=68):  76%|███████▋  | 153/200 [00:13<00:03, 11.92 examples/s]Applying chat template to eval dataset (num_proc=68):  80%|███████▉  | 159/200 [00:14<00:03, 12.26 examples/s]Applying chat template to eval dataset (num_proc=68):  81%|████████  | 162/200 [00:14<00:03, 12.05 examples/s]Applying chat template to eval dataset (num_proc=68):  84%|████████▍ | 168/200 [00:15<00:02, 11.21 examples/s]Applying chat template to eval dataset (num_proc=68):  87%|████████▋ | 174/200 [00:15<00:01, 13.36 examples/s]Applying chat template to eval dataset (num_proc=68):  88%|████████▊ | 177/200 [00:15<00:01, 12.57 examples/s]Applying chat template to eval dataset (num_proc=68):  90%|█████████ | 180/200 [00:16<00:01, 12.04 examples/s]Applying chat template to eval dataset (num_proc=68):  93%|█████████▎| 186/200 [00:16<00:00, 14.55 examples/s]Applying chat template to eval dataset (num_proc=68):  94%|█████████▍| 189/200 [00:16<00:00, 15.41 examples/s]Applying chat template to eval dataset (num_proc=68):  96%|█████████▌| 192/200 [00:16<00:00, 14.06 examples/s]Applying chat template to eval dataset (num_proc=68):  97%|█████████▋| 194/200 [00:17<00:00, 11.68 examples/s]Applying chat template to eval dataset (num_proc=68):  98%|█████████▊| 196/200 [00:17<00:00, 10.90 examples/s]Applying chat template to eval dataset (num_proc=68):  99%|█████████▉| 198/200 [00:17<00:00, 12.13 examples/s]Applying chat template to eval dataset (num_proc=68): 100%|██████████| 200/200 [00:17<00:00, 11.25 examples/s]Applying chat template to eval dataset (num_proc=68): 100%|██████████| 200/200 [00:17<00:00, 11.24 examples/s]
+Tokenizing eval dataset (num_proc=68):   0%|          | 0/200 [00:00<?, ? examples/s]Tokenizing eval dataset (num_proc=68):   2%|▏         | 3/200 [00:01<01:18,  2.50 examples/s]Tokenizing eval dataset (num_proc=68):   3%|▎         | 6/200 [00:01<00:43,  4.44 examples/s]Tokenizing eval dataset (num_proc=68):   6%|▌         | 12/200 [00:01<00:21,  8.61 examples/s]Tokenizing eval dataset (num_proc=68):   8%|▊         | 15/200 [00:02<00:20,  9.12 examples/s]Tokenizing eval dataset (num_proc=68):   9%|▉         | 18/200 [00:02<00:16, 10.79 examples/s]Tokenizing eval dataset (num_proc=68):  10%|█         | 21/200 [00:02<00:16, 10.81 examples/s]Tokenizing eval dataset (num_proc=68):  12%|█▏        | 24/200 [00:02<00:15, 11.06 examples/s]Tokenizing eval dataset (num_proc=68):  14%|█▎        | 27/200 [00:03<00:16, 10.69 examples/s]Tokenizing eval dataset (num_proc=68):  15%|█▌        | 30/200 [00:03<00:13, 12.18 examples/s]Tokenizing eval dataset (num_proc=68):  16%|█▋        | 33/200 [00:03<00:14, 11.61 examples/s]Tokenizing eval dataset (num_proc=68):  18%|█▊        | 36/200 [00:03<00:14, 11.66 examples/s]Tokenizing eval dataset (num_proc=68):  20%|█▉        | 39/200 [00:04<00:16,  9.55 examples/s]Tokenizing eval dataset (num_proc=68):  22%|██▎       | 45/200 [00:04<00:13, 11.87 examples/s]Tokenizing eval dataset (num_proc=68):  24%|██▍       | 48/200 [00:04<00:13, 11.56 examples/s]Tokenizing eval dataset (num_proc=68):  26%|██▌       | 51/200 [00:05<00:11, 12.69 examples/s]Tokenizing eval dataset (num_proc=68):  27%|██▋       | 54/200 [00:05<00:11, 12.98 examples/s]Tokenizing eval dataset (num_proc=68):  28%|██▊       | 57/200 [00:05<00:12, 11.83 examples/s]Tokenizing eval dataset (num_proc=68):  30%|███       | 60/200 [00:05<00:12, 11.23 examples/s]Tokenizing eval dataset (num_proc=68):  32%|███▏      | 63/200 [00:06<00:11, 12.06 examples/s]Tokenizing eval dataset (num_proc=68):  33%|███▎      | 66/200 [00:06<00:11, 11.88 examples/s]Tokenizing eval dataset (num_proc=68):  34%|███▍      | 69/200 [00:06<00:13,  9.75 examples/s]Tokenizing eval dataset (num_proc=68):  38%|███▊      | 75/200 [00:07<00:10, 12.35 examples/s]Tokenizing eval dataset (num_proc=68):  39%|███▉      | 78/200 [00:07<00:09, 12.34 examples/s]Tokenizing eval dataset (num_proc=68):  40%|████      | 81/200 [00:07<00:08, 13.54 examples/s]Tokenizing eval dataset (num_proc=68):  42%|████▏     | 84/200 [00:07<00:09, 12.33 examples/s]Tokenizing eval dataset (num_proc=68):  44%|████▎     | 87/200 [00:08<00:09, 11.86 examples/s]Tokenizing eval dataset (num_proc=68):  45%|████▌     | 90/200 [00:08<00:09, 12.11 examples/s]Tokenizing eval dataset (num_proc=68):  46%|████▋     | 93/200 [00:08<00:08, 12.30 examples/s]Tokenizing eval dataset (num_proc=68):  48%|████▊     | 96/200 [00:09<00:11,  9.45 examples/s]Tokenizing eval dataset (num_proc=68):  51%|█████     | 102/200 [00:09<00:08, 12.10 examples/s]Tokenizing eval dataset (num_proc=68):  52%|█████▎    | 105/200 [00:09<00:08, 10.93 examples/s]Tokenizing eval dataset (num_proc=68):  54%|█████▍    | 108/200 [00:10<00:08, 10.31 examples/s]Tokenizing eval dataset (num_proc=68):  56%|█████▌    | 111/200 [00:10<00:08, 10.33 examples/s]Tokenizing eval dataset (num_proc=68):  58%|█████▊    | 117/200 [00:10<00:05, 14.33 examples/s]Tokenizing eval dataset (num_proc=68):  60%|██████    | 120/200 [00:10<00:05, 13.87 examples/s]Tokenizing eval dataset (num_proc=68):  62%|██████▏   | 123/200 [00:11<00:05, 12.97 examples/s]Tokenizing eval dataset (num_proc=68):  63%|██████▎   | 126/200 [00:11<00:05, 14.07 examples/s]Tokenizing eval dataset (num_proc=68):  64%|██████▍   | 129/200 [00:11<00:05, 12.41 examples/s]Tokenizing eval dataset (num_proc=68):  66%|██████▌   | 132/200 [00:12<00:06, 10.27 examples/s]Tokenizing eval dataset (num_proc=68):  69%|██████▉   | 138/200 [00:12<00:05, 10.91 examples/s]Tokenizing eval dataset (num_proc=68):  72%|███████▏  | 144/200 [00:12<00:03, 14.32 examples/s]Tokenizing eval dataset (num_proc=68):  74%|███████▎  | 147/200 [00:13<00:03, 13.27 examples/s]Tokenizing eval dataset (num_proc=68):  75%|███████▌  | 150/200 [00:13<00:03, 13.43 examples/s]Tokenizing eval dataset (num_proc=68):  76%|███████▋  | 153/200 [00:13<00:03, 13.13 examples/s]Tokenizing eval dataset (num_proc=68):  78%|███████▊  | 156/200 [00:13<00:03, 12.47 examples/s]Tokenizing eval dataset (num_proc=68):  80%|███████▉  | 159/200 [00:13<00:03, 12.75 examples/s]Tokenizing eval dataset (num_proc=68):  81%|████████  | 162/200 [00:14<00:03, 12.60 examples/s]Tokenizing eval dataset (num_proc=68):  82%|████████▎ | 165/200 [00:14<00:02, 12.57 examples/s]Tokenizing eval dataset (num_proc=68):  84%|████████▍ | 168/200 [00:14<00:02, 12.46 examples/s]Tokenizing eval dataset (num_proc=68):  86%|████████▌ | 171/200 [00:14<00:02, 12.61 examples/s]Tokenizing eval dataset (num_proc=68):  87%|████████▋ | 174/200 [00:15<00:02, 12.35 examples/s]Tokenizing eval dataset (num_proc=68):  88%|████████▊ | 177/200 [00:15<00:01, 12.13 examples/s]Tokenizing eval dataset (num_proc=68):  90%|█████████ | 180/200 [00:15<00:01, 12.21 examples/s]Tokenizing eval dataset (num_proc=68):  92%|█████████▏| 183/200 [00:15<00:01, 12.33 examples/s]Tokenizing eval dataset (num_proc=68):  93%|█████████▎| 186/200 [00:16<00:01, 12.29 examples/s]Tokenizing eval dataset (num_proc=68):  94%|█████████▍| 189/200 [00:16<00:00, 12.04 examples/s]Tokenizing eval dataset (num_proc=68):  96%|█████████▌| 192/200 [00:16<00:00, 11.87 examples/s]Tokenizing eval dataset (num_proc=68):  97%|█████████▋| 194/200 [00:16<00:00, 11.72 examples/s]Tokenizing eval dataset (num_proc=68):  98%|█████████▊| 196/200 [00:17<00:00,  9.90 examples/s]Tokenizing eval dataset (num_proc=68):  99%|█████████▉| 198/200 [00:17<00:00,  9.23 examples/s]Tokenizing eval dataset (num_proc=68): 100%|██████████| 200/200 [00:17<00:00, 10.43 examples/s]Tokenizing eval dataset (num_proc=68): 100%|██████████| 200/200 [00:17<00:00, 11.30 examples/s]
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+  File "/cvmfs/soft.computecanada.ca/easybuild/software/2023/x86-64-v3/Compiler/gcccore/python/3.11.5/lib/python3.11/multiprocessing/spawn.py", line 122, in spawn_main
+    exitcode = _main(fd, parent_sentinel)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/cvmfs/soft.computecanada.ca/easybuild/software/2023/x86-64-v3/Compiler/gcccore/python/3.11.5/lib/python3.11/multiprocessing/spawn.py", line 131, in _main
+    prepare(preparation_data)
+  File "/cvmfs/soft.computecanada.ca/easybuild/software/2023/x86-64-v3/Compiler/gcccore/python/3.11.5/lib/python3.11/multiprocessing/spawn.py", line 246, in prepare
+    _fixup_main_from_path(data['init_main_from_path'])
+  File "/cvmfs/soft.computecanada.ca/easybuild/software/2023/x86-64-v3/Compiler/gcccore/python/3.11.5/lib/python3.11/multiprocessing/spawn.py", line 297, in _fixup_main_from_path
+    main_content = runpy.run_path(main_path,
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<frozen runpy>", line 291, in run_path
+  File "<frozen runpy>", line 98, in _run_module_code
+  File "<frozen runpy>", line 88, in _run_code
+  File "/project/6105902/shougan/balance-budget/tuning/training/ppl_pipeline.py", line 118, in <module>
+    model, tokenizer, trainer = train_model_dpo(
+                                ^^^^^^^^^^^^^^^^
+  File "/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/training/dpo_training.py", line 149, in train_model_dpo
+    trainer_stats = trainer.train()
+                    ^^^^^^^^^^^^^^^
+  File "/project/6105902/shougan/balance-budget/unsloth_compiled_cache/UnslothDPOTrainer.py", line 53, in wrapper
+    output = f(self, *args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/transformers/trainer.py", line 2267, in train
+    self._move_model_to_device(self.model, args.device)
+  File "/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/transformers/trainer.py", line 913, in _move_model_to_device
+    model = model.to(device)
+            ^^^^^^^^^^^^^^^^
+  File "/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1355, in to
+    return self._apply(convert)
+           ^^^^^^^^^^^^^^^^^^^^
+  File "/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/torch/nn/modules/module.py", line 915, in _apply
+    module._apply(fn)
+  File "/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/torch/nn/modules/module.py", line 915, in _apply
+    module._apply(fn)
+  File "/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/torch/nn/modules/module.py", line 915, in _apply
+    module._apply(fn)
+  [Previous line repeated 5 more times]
+  File "/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/torch/nn/modules/module.py", line 942, in _apply
+    param_applied = fn(param)
+                    ^^^^^^^^^
+  File "/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1348, in convert
+    raise NotImplementedError(
+NotImplementedError: Cannot copy out of meta tensor; no data! Please use torch.nn.Module.to_empty() instead of torch.nn.Module.to() when moving module from meta to a different device.
+Traceback (most recent call last):
+  File "/project/6105902/shougan/balance-budget/tuning/training/ppl_pipeline.py", line 118, in <module>
+    model, tokenizer, trainer = train_model_dpo(
+                                ^^^^^^^^^^^^^^^^
+  File "/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/training/dpo_training.py", line 149, in train_model_dpo
+    trainer_stats = trainer.train()
+                    ^^^^^^^^^^^^^^^
+  File "/project/6105902/shougan/balance-budget/unsloth_compiled_cache/UnslothDPOTrainer.py", line 53, in wrapper
+    output = f(self, *args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/transformers/trainer.py", line 2328, in train
+    return inner_training_loop(
+           ^^^^^^^^^^^^^^^^^^^^
+  File "<string>", line 407, in _fast_inner_training_loop
+  File "/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/transformers/trainer.py", line 3227, in _maybe_log_save_evaluate
+    metrics = self._evaluate(trial, ignore_keys_for_eval)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/transformers/trainer.py", line 3176, in _evaluate
+    metrics = self.evaluate(ignore_keys=ignore_keys_for_eval)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/transformers/trainer.py", line 4499, in evaluate
+    self.control = self.callback_handler.on_evaluate(self.args, self.state, self.control, output.metrics)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/transformers/trainer_callback.py", line 538, in on_evaluate
+    return self.call_event("on_evaluate", args, state, control, metrics=metrics)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/transformers/trainer_callback.py", line 556, in call_event
+    result = getattr(callback, event)(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/training/passk_callback.py", line 275, in on_evaluate
+    scores = self.evaluate_pass_at_k(model)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/training/passk_callback.py", line 219, in evaluate_pass_at_k
+    model_results = self._run_inference_with_vllm(temp_dir)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/training/passk_callback.py", line 149, in _run_inference_with_vllm
+    llm = LLM(
+          ^^^^
+  File "/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/vllm/entrypoints/llm.py", line 271, in __init__
+    self.llm_engine = LLMEngine.from_engine_args(
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/vllm/engine/llm_engine.py", line 501, in from_engine_args
+    return engine_cls.from_vllm_config(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/vllm/v1/engine/llm_engine.py", line 124, in from_vllm_config
+    return cls(vllm_config=vllm_config,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/vllm/v1/engine/llm_engine.py", line 101, in __init__
+    self.engine_core = EngineCoreClient.make_client(
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/vllm/v1/engine/core_client.py", line 75, in make_client
+    return SyncMPClient(vllm_config, executor_class, log_stats)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/vllm/v1/engine/core_client.py", line 503, in __init__
+    super().__init__(
+  File "/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/vllm/v1/engine/core_client.py", line 403, in __init__
+    with launch_core_engines(vllm_config, executor_class,
+  File "/cvmfs/soft.computecanada.ca/easybuild/software/2023/x86-64-v3/Compiler/gcccore/python/3.11.5/lib/python3.11/contextlib.py", line 144, in __exit__
+    next(self.gen)
+  File "/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/vllm/v1/engine/utils.py", line 434, in launch_core_engines
+    wait_for_engine_startup(
+  File "/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/vllm/v1/engine/utils.py", line 484, in wait_for_engine_startup
+    raise RuntimeError("Engine core initialization failed. "
+RuntimeError: Engine core initialization failed. See root cause above. Failed core proc(s): {}
+[1;34mwandb[0m: 
+[1;34mwandb[0m: 🚀 View run [33msunny-haze-66[0m at: [34mhttps://wandb.ai/shougan-university-of-waterloo/huggingface/runs/4ppr614g[0m
+[1;34mwandb[0m: Find logs at: [1;35mwandb/run-20260126_034632-4ppr614g/logs[0m
+[1;34mwandb[0m: 
+[1;34mwandb[0m: 🚀 View run [33melated-galaxy-63[0m at: [34mhttps://wandb.ai/shougan-university-of-waterloo/huggingface/runs/wab6zm88[0m
+[1;34mwandb[0m: Find logs at: [1;35mwandb/run-20260126_033137-wab6zm88/logs[0m

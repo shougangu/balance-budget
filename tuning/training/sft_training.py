@@ -23,6 +23,7 @@ def train_model_sft(
     model_load_config: ModelLoadConfig = None,
     training_args: TrainingArgumentsConfig = None,
     perplexity_thresholds: Optional[List[float]] = None,
+    perplexity_window: Optional[int] = None,
     passk_config = None,  # PassAtKConfig object
 ):  
     train_batch_size = sft_batch_size(run_config.dataset_config.train_size)
@@ -72,6 +73,7 @@ def train_model_sft(
             max_tokens=passk_config.max_tokens,
             strict=passk_config.strict,
             model_name=run_config.model_name,
+            
         )
         callbacks.append(passk_callback)
         print(f"[SFT] Will stop training when pass@{passk_config.k_values[0]} >= {passk_config.target_pass_at_k[-1]}")
