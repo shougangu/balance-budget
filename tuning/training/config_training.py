@@ -6,15 +6,16 @@ import os
 
 BaseModel.model_config['protected_namespaces'] = ()
 
-EFFECTIVE_BATCH_SIZE = 16
+EFFECTIVE_BATCH_SIZE = 128  # Increased for H100/L40 GPUs
+
 def sft_batch_size(dataset_size: int):
-    return 1
+    return 2  # H100/L40 can handle larger per-device batch sizes
 
 def dpo_batch_size(dataset_size: int):
-    return 1
+    return 2  # H100/L40 can handle larger per-device batch sizes
 
 def effective_batch_size(dataset_size: int):
-    return 16
+    return 128  # Increased for H100/L40 GPUs
 
 class ModelLoadConfig(BaseModel):
     max_seq_length: str = 1024 
@@ -35,11 +36,11 @@ class LoraConfig(BaseModel):
 
 class TrainingArgumentsConfig(BaseModel):
     # sft training parameters
-    per_device_train_batch_size: int = 1
+    per_device_train_batch_size: int = 16
     gradient_accumulation_steps: int = EFFECTIVE_BATCH_SIZE // per_device_train_batch_size # one opt step uses effective_batch_size data
-    per_device_eval_batch_size: int = 8
+    per_device_eval_batch_size: int = 16
     eval_strategy: str = "steps"
-    eval_steps: float = 20
+    eval_steps: float = 4
     logging_steps: int = 1
     do_eval: bool = True
     warmup_ratio: int = 0.1
@@ -50,7 +51,7 @@ class TrainingArgumentsConfig(BaseModel):
     lr_scheduler_type: str = "cosine"
     report_to: list[str] = ["wandb"]
     save_strategy: str = "no"
-    save_steps: int = 20 # each checkpoint step is one gradient weight update (optimizer.step()), data = grad_acc * batch_size * save_steps = effective_batch_size * save_steps
+    save_steps: int = 4 # each checkpoint step is one gradient weight update (optimizer.step()), data = grad_acc * batch_size * save_steps = effective_batch_size * save_steps
     save_total_limit: int = 1
     load_best_model_at_end: bool = False
     dataloader_drop_last: bool = False

@@ -19,12 +19,12 @@ import torch
 import gc
 
 def train_model_dpo(
-        run_config: PTRunConfig = None,
-        lora_config: LoraConfig = None,
-        model_load_config: ModelLoadConfig = None,
-        training_args: DPOTrainingConfig = None,
-        perplexity_thresholds: Optional[List[float]] = None,
-        passk_config = None,  # PassAtKConfig object
+    run_config: PTRunConfig = None,
+    lora_config: LoraConfig = None,
+    model_load_config: ModelLoadConfig = None,
+    training_args: DPOTrainingConfig = None,
+    perplexity_thresholds: Optional[List[float]] = None,
+    passk_config = None,  # PassAtKConfig object
 ):
 
     train_batch_size = dpo_batch_size(run_config.dataset_config.train_size)

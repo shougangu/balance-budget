@@ -53,7 +53,7 @@ class PerplexityStoppingCallback(TrainerCallback):
         train_batch_size = args.per_device_train_batch_size
         grad_accum = args.gradient_accumulation_steps
         world_size = getattr(args, "world_size", 1)
-        data_points_seen = state.global_step * train_batch_size * grad_accum * world_size
+        data_points_seen = int(state.global_step * train_batch_size * grad_accum * world_size // 2)
 
         # Use data_points_seen as the checkpoint name suffix (e.g., llama3-8B_sft-tuluif-500)
         checkpoint_name = f"{self.model_name}_ppl-{threshold:.2f}_sft-{data_points_seen}"

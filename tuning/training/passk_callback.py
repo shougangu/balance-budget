@@ -58,7 +58,7 @@ class PassAtKStoppingCallback(TrainerCallback):
         num_prompts: int = 50,
         temperature: float = 0.7,
         max_tokens: int = 1024,
-        strict: bool = True,
+        strict: bool = False,
         model_name: str = None,
         prevWindow: int = None,
     ):
@@ -106,7 +106,7 @@ class PassAtKStoppingCallback(TrainerCallback):
         train_batch_size = args.per_device_train_batch_size
         grad_accum = args.gradient_accumulation_steps
         world_size = getattr(args, "world_size", 1)
-        data_points_seen = state.global_step * train_batch_size * grad_accum * world_size
+        data_points_seen = int(state.global_step * train_batch_size * grad_accum * world_size / 2)
 
         # Use data_points_seen as the checkpoint name suffix
         checkpoint_name = f"{self.model_name}_pass@{self.stopping_k}-{threshold:.2f}_sft-{data_points_seen}"
@@ -149,7 +149,7 @@ class PassAtKStoppingCallback(TrainerCallback):
 
         llm = LLM(
             model=model_path,
-            gpu_memory_utilization=0.7,
+            gpu_memory_utilization=0.8,
             trust_remote_code=True,
         )
         
@@ -195,8 +195,6 @@ class PassAtKStoppingCallback(TrainerCallback):
 
 
         model_results = [{"prompt": p, "responses": resps} for p, resps in grouped.items()]
-        
-        
         
         return model_results
     
