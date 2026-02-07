@@ -14,6 +14,7 @@ from transformers.training_args import TrainingArguments
 from collections import defaultdict
 from vllm import LLM, SamplingParams
 from vllm.distributed.parallel_state import destroy_model_parallel
+from vllm.lora.request import LoRARequest
 
 from instruction_following_eval import evaluation_lib
 from tuning.data.test_dataset import get_ifeval_test_dataset
@@ -43,16 +44,22 @@ def evaluate_single_response(inp: evaluation_lib.InputExample, response: str, st
 class PassAtKStoppingCallback(TrainerCallback):
     """
     Save checkpoints at pass@k sweetspots for downstream runs.
-    
+
     Implements the "Fork Strategy": training continues through all thresholds,
     saving checkpoints at each sweetspot without stopping. The final threshold
     in the list will stop training.
+
+    Supports two vLLM modes for inference during training:
+    - Persistent mode (default): Keeps vLLM engine alive with base model loaded,
+      swaps LoRA adapters each eval. Eliminates cold-start overhead.
+    - Non-persistent mode: Creates/destroys vLLM each eval, but still uses
+      adapter-only saves instead of full merged model saves.
     """
-    
+
     def __init__(
-        self, 
-        target_pass_at_k: List[float], 
-        tokenizer, 
+        self,
+        target_pass_at_k: List[float],
+        tokenizer,
         k_values: List[int] = [1],
         n_samples: int = 16,
         num_prompts: int = 50,
@@ -61,6 +68,10 @@ class PassAtKStoppingCallback(TrainerCallback):
         strict: bool = False,
         model_name: str = None,
         prevWindow: int = None,
+        use_persistent_vllm: bool = True,
+        base_model_hf: str = None,
+        vllm_gpu_memory_utilization: float = 0.4,
+        lora_max_rank: int = 32,
     ):
         # Sort thresholds in descending order (hardest to easiest: 0.7, 0.5, 0.3)
         # Higher pass@k = harder to reach, so we process from largest to smallest
@@ -77,30 +88,187 @@ class PassAtKStoppingCallback(TrainerCallback):
         self.metadata_path = None
         self.prevResults = []
         self.prevWindow = prevWindow
-        
+
+        # LoRA adapter / persistent vLLM settings
+        self.use_persistent_vllm = use_persistent_vllm
+        self.base_model_hf = base_model_hf
+        self.vllm_gpu_memory_utilization = vllm_gpu_memory_utilization
+        self.lora_max_rank = lora_max_rank
+        self._vllm_engine = None
+        self._lora_request_id = 0
+        self._chat_template = None
+
         self.test_dataset = get_ifeval_test_dataset()
         if num_prompts is not None:
             self.test_dataset = self.test_dataset.select(range(min(num_prompts, len(self.test_dataset))))
-        
+
         # Load IFEval inputs for evaluation
         self.inputs_map = {
-            inp.prompt: inp 
+            inp.prompt: inp
             for inp in evaluation_lib.read_prompt_list(str(IFEVAL_INPUT_PATH))
         }
-        
-        print(f"[PassAtKCallback] Initialized with pass@{self.stopping_k} thresholds={self.target_pass_at_k_thresholds}")
+
+        mode_str = "persistent" if use_persistent_vllm else "non-persistent"
+        print(f"[PassAtKCallback] 1Initialized with pass@{self.stopping_k} thresholds={self.target_pass_at_k_thresholds}")
         print(f"[PassAtKCallback] Training will stop when hardest threshold is reached: {self.target_pass_at_k_thresholds[0]}")
         print(f"[PassAtKCallback] k_values={self.k_values} (stopping on k={self.stopping_k})")
         print(f"[PassAtKCallback] n_samples={n_samples}, temperature={temperature}, strict={strict}")
         print(f"[PassAtKCallback] IFEval prompts loaded: {len(self.inputs_map)}, num_prompts={len(self.test_dataset)}")
-        print(f"[PassAtKCallback] Using vLLM with model save/load (replicating run_inference_ifeval)")
+        print(f"[PassAtKCallback] vLLM mode: {mode_str}, base_model_hf={base_model_hf}, gpu_mem={vllm_gpu_memory_utilization}")
+
     def on_train_begin(self, args, state, control, **kwargs):
         if not self.model_name:
             self.model_name = kwargs.get("model")
         print(f"[PassAtKCallback] on_train_begin: model_name={self.model_name}")
         now = datetime.datetime.now().strftime("%m%d_%H%M")
         self.metadata_path = os.path.join(MODELS_METADATA_DIR, f"{self.model_name}_passatk-{now}.json")
-    
+
+    def on_train_end(self, args, state, control, **kwargs):
+        """Cleanup persistent vLLM engine when training ends."""
+        self._cleanup_vllm()
+
+    def _init_persistent_vllm(self):
+        """Lazily initialize the persistent vLLM engine with LoRA support."""
+        if self._vllm_engine is not None:
+            return
+
+        print(f"[PassAtKCallback] Initializing persistent vLLM engine with base model: {self.base_model_hf}")
+        print(f"[PassAtKCallback] gpu_memory_utilization={self.vllm_gpu_memory_utilization}, max_lora_rank={self.lora_max_rank}")
+
+        # enforce_eager=True is required for LoRA — CUDA graph capture is incompatible with dynamic adapter swapping
+        self._vllm_engine = LLM(
+            model=self.base_model_hf,
+            enable_lora=True,
+            max_lora_rank=self.lora_max_rank,
+            max_loras=1,
+            gpu_memory_utilization=self.vllm_gpu_memory_utilization,
+            trust_remote_code=True,
+            enforce_eager=True,
+            # max_model_len=2048,
+        )
+
+        # Cache chat template
+        tokenizer = self._vllm_engine.get_tokenizer()
+        tokenizer = chat_template_func(tokenizer)
+        self._chat_template = tokenizer.chat_template
+
+        print(f"[PassAtKCallback] Persistent vLLM engine initialized successfully")
+
+    def _save_lora_adapter(self, model, adapter_dir: str):
+        """Save only the LoRA adapter weights (~50MB instead of ~2GB merged)."""
+        print(f"[PassAtKCallback] Saving LoRA adapter to {adapter_dir}...")
+        # model.save_pretrained_merged(adapter_dir, self.tokenizer, save_method="lora")
+        # Use standard PEFT save to ensure adapter_config.json is created for vLLM
+        if hasattr(model, 'save_pretrained'):
+            # PEFT model - save adapter only
+            model.save_pretrained(adapter_dir)
+        else:
+            # Fallback: use unsloth's method
+            model.save_pretrained_merged(adapter_dir, self.tokenizer, save_method="lora")
+        print(f"[PassAtKCallback] LoRA adapter saved")
+
+    def _run_inference_with_lora(self, adapter_path: str) -> List[Dict]:
+        """Run inference on persistent vLLM engine with a LoRA adapter."""
+        self._lora_request_id += 1
+        lora_request = LoRARequest(
+            lora_name=f"adapter_{self._lora_request_id}",
+            lora_int_id=self._lora_request_id,
+            lora_path=adapter_path,
+        )
+
+        sampling_params = SamplingParams(
+            n=self.n_samples,
+            temperature=self.temperature,
+            max_tokens=self.max_tokens,
+        )
+
+        print(f"[PassAtKCallback] Generating {len(self.test_dataset)} prompts x {self.n_samples} samples (persistent, lora_id={self._lora_request_id})...")
+        outputs = self._vllm_engine.chat(
+            self.test_dataset["messages"],
+            sampling_params,
+            chat_template=self._chat_template,
+            lora_request=lora_request,
+        )
+
+        return self._format_outputs(outputs)
+
+    def _run_inference_with_vllm_lora(self, adapter_path: str) -> List[Dict]:
+        """Non-persistent variant: create ephemeral vLLM with LoRA, run, destroy."""
+        print(f"[PassAtKCallback] Loading ephemeral vLLM with base model: {self.base_model_hf}")
+
+        llm = LLM(
+            model=self.base_model_hf,
+            enable_lora=True,
+            max_lora_rank=self.lora_max_rank,
+            max_loras=1,
+            gpu_memory_utilization=0.8,
+            trust_remote_code=True,
+        )
+
+        tokenizer = llm.get_tokenizer()
+        tokenizer = chat_template_func(tokenizer)
+        chat_template = tokenizer.chat_template
+
+        self._lora_request_id += 1
+        lora_request = LoRARequest(
+            lora_name=f"adapter_{self._lora_request_id}",
+            lora_int_id=self._lora_request_id,
+            lora_path=adapter_path,
+        )
+
+        sampling_params = SamplingParams(
+            n=self.n_samples,
+            temperature=self.temperature,
+            max_tokens=self.max_tokens,
+        )
+
+        print(f"[PassAtKCallback] Generating {len(self.test_dataset)} prompts x {self.n_samples} samples (non-persistent, lora_id={self._lora_request_id})...")
+        outputs = llm.chat(
+            self.test_dataset["messages"],
+            sampling_params,
+            chat_template=chat_template,
+            lora_request=lora_request,
+        )
+
+        results = self._format_outputs(outputs)
+
+        destroy_model_parallel()
+        del llm
+        gc.collect()
+        torch.cuda.empty_cache()
+        torch.cuda.synchronize()
+
+        return results
+
+    def _cleanup_vllm(self):
+        """Destroy the persistent vLLM engine and free GPU memory."""
+        if self._vllm_engine is not None:
+            print(f"[PassAtKCallback] Cleaning up persistent vLLM engine...")
+            destroy_model_parallel()
+            del self._vllm_engine
+            self._vllm_engine = None
+            self._chat_template = None
+            gc.collect()
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
+            print(f"[PassAtKCallback] vLLM engine cleaned up")
+
+    def _format_outputs(self, outputs) -> List[Dict]:
+        """Format vLLM outputs into grouped results for pass@k evaluation."""
+        if self.n_samples == 1:
+            responses = [output.outputs[0].text for output in outputs]
+        else:
+            responses = [[response.text for response in output.outputs] for output in outputs]
+
+        grouped = defaultdict(list)
+        for prompt, resp in zip(self.test_dataset["prompt"], responses):
+            if isinstance(resp, list):
+                grouped[prompt].extend(resp)
+            else:
+                grouped[prompt].append(resp)
+
+        return [{"prompt": p, "responses": resps} for p, resps in grouped.items()]
+
     def _save_sweetspot_checkpoint(self, model, threshold: float, state: TrainerState, args: TrainingArguments):
         """Save a checkpoint when a pass@k sweetspot threshold is reached."""
         train_batch_size = args.per_device_train_batch_size
@@ -113,10 +281,11 @@ class PassAtKStoppingCallback(TrainerCallback):
         checkpoint_path = os.path.join(MODELS_DIR, checkpoint_name)
 
         print(f"[PassAtKCallback] Saving sweetspot checkpoint to {checkpoint_path}")
-        
+
         # Save using Unsloth's merged 16bit method (consistent with PerplexityCallback)
+        # Downstream DPO expects fully merged models, so we always use merged_16bit here
         model.save_pretrained_merged(checkpoint_path, self.tokenizer, save_method="merged_16bit")
-        
+
         with open(f"{checkpoint_path}/training_config.json", "w") as f:
             json.dump(args.to_dict(), f, indent=4)
 
@@ -131,19 +300,19 @@ class PassAtKStoppingCallback(TrainerCallback):
             "n_samples": self.n_samples,
             "strict": self.strict,
         }
-        
+
         with open(self.metadata_path, "a") as f:
             f.write(json.dumps(metadata)+"\n")
-        
+
         print(f"[PassAtKCallback] Sweetspot checkpoint saved with metadata at {self.metadata_path}")
         return checkpoint_path
-    
+
     def _run_inference_with_vllm(self, model_path: str) -> List[Dict]:
         """
-        Run inference using vLLM, replicating the pattern from run_inference_ifeval.
+        Legacy: Run inference using vLLM with a fully merged model.
+        Used as fallback when base_model_hf is not available.
         Returns list of dicts: [{"prompt": str, "responses": List[str]}, ...]
         """
-        # Load model with vLLM (similar to load_vlm_model)
         print(f"[PassAtKCallback] Loading model with vLLM from {model_path}...")
         print("LLM UTILISATION IS 0.8")
 
@@ -152,115 +321,120 @@ class PassAtKStoppingCallback(TrainerCallback):
             gpu_memory_utilization=0.8,
             trust_remote_code=True,
         )
-        
+
         sampling_params = SamplingParams(
             n=self.n_samples,
             temperature=self.temperature,
             max_tokens=self.max_tokens,
         )
-        
-        # Get tokenizer from vLLM and apply chat template (like in vllm_utils.py)
+
         tokenizer = llm.get_tokenizer()
         tokenizer = chat_template_func(tokenizer)
         chat_template = tokenizer.chat_template
-        
-        # Generate responses using llm.chat (like make_vllm_call)
+
         print(f"[PassAtKCallback] Generating {len(self.test_dataset)} prompts x {self.n_samples} samples...")
         outputs = llm.chat(
-            self.test_dataset["messages"], 
-            sampling_params, 
+            self.test_dataset["messages"],
+            sampling_params,
             chat_template=chat_template
         )
-        
-        # Format results (like generate_responses_vllm)
-        # Group responses by prompt for pass@k evaluation
-        if self.n_samples == 1:
-            responses = [output.outputs[0].text for output in outputs]
-        else:
-            responses = [[response.text for response in output.outputs] for output in outputs]
-        
-        # Group by prompt (like in calculate_pass@k.py run_inference)
-        grouped = defaultdict(list)
-        for prompt, resp in zip(self.test_dataset["prompt"], responses):
-            if isinstance(resp, list):
-                grouped[prompt].extend(resp)
-            else:
-                grouped[prompt].append(resp)
-        
+
+        results = self._format_outputs(outputs)
+
         destroy_model_parallel()
         del llm
         gc.collect()
         torch.cuda.empty_cache()
         torch.cuda.synchronize()
 
+        return results
 
-        model_results = [{"prompt": p, "responses": resps} for p, resps in grouped.items()]
-        
-        return model_results
-    
     def evaluate_pass_at_k(self, model) -> Dict[str, float]:
-        """Evaluate pass@k using vLLM with model save/load."""
-        
-        # Step 1: Save model to temp directory
+        """Evaluate pass@k using vLLM with LoRA adapter support."""
+
         temp_dir = tempfile.mkdtemp()
-        
+
         try:
-            print(f"[PassAtKCallback] Saving model to {temp_dir}...")
-            
-            model.save_pretrained_merged(temp_dir, self.tokenizer, save_method="merged_16bit")
-            
-            print(f"[PassAtKCallback] Moving training model to CPU...")
-            original_device = next(model.parameters()).device
-            model.cpu()
-            torch.cuda.empty_cache()
-            
-            model_results = self._run_inference_with_vllm(temp_dir)
-            
-            print(f"[PassAtKCallback] Moving training model back to GPU...")
-            model.to(original_device)
-            model.train()  # Ensure model is back in training mode
-            
+            if self.base_model_hf and self.use_persistent_vllm:
+                # Persistent mode: save adapter, swap into persistent engine
+                try:
+                    self._init_persistent_vllm()
+                    self._save_lora_adapter(model, temp_dir)
+                    model_results = self._run_inference_with_lora(temp_dir)
+                except Exception as e:
+                    print(f"[PassAtKCallback] Persistent vLLM failed: {e}")
+                    print(f"[PassAtKCallback] Falling back to non-persistent mode")
+                    self._cleanup_vllm()
+                    self.use_persistent_vllm = False
+                    # Fall through to non-persistent path
+                    shutil.rmtree(temp_dir, ignore_errors=True)
+                    temp_dir = tempfile.mkdtemp()
+                    self._save_lora_adapter(model, temp_dir)
+                    original_device = next(model.parameters()).device
+                    model.cpu()
+                    torch.cuda.empty_cache()
+                    model_results = self._run_inference_with_vllm_lora(temp_dir)
+                    model.to(original_device)
+                    model.train()
+            elif self.base_model_hf:
+                # Non-persistent mode with LoRA: save adapter, create/destroy vLLM each eval
+                self._save_lora_adapter(model, temp_dir)
+                original_device = next(model.parameters()).device
+                model.cpu()
+                torch.cuda.empty_cache()
+                model_results = self._run_inference_with_vllm_lora(temp_dir)
+                model.to(original_device)
+                model.train()
+            else:
+                # Legacy fallback: full merged model save (when base_model_hf not available)
+                print(f"[PassAtKCallback] No base_model_hf set, using legacy merged model path")
+                model.save_pretrained_merged(temp_dir, self.tokenizer, save_method="merged_16bit")
+                original_device = next(model.parameters()).device
+                model.cpu()
+                torch.cuda.empty_cache()
+                model_results = self._run_inference_with_vllm(temp_dir)
+                model.to(original_device)
+                model.train()
         finally:
-            # Cleanup temp directory
             shutil.rmtree(temp_dir, ignore_errors=True)
-        
-        # Step 5: Evaluate responses (like evaluate_pass_at_k in calculate_pass@k.py)
+
+        # Evaluate responses
         print(f"[PassAtKCallback] Evaluating responses...")
         all_results = []
         for item in model_results:
             prompt = item["prompt"]
             responses = item["responses"]
-            
+
             if prompt not in self.inputs_map:
                 print(f"[PassAtKCallback] Warning: Prompt not found in inputs_map: {prompt[:50]}...")
                 continue
-            
+
             eval_input = self.inputs_map[prompt]
             results = [evaluate_single_response(eval_input, r, self.strict) for r in responses]
             all_results.append(results)
-        
+
         # Compute pass@k scores for all k values
         if not all_results:
             scores = {f"pass_at_{k}": 0.0 for k in self.k_values}
             scores["num_prompts_evaluated"] = 0
             return scores
-        
+
         scores = {}
         for k in self.k_values:
             pass_at_k_scores = [pass_at_k(len(r), sum(r), k) for r in all_results]
             scores[f"pass_at_{k}"] = np.mean(pass_at_k_scores)
         scores["num_prompts_evaluated"] = len(all_results)
-        
+
         return scores
-    
-    def on_evaluate(self, args: TrainingArguments, state: TrainerState, 
+
+    def on_evaluate(self, args: TrainingArguments, state: TrainerState,
                     control: TrainerControl, model=None, **kwargs):
         """Called after evaluation, check pass@k and stop if target reached."""
         train_batch_size = args.per_device_train_batch_size
         grad_accum = args.gradient_accumulation_steps
         world_size = getattr(args, "world_size", 1)
         data_points_seen = state.global_step * train_batch_size * grad_accum * world_size
-        
+
         if model is None:
             model = kwargs.get("model")
         if model is None:
@@ -268,9 +442,9 @@ class PassAtKStoppingCallback(TrainerCallback):
         if model is None:
             print("[PassAtKCallback] Warning: model is None, skipping pass@k check")
             return control
-        
+
         scores = self.evaluate_pass_at_k(model)
-        
+
         # Log all k values to wandb
         log_dict = {"train/global_step": state.global_step}
         for k in self.k_values:
@@ -283,7 +457,7 @@ class PassAtKStoppingCallback(TrainerCallback):
         scores_str = ", ".join([f"pass@{k}={scores[f'pass_at_{k}']:.4f}" for k in self.k_values])
         print(f"\n[PassAtKCallback] Step {state.global_step}, Data Points {data_points_seen}: "
               f"{scores_str} ({eval_type}, {scores['num_prompts_evaluated']} prompts)")
-        
+
         # Check each threshold and save checkpoint if crossed (Fork Strategy)
         # Thresholds are sorted descending (hardest to easiest: 0.7, 0.5, 0.3)
         # We iterate to find the hardest threshold that current pass@k has reached
@@ -321,5 +495,5 @@ class PassAtKStoppingCallback(TrainerCallback):
                 if self.prevResults[-self.prevWindow] == max(self.prevResults[-self.prevWindow:]):
                     print(f"[PassAtKCallback] No improvement in last {self.prevWindow} evaluations. Stopping training.")
                     control.should_training_stop = True
-                
+
         return control

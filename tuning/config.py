@@ -27,6 +27,6 @@ HF_MODEL_MAP = {
     "qwen2-3B": "unsloth/Qwen2.5-3B",
     "qwen2-2B": "unsloth/Qwen2.5-1.5B",
     "qwen2-14B": "unsloth/Qwen2.5-14B",
-    "llama3-3B": "unsloth3/Llama-3.2-3B",
+    "llama3-3B": "unsloth/Llama-3.2-3B",
     "llama3-1B": "unsloth/Llama-3.2-1B"
 }

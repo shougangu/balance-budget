@@ -85,7 +85,7 @@ def train_model_dpo(
     callbacks = []
     if passk_config is not None and passk_config.enabled:
         passk_callback = PassAtKStoppingCallback(
-            target_pass_at_k=passk_config.target_pass_at_k,  
+            target_pass_at_k=passk_config.target_pass_at_k,
             tokenizer=chat_template_func(tokenizer),
             k_values=passk_config.k_values,
             n_samples=passk_config.n_samples,
@@ -93,6 +93,10 @@ def train_model_dpo(
             temperature=passk_config.temperature,
             max_tokens=passk_config.max_tokens,
             strict=passk_config.strict,
+            model_name=run_config.model_name,
+            base_model_hf=run_config.model_name_hf,
+            use_persistent_vllm=getattr(passk_config, 'use_persistent_vllm', True),
+            vllm_gpu_memory_utilization=getattr(passk_config, 'vllm_gpu_memory_utilization', 0.4),
         )
         callbacks.append(passk_callback)
         print(f"[DPO] Will stop training when pass@{passk_config.k_values[0]} >= {passk_config.target_pass_at_k}")

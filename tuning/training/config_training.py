@@ -74,6 +74,8 @@ class PassAtKConfig(BaseModel):
     max_tokens: int = 1024  # Maximum tokens to generate per response
     strict: bool = True  # Use strict (True) or loose (False) IFEval evaluation
     enabled: bool = True  # Whether to enable the callback
+    use_persistent_vllm: bool = True  # Keep vLLM engine alive between evals (saves cold-start time)
+    vllm_gpu_memory_utilization: float = 0.4  # GPU memory fraction for vLLM (conservative for coexistence with training)
 
 
 class DatasetConfig(BaseModel):
