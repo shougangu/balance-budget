@@ -18,8 +18,9 @@ from vllm.lora.request import LoRARequest
 
 from instruction_following_eval import evaluation_lib
 from tuning.data.test_dataset import get_ifeval_test_dataset
-from tuning.utils.utils import chat_template_func
 from tuning.config import MODELS_DIR, MODELS_METADATA_DIR
+
+from tuning.inference.config_inference import VLLMSamplingParamsConfig
 
 BASE_DIR = Path('/home/shougan/projects/aip-fredashi/shougan/balance-budget')
 IFEVAL_INPUT_PATH = BASE_DIR / "instruction_following_eval/data/input_data.jsonl"
@@ -63,11 +64,12 @@ class PassAtKStoppingCallback(TrainerCallback):
         k_values: List[int] = [1],
         n_samples: int = 16,
         num_prompts: int = 50,
-        temperature: float = 0.7,
-        max_tokens: int = 1024,
+        temperature: float = 0.5,
+        max_tokens: int = 4096,
         strict: bool = False,
         model_name: str = None,
-        prevWindow: int = None,
+        patience: int = None,
+        min_increase: float = 0.02,
         use_persistent_vllm: bool = True,
         base_model_hf: str = None,
         vllm_gpu_memory_utilization: float = 0.4,
@@ -76,6 +78,8 @@ class PassAtKStoppingCallback(TrainerCallback):
         # Sort thresholds in descending order (hardest to easiest: 0.7, 0.5, 0.3)
         # Higher pass@k = harder to reach, so we process from largest to smallest
         self.target_pass_at_k_thresholds = sorted(target_pass_at_k, reverse=True)
+        self.patience = patience
+        self.min_increase = min_increase
         self.tokenizer = tokenizer
         self.k_values = k_values
         self.stopping_k = self.k_values[0]  # First k value is used for stopping
@@ -87,7 +91,7 @@ class PassAtKStoppingCallback(TrainerCallback):
         self.model_name = model_name
         self.metadata_path = None
         self.prevResults = []
-        self.prevWindow = prevWindow
+        
 
         # LoRA adapter / persistent vLLM settings
         self.use_persistent_vllm = use_persistent_vllm
@@ -96,7 +100,7 @@ class PassAtKStoppingCallback(TrainerCallback):
         self.lora_max_rank = lora_max_rank
         self._vllm_engine = None
         self._lora_request_id = 0
-        self._chat_template = None
+        self._chat_template = self.tokenizer.chat_template
 
         self.test_dataset = get_ifeval_test_dataset()
         if num_prompts is not None:
@@ -109,9 +113,17 @@ class PassAtKStoppingCallback(TrainerCallback):
         }
 
         mode_str = "persistent" if use_persistent_vllm else "non-persistent"
-        print(f"[PassAtKCallback] 1Initialized with pass@{self.stopping_k} thresholds={self.target_pass_at_k_thresholds}")
-        print(f"[PassAtKCallback] Training will stop when hardest threshold is reached: {self.target_pass_at_k_thresholds[0]}")
-        print(f"[PassAtKCallback] k_values={self.k_values} (stopping on k={self.stopping_k})")
+        if not self.patience:
+            print(f"[PassAtKCallback] Initialized with pass@{self.stopping_k} thresholds={self.target_pass_at_k_thresholds}")
+            print(f"[PassAtKCallback] Training will stop when hardest threshold is reached: {self.target_pass_at_k_thresholds[0]}")
+            print(f"[PassAtKCallback] k_values={self.k_values} (stopping on k={self.stopping_k})")
+        
+        else:
+            print(f"[PassAtKCallback] Initialized with patience={self.patience}, min_increase={self.min_increase}")
+            print(f"[PassAtKCallback] Training will stop if pass@{self.stopping_k} does not improve by {self.min_increase} for {self.patience} evaluations in a row")
+            print(f"[PassAtKCallback] k_values={self.k_values} (stopping on k={self.stopping_k})")
+
+
         print(f"[PassAtKCallback] n_samples={n_samples}, temperature={temperature}, strict={strict}")
         print(f"[PassAtKCallback] IFEval prompts loaded: {len(self.inputs_map)}, num_prompts={len(self.test_dataset)}")
         print(f"[PassAtKCallback] vLLM mode: {mode_str}, base_model_hf={base_model_hf}, gpu_mem={vllm_gpu_memory_utilization}")
@@ -147,24 +159,24 @@ class PassAtKStoppingCallback(TrainerCallback):
             # max_model_len=2048,
         )
 
-        # Cache chat template
-        tokenizer = self._vllm_engine.get_tokenizer()
-        tokenizer = chat_template_func(tokenizer)
-        self._chat_template = tokenizer.chat_template
-
         print(f"[PassAtKCallback] Persistent vLLM engine initialized successfully")
 
     def _save_lora_adapter(self, model, adapter_dir: str):
         """Save only the LoRA adapter weights (~50MB instead of ~2GB merged)."""
         print(f"[PassAtKCallback] Saving LoRA adapter to {adapter_dir}...")
-        # model.save_pretrained_merged(adapter_dir, self.tokenizer, save_method="lora")
+
         # Use standard PEFT save to ensure adapter_config.json is created for vLLM
         if hasattr(model, 'save_pretrained'):
+            print(f"[PassAtKCallback] PEFT saving adaptor only")
             # PEFT model - save adapter only
             model.save_pretrained(adapter_dir)
         else:
             # Fallback: use unsloth's method
+            print(f"[PassAtKCallback] Model does not have save_pretrained, using merged method with lora save")
             model.save_pretrained_merged(adapter_dir, self.tokenizer, save_method="lora")
+        # Save tokenizer so vLLM doesn't warn about missing tokenizer in adapter dir
+        
+        self.tokenizer.save_pretrained(adapter_dir)
         print(f"[PassAtKCallback] LoRA adapter saved")
 
     def _run_inference_with_lora(self, adapter_path: str) -> List[Dict]:
@@ -176,11 +188,14 @@ class PassAtKStoppingCallback(TrainerCallback):
             lora_path=adapter_path,
         )
 
-        sampling_params = SamplingParams(
+        
+        inference_config = VLLMSamplingParamsConfig(
             n=self.n_samples,
             temperature=self.temperature,
             max_tokens=self.max_tokens,
         )
+        sampling_params = SamplingParams(**inference_config.model_dump())
+
 
         print(f"[PassAtKCallback] Generating {len(self.test_dataset)} prompts x {self.n_samples} samples (persistent, lora_id={self._lora_request_id})...")
         outputs = self._vllm_engine.chat(
@@ -201,13 +216,9 @@ class PassAtKStoppingCallback(TrainerCallback):
             enable_lora=True,
             max_lora_rank=self.lora_max_rank,
             max_loras=1,
-            gpu_memory_utilization=0.8,
+            gpu_memory_utilization=self.vllm_gpu_memory_utilization,
             trust_remote_code=True,
         )
-
-        tokenizer = llm.get_tokenizer()
-        tokenizer = chat_template_func(tokenizer)
-        chat_template = tokenizer.chat_template
 
         self._lora_request_id += 1
         lora_request = LoRARequest(
@@ -226,7 +237,7 @@ class PassAtKStoppingCallback(TrainerCallback):
         outputs = llm.chat(
             self.test_dataset["messages"],
             sampling_params,
-            chat_template=chat_template,
+            chat_template=self._chat_template,
             lora_request=lora_request,
         )
 
@@ -247,7 +258,6 @@ class PassAtKStoppingCallback(TrainerCallback):
             destroy_model_parallel()
             del self._vllm_engine
             self._vllm_engine = None
-            self._chat_template = None
             gc.collect()
             torch.cuda.empty_cache()
             torch.cuda.synchronize()
@@ -269,7 +279,7 @@ class PassAtKStoppingCallback(TrainerCallback):
 
         return [{"prompt": p, "responses": resps} for p, resps in grouped.items()]
 
-    def _save_sweetspot_checkpoint(self, model, threshold: float, state: TrainerState, args: TrainingArguments):
+    def _save_sweetspot_checkpoint(self, model, threshold, state: TrainerState, args: TrainingArguments):
         """Save a checkpoint when a pass@k sweetspot threshold is reached."""
         train_batch_size = args.per_device_train_batch_size
         grad_accum = args.gradient_accumulation_steps
@@ -277,7 +287,7 @@ class PassAtKStoppingCallback(TrainerCallback):
         data_points_seen = int(state.global_step * train_batch_size * grad_accum * world_size / 2)
 
         # Use data_points_seen as the checkpoint name suffix
-        checkpoint_name = f"{self.model_name}_pass@{self.stopping_k}-{threshold:.2f}_sft-{data_points_seen}"
+        checkpoint_name = f"{self.model_name}_pass@{self.stopping_k}-{threshold}_sft-{data_points_seen}"
         checkpoint_path = os.path.join(MODELS_DIR, checkpoint_name)
 
         print(f"[PassAtKCallback] Saving sweetspot checkpoint to {checkpoint_path}")
@@ -314,11 +324,10 @@ class PassAtKStoppingCallback(TrainerCallback):
         Returns list of dicts: [{"prompt": str, "responses": List[str]}, ...]
         """
         print(f"[PassAtKCallback] Loading model with vLLM from {model_path}...")
-        print("LLM UTILISATION IS 0.8")
 
         llm = LLM(
             model=model_path,
-            gpu_memory_utilization=0.8,
+            gpu_memory_utilization=self.vllm_gpu_memory_utilization,
             trust_remote_code=True,
         )
 
@@ -328,15 +337,11 @@ class PassAtKStoppingCallback(TrainerCallback):
             max_tokens=self.max_tokens,
         )
 
-        tokenizer = llm.get_tokenizer()
-        tokenizer = chat_template_func(tokenizer)
-        chat_template = tokenizer.chat_template
-
         print(f"[PassAtKCallback] Generating {len(self.test_dataset)} prompts x {self.n_samples} samples...")
         outputs = llm.chat(
             self.test_dataset["messages"],
             sampling_params,
-            chat_template=chat_template
+            chat_template=self._chat_template
         )
 
         results = self._format_outputs(outputs)
@@ -461,7 +466,7 @@ class PassAtKStoppingCallback(TrainerCallback):
         # Check each threshold and save checkpoint if crossed (Fork Strategy)
         # Thresholds are sorted descending (hardest to easiest: 0.7, 0.5, 0.3)
         # We iterate to find the hardest threshold that current pass@k has reached
-        if not self.prevWindow:
+        if not self.patience:
             current_pass_at_k = scores[f"pass_at_{self.stopping_k}"]
             reached_threshold = None
             reached_index = None
@@ -474,11 +479,7 @@ class PassAtKStoppingCallback(TrainerCallback):
 
             if reached_threshold is not None:
                 print(f"[PassAtKCallback] Sweetspot threshold {reached_threshold} reached!")
-
                 checkpoint_path = self._save_sweetspot_checkpoint(model, reached_threshold, state, args)
-
-                dpo_data = 8192 - data_points_seen  # Let's say we have 8192 datapoint budget
-                print(f"[PassAtKCallback] Launching DPO job with data points {dpo_data} at checkpoint {checkpoint_path}")
 
                 # Trim thresholds to only include harder ones (before current index)
                 self.target_pass_at_k_thresholds = self.target_pass_at_k_thresholds[:reached_index]
@@ -490,10 +491,17 @@ class PassAtKStoppingCallback(TrainerCallback):
                 else:
                     print(f"[PassAtKCallback] Continuing training to next threshold: {self.target_pass_at_k_thresholds[0]}")
 
-        if self.prevWindow:
-            if len(self.prevResults) > self.prevWindow:
-                if self.prevResults[-self.prevWindow] == max(self.prevResults[-self.prevWindow:]):
-                    print(f"[PassAtKCallback] No improvement in last {self.prevWindow} evaluations. Stopping training.")
+        if self.patience:
+            if len(self.prevResults) > self.patience:
+                early_stopping = True
+                for old,new in zip(self.prevResults[-self.patience-1:], self.prevResults[-self.patience:]):
+                    if new - old >= self.min_increase:
+                        early_stopping = False
+                if early_stopping:
+                    checkpoint_path = self._save_sweetspot_checkpoint(model, f"{self.patience}@{self.min_increase}", state, args)
+                    print(f"[PassAtKCallback] No significant improvement in the last {self.patience} evaluations. Stopping training.")
+                    print(f"[PassAtKCallback] Previous pass@{self.stopping_k} scores: {self.prevResults[-self.patience-1:]}")
+                    print(f"[PassAtKCallback] Final checkpoint saved at {checkpoint_path}")
                     control.should_training_stop = True
 
         return control

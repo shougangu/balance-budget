@@ -1,649 +1,0 @@
-🦥 Unsloth: Will patch your computer to enable 2x faster free finetuning.
-INFO 01-26 03:34:14 [__init__.py:244] Automatically detected platform cuda.
-🦥 Unsloth Zoo will now patch everything to make training faster!
-/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/pydantic/_internal/_generate_schema.py:2249: UnsupportedFieldAttributeWarning: The 'repr' attribute with value False was provided to the `Field()` function, which has no effect in the context it was used. 'repr' is field-specific metadata, and can only be attached to a model field using `Annotated` metadata or by assignment. This may have happened because an `Annotated` type alias using the `type` statement was used, or if the `Field()` function was attached to a single member of a union type.
-  warnings.warn(
-/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/pydantic/_internal/_generate_schema.py:2249: UnsupportedFieldAttributeWarning: The 'frozen' attribute with value True was provided to the `Field()` function, which has no effect in the context it was used. 'frozen' is field-specific metadata, and can only be attached to a model field using `Annotated` metadata or by assignment. This may have happened because an `Annotated` type alias using the `type` statement was used, or if the `Field()` function was attached to a single member of a union type.
-  warnings.warn(
-/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning
-Getting train dataset for run config: llama3-8B_sft-tuluif-8192
-Checking for dataset at /home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/data/datasets/sft-tuluif-8192
-Dataset already exists at /home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/data/datasets/sft-tuluif-8192
-Sampled dataset: DatasetDict({
-    train: Dataset({
-        features: ['id', 'prompt', 'messages', 'constraints'],
-        num_rows: 8192
-    })
-    test: Dataset({
-        features: ['id', 'prompt', 'messages', 'constraints'],
-        num_rows: 200
-    })
-})
-Example training row: {'id': 'personas_IF_9u3mcrurksv7hypq3xlppyba', 'prompt': 'Compile a detailed summary of the most recent case discussed on the podcast. Include the title of the episode wrapped in double angular brackets, i.e. <<title>>, and quote at least one statement made by the host during the discussion.', 'messages': [{'content': 'You are a helpful assistant who is an expert at responding to prompts by carefully following the given instructions', 'role': 'system'}, {'content': 'Compile a detailed summary of the most recent case discussed on the podcast. Include the title of the episode wrapped in double angular brackets, i.e. <<title>>, and quote at least one statement made by the host during the discussion.', 'role': 'user'}, {'content': "I'm sorry, but I don't have access to real-time data, including the most recent episodes of podcasts. If you provide me with some details from the episode, I'd be happy to help you compile a summary based on that information.", 'role': 'assistant'}], 'constraints': ['format:title', 'use quotation']}
-Example evaluation row: {'id': 'personas_IF_o3dewf33wk895zom2dbfye5u', 'prompt': 'I want to create a podcast where I explore the themes and motifs found in surreal dystopian literature, both mine and others. This podcast will dive deep into the artistic and philosophical underpinnings of this genre, aiming to become a leading voice in literary criticism. Can you guide me on how to effectively launch and grow this podcast? Include at least 3 **bold text** sections such as: **bold text 1**, **bold text 2**, etc., and incorporate a famous quote about dystopian literature.', 'messages': [{'content': 'You are a helpful assistant who is an expert at responding to prompts by carefully following the given instructions', 'role': 'system'}, {'content': 'I want to create a podcast where I explore the themes and motifs found in surreal dystopian literature, both mine and others. This podcast will dive deep into the artistic and philosophical underpinnings of this genre, aiming to become a leading voice in literary criticism. Can you guide me on how to effectively launch and grow this podcast? Include at least 3 **bold text** sections such as: **bold text 1**, **bold text 2**, etc., and incorporate a famous quote about dystopian literature.', 'role': 'user'}, {'content': 'Launching a podcast on surreal dystopian literature is a fascinating endeavor that requires a combination of passion, strategic planning, and thoughtful execution. Here\'s a guide to help you effectively launch and grow your podcast:\n\n**Identify Your Niche and Audience:** Begin by clearly defining what makes your podcast unique in the realm of dystopian literature. Consider focusing on specific sub-genres, authors, or themes that resonate with you. Understanding your target audience will help tailor your content to their interests and needs.\n\n**Develop Compelling Content:** Plan your episodes around intriguing themes and motifs found in surreal dystopian literature. Consider including analyses of classic works, like George Orwell\'s "1984" or Aldous Huxley\'s "Brave New World," alongside contemporary pieces. A quote to inspire your discussions might be Margaret Atwood\'s reflection: "A dystopia is a utopia that\'s gone wrong," which can serve as a launching point for exploring the thin line between utopian ideals and dystopian realities.\n\n**Leverage Expertise and Connections:** To establish credibility, invite authors, literary critics, and professors as guests to provide diverse perspectives. Your own insights as a writer can create a rich dialogue, blending personal experiences with broader literary critiques.\n\n**Invest in Quality Production:** Ensure high-quality audio and editing to maintain a professional standard. Consider investing in a good microphone and editing software. This attention to detail will enhance listener experience and retention.\n\n**Engage Your Audience:** Create a community around your podcast by encouraging listener interaction. Use social media platforms to engage with your audience, gather feedback, and promote upcoming episodes. Consider hosting live Q&A sessions or discussions to deepen listener involvement.\n\n**Market Strategically:** Utilize SEO techniques to make your podcast more discoverable. Write detailed show notes and transcriptions for each episode, including relevant keywords about the literature discussed. Collaborate with other podcasters or bloggers in the literary space to expand your reach.\n\n**Monitor and Adapt:** Regularly review analytics to understand which episodes resonate most with your audience. Be ready to adapt your content strategy based on listener feedback and trends in the literary world.\n\nBy focusing on these key areas, you can launch a podcast that not only explores the depths of surreal dystopian literature but also becomes a leading voice in literary criticism. Remember, consistency and authenticity are crucial to building a loyal listener base.', 'role': 'assistant'}], 'constraints': ['use quotation', 'format:number of highlighted sections']}
-==((====))==  Unsloth 2025.10.1: Fast Llama patching. Transformers: 4.56.1. vLLM: 0.9.2+computecanada.
-   \\   /|    NVIDIA L40S. Num GPUs = 1. Max memory: 44.403 GB. Platform: Linux.
-O^O/ \_/ \    Torch: 2.7.0. CUDA: 8.9. CUDA Toolkit: 12.6. Triton: 3.3.1
-\        /    Bfloat16 = TRUE. FA [Xformers = 0.0.30. FA2 = False]
- "-____-"     Free license: http://github.com/unslothai/unsloth
-Unsloth: Fast downloading is enabled - ignore downloading bars which are red colored!
-Loading checkpoint shards:   0%|          | 0/4 [00:00<?, ?it/s]Loading checkpoint shards:  25%|██▌       | 1/4 [00:18<00:54, 18.07s/it]Loading checkpoint shards:  50%|█████     | 2/4 [00:35<00:35, 17.68s/it]Loading checkpoint shards:  75%|███████▌  | 3/4 [00:53<00:17, 17.81s/it]Loading checkpoint shards: 100%|██████████| 4/4 [00:57<00:00, 12.46s/it]Loading checkpoint shards: 100%|██████████| 4/4 [00:57<00:00, 14.43s/it]
-Unsloth: Will map <|im_end|> to EOS = <|end_of_text|>.
-DatasetDict({
-    train: Dataset({
-        features: ['id', 'prompt', 'messages', 'constraints', 'text'],
-        num_rows: 8192
-    })
-    test: Dataset({
-        features: ['id', 'prompt', 'messages', 'constraints', 'text'],
-        num_rows: 200
-    })
-})
-{'id': 'personas_IF_9u3mcrurksv7hypq3xlppyba', 'prompt': 'Compile a detailed summary of the most recent case discussed on the podcast. Include the title of the episode wrapped in double angular brackets, i.e. <<title>>, and quote at least one statement made by the host during the discussion.', 'messages': [{'content': 'You are a helpful assistant who is an expert at responding to prompts by carefully following the given instructions', 'role': 'system'}, {'content': 'Compile a detailed summary of the most recent case discussed on the podcast. Include the title of the episode wrapped in double angular brackets, i.e. <<title>>, and quote at least one statement made by the host during the discussion.', 'role': 'user'}, {'content': "I'm sorry, but I don't have access to real-time data, including the most recent episodes of podcasts. If you provide me with some details from the episode, I'd be happy to help you compile a summary based on that information.", 'role': 'assistant'}], 'constraints': ['format:title', 'use quotation'], 'text': "<|im_start|>system\nYou are a helpful assistant who is an expert at responding to prompts by carefully following the given instructions<|im_end|>\n<|im_start|>user\nCompile a detailed summary of the most recent case discussed on the podcast. Include the title of the episode wrapped in double angular brackets, i.e. <<title>>, and quote at least one statement made by the host during the discussion.<|im_end|>\n<|im_start|>assistant\nI'm sorry, but I don't have access to real-time data, including the most recent episodes of podcasts. If you provide me with some details from the episode, I'd be happy to help you compile a summary based on that information.<|im_end|>\n"}
-Unsloth 2025.10.1 patched 32 layers with 32 QKV layers, 32 O layers and 32 MLP layers.
-[PassAtKCallback] Initialized with pass@1 thresholds=[0.6, 0.5, 0.4, 0.3, 0.2, 0.1]
-[PassAtKCallback] Training will stop at final threshold: 0.1
-[PassAtKCallback] k_values=[1] (stopping on k=1)
-[PassAtKCallback] n_samples=1, temperature=0.7, strict=True
-[PassAtKCallback] IFEval prompts loaded: 541, num_prompts=100
-[PassAtKCallback] Using vLLM with model save/load (replicating run_inference_ifeval)
-[SFT] Will stop training when pass@1 >= 0.6
-[SFT] Checkpoints will be saved at thresholds: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6]
-{'output_dir': '/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/models/llama3-8B_sft-tuluif-8192', 'overwrite_output_dir': False, 'do_train': False, 'do_eval': True, 'do_predict': False, 'eval_strategy': 'steps', 'prediction_loss_only': False, 'per_device_train_batch_size': 1, 'per_device_eval_batch_size': 1, 'per_gpu_train_batch_size': None, 'per_gpu_eval_batch_size': None, 'gradient_accumulation_steps': 16, 'eval_accumulation_steps': 16, 'eval_delay': 0, 'torch_empty_cache_steps': None, 'learning_rate': 5e-05, 'weight_decay': 0.01, 'adam_beta1': 0.9, 'adam_beta2': 0.999, 'adam_epsilon': 1e-08, 'max_grad_norm': 1.0, 'num_train_epochs': 2, 'max_steps': -1, 'lr_scheduler_type': 'cosine', 'lr_scheduler_kwargs': {}, 'warmup_ratio': 0.1, 'warmup_steps': 0, 'log_level': 'passive', 'log_level_replica': 'warning', 'log_on_each_node': True, 'logging_dir': '/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/models/llama3-8B_sft-tuluif-8192/runs/Jan26_03-35-41_kn023', 'logging_strategy': 'steps', 'logging_first_step': False, 'logging_steps': 1, 'logging_nan_inf_filter': True, 'save_strategy': 'no', 'save_steps': 20, 'save_total_limit': 1, 'save_safetensors': True, 'save_on_each_node': False, 'save_only_model': False, 'restore_callback_states_from_checkpoint': False, 'no_cuda': False, 'use_cpu': False, 'use_mps_device': False, 'seed': 42, 'data_seed': None, 'jit_mode_eval': False, 'use_ipex': False, 'bf16': True, 'fp16': False, 'fp16_opt_level': 'O1', 'half_precision_backend': 'auto', 'bf16_full_eval': True, 'fp16_full_eval': False, 'tf32': None, 'local_rank': 0, 'ddp_backend': None, 'tpu_num_cores': None, 'tpu_metrics_debug': False, 'debug': [], 'dataloader_drop_last': False, 'eval_steps': 20, 'dataloader_num_workers': 0, 'dataloader_prefetch_factor': None, 'past_index': -1, 'run_name': None, 'disable_tqdm': False, 'remove_unused_columns': True, 'label_names': None, 'load_best_model_at_end': False, 'metric_for_best_model': None, 'greater_is_better': None, 'ignore_data_skip': False, 'fsdp': [], 'fsdp_min_num_params': 0, 'fsdp_config': {'min_num_params': 0, 'xla': False, 'xla_fsdp_v2': False, 'xla_fsdp_grad_ckpt': False}, 'fsdp_transformer_layer_cls_to_wrap': None, 'accelerator_config': {'split_batches': False, 'dispatch_batches': None, 'even_batches': True, 'use_seedable_sampler': True, 'non_blocking': False, 'gradient_accumulation_kwargs': None}, 'parallelism_config': None, 'deepspeed': None, 'label_smoothing_factor': 0.0, 'optim': 'adamw_8bit', 'optim_args': None, 'adafactor': False, 'group_by_length': False, 'length_column_name': 'length', 'report_to': ['wandb'], 'ddp_find_unused_parameters': None, 'ddp_bucket_cap_mb': None, 'ddp_broadcast_buffers': None, 'dataloader_pin_memory': True, 'dataloader_persistent_workers': False, 'skip_memory_metrics': True, 'use_legacy_prediction_loop': False, 'push_to_hub': False, 'resume_from_checkpoint': None, 'hub_model_id': None, 'hub_strategy': 'every_save', 'hub_token': '<HUB_TOKEN>', 'hub_private_repo': None, 'hub_always_push': False, 'hub_revision': None, 'gradient_checkpointing': False, 'gradient_checkpointing_kwargs': None, 'include_inputs_for_metrics': False, 'include_for_metrics': [], 'eval_do_concat_batches': True, 'fp16_backend': 'auto', 'push_to_hub_model_id': None, 'push_to_hub_organization': None, 'push_to_hub_token': '<PUSH_TO_HUB_TOKEN>', 'mp_parameters': '', 'auto_find_batch_size': False, 'full_determinism': False, 'torchdynamo': None, 'ray_scope': 'last', 'ddp_timeout': 1800, 'torch_compile': False, 'torch_compile_backend': None, 'torch_compile_mode': None, 'include_tokens_per_second': False, 'include_num_input_tokens_seen': False, 'neftune_noise_alpha': None, 'optim_target_modules': None, 'batch_eval_metrics': False, 'eval_on_start': False, 'use_liger_kernel': False, 'liger_kernel_config': None, 'eval_use_gather_object': False, 'average_tokens_across_devices': False, 'model_init_kwargs': None, 'chat_template_path': None, 'dataset_text_field': 'text', 'dataset_kwargs': None, 'dataset_num_proc': None, 'eos_token': '<EOS_TOKEN>', 'pad_token': '<PAD_TOKEN>', 'max_length': 1024, 'packing': False, 'packing_strategy': 'bfd', 'padding_free': False, 'pad_to_multiple_of': None, 'eval_packing': None, 'completion_only_loss': None, 'assistant_only_loss': False, 'loss_type': 'nll', 'activation_offloading': False}
-==((====))==  Unsloth - 2x faster free finetuning | Num GPUs used = 1
-   \\   /|    Num examples = 8,192 | Num Epochs = 2 | Total steps = 1,024
-O^O/ \_/ \    Batch size per device = 1 | Gradient accumulation steps = 16
-\        /    Data Parallel GPUs = 1 | Total batch size (1 x 16 x 1) = 16
- "-____-"     Trainable parameters = 83,886,080 of 8,114,147,328 (1.03% trained)
-wandb: Currently logged in as: shougan (shougan-university-of-waterloo) to https://api.wandb.ai. Use `wandb login --relogin` to force relogin
-wandb: Tracking run with wandb version 0.21.0
-wandb: Run data is saved locally in /project/6105902/shougan/balance-budget/wandb/run-20260126_033544-bu80nfr9
-wandb: Run `wandb offline` to turn off syncing.
-wandb: Syncing run expert-sponge-64
-wandb: ⭐️ View project at https://wandb.ai/shougan-university-of-waterloo/huggingface
-wandb: 🚀 View run at https://wandb.ai/shougan-university-of-waterloo/huggingface/runs/bu80nfr9
-[PassAtKCallback] on_train_begin: model_name=llama3-8B
-  0%|          | 0/1024 [00:00<?, ?it/s]Unsloth: Will smartly offload gradients to save VRAM!
-  0%|          | 1/1024 [00:06<1:44:31,  6.13s/it]                                                  {'loss': 2.0671, 'grad_norm': 1.317892074584961, 'learning_rate': 0.0, 'epoch': 0.0}
-  0%|          | 1/1024 [00:06<1:44:31,  6.13s/it]  0%|          | 2/1024 [00:10<1:31:12,  5.35s/it]                                                  {'loss': 1.7509, 'grad_norm': 1.0593403577804565, 'learning_rate': 4.854368932038835e-07, 'epoch': 0.0}
-  0%|          | 2/1024 [00:10<1:31:12,  5.35s/it]  0%|          | 3/1024 [00:15<1:24:08,  4.94s/it]                                                  {'loss': 1.7533, 'grad_norm': 1.06293785572052, 'learning_rate': 9.70873786407767e-07, 'epoch': 0.01}
-  0%|          | 3/1024 [00:15<1:24:08,  4.94s/it]  0%|          | 4/1024 [00:19<1:20:18,  4.72s/it]                                                  {'loss': 1.8809, 'grad_norm': 1.1757797002792358, 'learning_rate': 1.4563106796116506e-06, 'epoch': 0.01}
-  0%|          | 4/1024 [00:19<1:20:18,  4.72s/it]  0%|          | 5/1024 [00:24<1:18:47,  4.64s/it]                                                  {'loss': 1.6241, 'grad_norm': 1.1013119220733643, 'learning_rate': 1.941747572815534e-06, 'epoch': 0.01}
-  0%|          | 5/1024 [00:24<1:18:47,  4.64s/it]  1%|          | 6/1024 [00:28<1:18:17,  4.61s/it]                                                  {'loss': 1.6251, 'grad_norm': 0.9280884265899658, 'learning_rate': 2.4271844660194174e-06, 'epoch': 0.01}
-  1%|          | 6/1024 [00:28<1:18:17,  4.61s/it]  1%|          | 7/1024 [00:33<1:17:13,  4.56s/it]                                                  {'loss': 1.6453, 'grad_norm': 1.001452088356018, 'learning_rate': 2.912621359223301e-06, 'epoch': 0.01}
-  1%|          | 7/1024 [00:33<1:17:13,  4.56s/it]  1%|          | 8/1024 [00:37<1:16:10,  4.50s/it]                                                  {'loss': 1.9264, 'grad_norm': 1.3950259685516357, 'learning_rate': 3.3980582524271844e-06, 'epoch': 0.02}
-  1%|          | 8/1024 [00:37<1:16:10,  4.50s/it]  1%|          | 9/1024 [00:42<1:16:16,  4.51s/it]                                                  {'loss': 1.8666, 'grad_norm': 1.1017236709594727, 'learning_rate': 3.883495145631068e-06, 'epoch': 0.02}
-  1%|          | 9/1024 [00:42<1:16:16,  4.51s/it]  1%|          | 10/1024 [00:46<1:15:48,  4.49s/it]                                                   {'loss': 2.011, 'grad_norm': 1.4712271690368652, 'learning_rate': 4.368932038834952e-06, 'epoch': 0.02}
-  1%|          | 10/1024 [00:46<1:15:48,  4.49s/it]  1%|          | 11/1024 [00:51<1:15:47,  4.49s/it]                                                   {'loss': 1.7069, 'grad_norm': 1.1830410957336426, 'learning_rate': 4.854368932038835e-06, 'epoch': 0.02}
-  1%|          | 11/1024 [00:51<1:15:47,  4.49s/it]  1%|          | 12/1024 [00:55<1:15:18,  4.47s/it]                                                   {'loss': 1.9841, 'grad_norm': 1.3272881507873535, 'learning_rate': 5.3398058252427185e-06, 'epoch': 0.02}
-  1%|          | 12/1024 [00:55<1:15:18,  4.47s/it]  1%|▏         | 13/1024 [00:59<1:14:52,  4.44s/it]                                                   {'loss': 1.8541, 'grad_norm': 1.292829155921936, 'learning_rate': 5.825242718446602e-06, 'epoch': 0.03}
-  1%|▏         | 13/1024 [00:59<1:14:52,  4.44s/it]  1%|▏         | 14/1024 [01:04<1:14:21,  4.42s/it]                                                   {'loss': 1.8806, 'grad_norm': 1.3083534240722656, 'learning_rate': 6.310679611650486e-06, 'epoch': 0.03}
-  1%|▏         | 14/1024 [01:04<1:14:21,  4.42s/it]  1%|▏         | 15/1024 [01:08<1:14:08,  4.41s/it]                                                   {'loss': 1.9099, 'grad_norm': 1.3475714921951294, 'learning_rate': 6.796116504854369e-06, 'epoch': 0.03}
-  1%|▏         | 15/1024 [01:08<1:14:08,  4.41s/it]  2%|▏         | 16/1024 [01:13<1:14:19,  4.42s/it]                                                   {'loss': 1.8165, 'grad_norm': 1.260191559791565, 'learning_rate': 7.281553398058253e-06, 'epoch': 0.03}
-  2%|▏         | 16/1024 [01:13<1:14:19,  4.42s/it]  2%|▏         | 17/1024 [01:17<1:15:11,  4.48s/it]                                                   {'loss': 1.5204, 'grad_norm': 0.9463953971862793, 'learning_rate': 7.766990291262136e-06, 'epoch': 0.03}
-  2%|▏         | 17/1024 [01:17<1:15:11,  4.48s/it]  2%|▏         | 18/1024 [01:22<1:14:56,  4.47s/it]                                                   {'loss': 1.7179, 'grad_norm': 1.0561842918395996, 'learning_rate': 8.25242718446602e-06, 'epoch': 0.04}
-  2%|▏         | 18/1024 [01:22<1:14:56,  4.47s/it]  2%|▏         | 19/1024 [01:26<1:14:13,  4.43s/it]                                                   {'loss': 1.927, 'grad_norm': 1.5310925245285034, 'learning_rate': 8.737864077669904e-06, 'epoch': 0.04}
-  2%|▏         | 19/1024 [01:26<1:14:13,  4.43s/it]  2%|▏         | 20/1024 [01:31<1:14:45,  4.47s/it]                                                   {'loss': 1.5455, 'grad_norm': 0.9243187308311462, 'learning_rate': 9.223300970873788e-06, 'epoch': 0.04}
-  2%|▏         | 20/1024 [01:31<1:14:45,  4.47s/it]Unsloth: Not an error, but LlamaForCausalLM does not accept `num_items_in_batch`.
-Using gradient accumulation will be very slightly less accurate.
-Read more on gradient accumulation issues here: https://unsloth.ai/blog/gradient
-
-  0%|          | 0/200 [00:00<?, ?it/s][A
-  2%|▏         | 3/200 [00:00<00:10, 19.59it/s][A
-  2%|▎         | 5/200 [00:00<00:12, 15.52it/s][A
-  4%|▎         | 7/200 [00:00<00:12, 15.02it/s][A
-  4%|▍         | 9/200 [00:00<00:13, 14.61it/s][A
-  6%|▌         | 11/200 [00:00<00:13, 14.40it/s][A
-  6%|▋         | 13/200 [00:00<00:13, 14.34it/s][A
-  8%|▊         | 15/200 [00:01<00:13, 13.32it/s][A
-  8%|▊         | 17/200 [00:01<00:14, 12.48it/s][A
- 10%|▉         | 19/200 [00:01<00:13, 12.94it/s][A
- 10%|█         | 21/200 [00:01<00:13, 13.41it/s][A
- 12%|█▏        | 23/200 [00:01<00:13, 13.57it/s][A
- 12%|█▎        | 25/200 [00:01<00:13, 12.51it/s][A
- 14%|█▎        | 27/200 [00:02<00:14, 11.71it/s][A
- 14%|█▍        | 29/200 [00:02<00:14, 12.00it/s][A
- 16%|█▌        | 31/200 [00:02<00:13, 12.59it/s][A
- 16%|█▋        | 33/200 [00:02<00:14, 11.42it/s][A
- 18%|█▊        | 35/200 [00:02<00:13, 11.80it/s][A
- 18%|█▊        | 37/200 [00:02<00:13, 12.38it/s][A
- 20%|█▉        | 39/200 [00:02<00:12, 12.92it/s][A
- 20%|██        | 41/200 [00:03<00:11, 13.37it/s][A
- 22%|██▏       | 43/200 [00:03<00:11, 13.69it/s][A
- 22%|██▎       | 45/200 [00:03<00:11, 13.92it/s][A
- 24%|██▎       | 47/200 [00:03<00:11, 13.66it/s][A
- 24%|██▍       | 49/200 [00:03<00:11, 13.05it/s][A
- 26%|██▌       | 51/200 [00:03<00:11, 13.33it/s][A
- 26%|██▋       | 53/200 [00:04<00:10, 13.39it/s][A
- 28%|██▊       | 55/200 [00:04<00:10, 13.66it/s][A
- 28%|██▊       | 57/200 [00:04<00:10, 13.90it/s][A
- 30%|██▉       | 59/200 [00:04<00:10, 14.04it/s][A
- 30%|███       | 61/200 [00:04<00:10, 13.28it/s][A
- 32%|███▏      | 63/200 [00:04<00:10, 13.58it/s][A
- 32%|███▎      | 65/200 [00:04<00:10, 12.94it/s][A
- 34%|███▎      | 67/200 [00:05<00:10, 13.17it/s][A
- 34%|███▍      | 69/200 [00:05<00:09, 13.44it/s][A
- 36%|███▌      | 71/200 [00:05<00:10, 12.23it/s][A
- 36%|███▋      | 73/200 [00:05<00:10, 12.61it/s][A
- 38%|███▊      | 75/200 [00:05<00:09, 12.92it/s][A
- 38%|███▊      | 77/200 [00:05<00:09, 13.37it/s][A
- 40%|███▉      | 79/200 [00:05<00:08, 13.78it/s][A
- 40%|████      | 81/200 [00:06<00:11, 10.02it/s][A
- 42%|████▏     | 83/200 [00:06<00:10, 11.03it/s][A
- 42%|████▎     | 85/200 [00:06<00:09, 11.91it/s][A
- 44%|████▎     | 87/200 [00:06<00:09, 12.48it/s][A
- 44%|████▍     | 89/200 [00:06<00:08, 12.87it/s][A
- 46%|████▌     | 91/200 [00:06<00:08, 13.24it/s][A
- 46%|████▋     | 93/200 [00:07<00:07, 13.55it/s][A
- 48%|████▊     | 95/200 [00:07<00:07, 13.63it/s][A
- 48%|████▊     | 97/200 [00:07<00:08, 12.33it/s][A
- 50%|████▉     | 99/200 [00:07<00:07, 12.74it/s][A
- 50%|█████     | 101/200 [00:07<00:07, 13.20it/s][A
- 52%|█████▏    | 103/200 [00:07<00:07, 13.55it/s][A
- 52%|█████▎    | 105/200 [00:08<00:06, 13.70it/s][A
- 54%|█████▎    | 107/200 [00:08<00:06, 13.32it/s][A
- 55%|█████▍    | 109/200 [00:08<00:06, 13.67it/s][A
- 56%|█████▌    | 111/200 [00:08<00:06, 13.91it/s][A
- 56%|█████▋    | 113/200 [00:08<00:06, 12.77it/s][A
- 57%|█████▊    | 115/200 [00:08<00:06, 12.97it/s][A
- 58%|█████▊    | 117/200 [00:08<00:06, 12.36it/s][A
- 60%|█████▉    | 119/200 [00:09<00:06, 12.85it/s][A
- 60%|██████    | 121/200 [00:09<00:05, 13.18it/s][A
- 62%|██████▏   | 123/200 [00:09<00:05, 13.48it/s][A
- 62%|██████▎   | 125/200 [00:09<00:05, 13.37it/s][A
- 64%|██████▎   | 127/200 [00:09<00:05, 13.57it/s][A
- 64%|██████▍   | 129/200 [00:09<00:05, 12.71it/s][A
- 66%|██████▌   | 131/200 [00:10<00:05, 12.88it/s][A
- 66%|██████▋   | 133/200 [00:10<00:05, 12.87it/s][A
- 68%|██████▊   | 135/200 [00:10<00:04, 13.22it/s][A
- 68%|██████▊   | 137/200 [00:10<00:04, 13.55it/s][A
- 70%|██████▉   | 139/200 [00:10<00:04, 13.78it/s][A
- 70%|███████   | 141/200 [00:10<00:04, 13.93it/s][A
- 72%|███████▏  | 143/200 [00:10<00:04, 13.60it/s][A
- 72%|███████▎  | 145/200 [00:11<00:04, 13.00it/s][A
- 74%|███████▎  | 147/200 [00:11<00:04, 12.66it/s][A
- 74%|███████▍  | 149/200 [00:11<00:03, 13.13it/s][A
- 76%|███████▌  | 151/200 [00:11<00:03, 13.05it/s][A
- 76%|███████▋  | 153/200 [00:11<00:03, 13.34it/s][A
- 78%|███████▊  | 155/200 [00:11<00:03, 13.59it/s][A
- 78%|███████▊  | 157/200 [00:11<00:03, 13.83it/s][A
- 80%|███████▉  | 159/200 [00:12<00:02, 13.98it/s][A
- 80%|████████  | 161/200 [00:12<00:02, 13.21it/s][A
- 82%|████████▏ | 163/200 [00:12<00:02, 12.59it/s][A
- 82%|████████▎ | 165/200 [00:12<00:02, 12.91it/s][A
- 84%|████████▎ | 167/200 [00:12<00:02, 13.29it/s][A
- 84%|████████▍ | 169/200 [00:12<00:02, 13.64it/s][A
- 86%|████████▌ | 171/200 [00:13<00:02, 13.68it/s][A
- 86%|████████▋ | 173/200 [00:13<00:01, 13.85it/s][A
- 88%|████████▊ | 175/200 [00:13<00:01, 13.95it/s][A
- 88%|████████▊ | 177/200 [00:13<00:01, 12.61it/s][A
- 90%|████████▉ | 179/200 [00:13<00:01, 13.07it/s][A
- 90%|█████████ | 181/200 [00:13<00:01, 12.18it/s][A
- 92%|█████████▏| 183/200 [00:13<00:01, 12.63it/s][A
- 92%|█████████▎| 185/200 [00:14<00:01, 13.14it/s][A
- 94%|█████████▎| 187/200 [00:14<00:00, 13.52it/s][A
- 94%|█████████▍| 189/200 [00:14<00:00, 13.78it/s][A
- 96%|█████████▌| 191/200 [00:14<00:00, 13.89it/s][A
- 96%|█████████▋| 193/200 [00:14<00:00, 13.22it/s][A
- 98%|█████████▊| 195/200 [00:14<00:00, 12.97it/s][A
- 98%|█████████▊| 197/200 [00:14<00:00, 13.35it/s][A
-100%|█████████▉| 199/200 [00:15<00:00, 13.28it/s][A                                                   
-                                                 [A{'eval_loss': 1.989134669303894, 'eval_runtime': 15.3836, 'eval_samples_per_second': 13.001, 'eval_steps_per_second': 13.001, 'epoch': 0.04}
-  2%|▏         | 20/1024 [01:46<1:14:45,  4.47s/it]
-100%|██████████| 200/200 [00:15<00:00, 13.28it/s][A[PassAtKCallback] Saving model to /tmp/tmpkph9uuim...
-Found HuggingFace hub cache directory: /home/shougan/.cache/huggingface/hub
-
-
-Fetching 1 files:   0%|          | 0/1 [00:00<?, ?it/s][A[A
-
-Fetching 1 files: 100%|██████████| 1/1 [00:00<00:00,  7.17it/s][A[AFetching 1 files: 100%|██████████| 1/1 [00:00<00:00,  7.10it/s]
-Checking cache directory for required files...
-
-
-Unsloth: Copying 4 files from cache to `/tmp/tmpkph9uuim`:   0%|          | 0/4 [00:00<?, ?it/s][A[A
-
-Unsloth: Copying 4 files from cache to `/tmp/tmpkph9uuim`:  25%|██▌       | 1/4 [00:02<00:08,  2.77s/it][A[A
-
-Unsloth: Copying 4 files from cache to `/tmp/tmpkph9uuim`:  50%|█████     | 2/4 [00:05<00:05,  2.90s/it][A[A
-100%|██████████| 200/200 [00:26<00:00, 13.28it/s][A
-
-Unsloth: Copying 4 files from cache to `/tmp/tmpkph9uuim`:  75%|███████▌  | 3/4 [00:13<00:04,  4.89s/it][A[A
-
-Unsloth: Copying 4 files from cache to `/tmp/tmpkph9uuim`: 100%|██████████| 4/4 [00:14<00:00,  3.73s/it][A[AUnsloth: Copying 4 files from cache to `/tmp/tmpkph9uuim`: 100%|██████████| 4/4 [00:14<00:00,  3.74s/it]
-Successfully copied all 4 files from cache to `/tmp/tmpkph9uuim`
-
-
-Unsloth: Preparing safetensor model files:   0%|          | 0/4 [00:00<?, ?it/s][A[AUnsloth: Preparing safetensor model files: 100%|██████████| 4/4 [00:00<00:00, 14716.86it/s]
-
-
-Unsloth: Merging weights into 16bit:   0%|          | 0/4 [00:00<?, ?it/s][A[A
-
-Unsloth: Merging weights into 16bit:  25%|██▌       | 1/4 [00:20<01:01, 20.44s/it][A[A
-
-Unsloth: Merging weights into 16bit:  50%|█████     | 2/4 [00:35<00:34, 17.43s/it][A[A
-
-Unsloth: Merging weights into 16bit:  75%|███████▌  | 3/4 [00:56<00:18, 18.87s/it][A[A
-
-Unsloth: Merging weights into 16bit: 100%|██████████| 4/4 [01:00<00:00, 13.05s/it][A[AUnsloth: Merging weights into 16bit: 100%|██████████| 4/4 [01:00<00:00, 15.12s/it]
-Unsloth: Merge process complete. Saved to `/tmp/tmpkph9uuim`
-[PassAtKCallback] Moving training model to CPU...
-[PassAtKCallback] Loading model with vLLM from /tmp/tmpkph9uuim...
-LLM UTILISATION IS 0.8
-INFO 01-26 03:39:21 [config.py:841] This model supports multiple tasks: {'generate', 'reward', 'embed', 'classify'}. Defaulting to 'generate'.
-`torch_dtype` is deprecated! Use `dtype` instead!
-INFO 01-26 03:39:21 [config.py:1472] Using max model len 131072
-INFO 01-26 03:39:24 [config.py:2285] Chunked prefill is enabled with max_num_batched_tokens=8192.
-WARNING 01-26 03:39:25 [__init__.py:2662] We must use the `spawn` multiprocessing start method. Overriding VLLM_WORKER_MULTIPROC_METHOD to 'spawn'. See https://docs.vllm.ai/en/latest/usage/troubleshooting.html#python-multiprocessing for more information. Reason: CUDA is initialized
-🦥 Unsloth: Will patch your computer to enable 2x faster free finetuning.
-INFO 01-26 03:39:37 [__init__.py:244] Automatically detected platform cuda.
-🦥 Unsloth Zoo will now patch everything to make training faster!
-/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/pydantic/_internal/_generate_schema.py:2249: UnsupportedFieldAttributeWarning: The 'repr' attribute with value False was provided to the `Field()` function, which has no effect in the context it was used. 'repr' is field-specific metadata, and can only be attached to a model field using `Annotated` metadata or by assignment. This may have happened because an `Annotated` type alias using the `type` statement was used, or if the `Field()` function was attached to a single member of a union type.
-  warnings.warn(
-/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/pydantic/_internal/_generate_schema.py:2249: UnsupportedFieldAttributeWarning: The 'frozen' attribute with value True was provided to the `Field()` function, which has no effect in the context it was used. 'frozen' is field-specific metadata, and can only be attached to a model field using `Annotated` metadata or by assignment. This may have happened because an `Annotated` type alias using the `type` statement was used, or if the `Field()` function was attached to a single member of a union type.
-  warnings.warn(
-/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning
-Getting train dataset for run config: llama3-8B_sft-tuluif-8192
-Checking for dataset at /home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/data/datasets/sft-tuluif-8192
-Dataset already exists at /home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/data/datasets/sft-tuluif-8192
-Sampled dataset: DatasetDict({
-    train: Dataset({
-        features: ['id', 'prompt', 'messages', 'constraints'],
-        num_rows: 8192
-    })
-    test: Dataset({
-        features: ['id', 'prompt', 'messages', 'constraints'],
-        num_rows: 200
-    })
-})
-Example training row: {'id': 'personas_IF_9u3mcrurksv7hypq3xlppyba', 'prompt': 'Compile a detailed summary of the most recent case discussed on the podcast. Include the title of the episode wrapped in double angular brackets, i.e. <<title>>, and quote at least one statement made by the host during the discussion.', 'messages': [{'content': 'You are a helpful assistant who is an expert at responding to prompts by carefully following the given instructions', 'role': 'system'}, {'content': 'Compile a detailed summary of the most recent case discussed on the podcast. Include the title of the episode wrapped in double angular brackets, i.e. <<title>>, and quote at least one statement made by the host during the discussion.', 'role': 'user'}, {'content': "I'm sorry, but I don't have access to real-time data, including the most recent episodes of podcasts. If you provide me with some details from the episode, I'd be happy to help you compile a summary based on that information.", 'role': 'assistant'}], 'constraints': ['format:title', 'use quotation']}
-Example evaluation row: {'id': 'personas_IF_o3dewf33wk895zom2dbfye5u', 'prompt': 'I want to create a podcast where I explore the themes and motifs found in surreal dystopian literature, both mine and others. This podcast will dive deep into the artistic and philosophical underpinnings of this genre, aiming to become a leading voice in literary criticism. Can you guide me on how to effectively launch and grow this podcast? Include at least 3 **bold text** sections such as: **bold text 1**, **bold text 2**, etc., and incorporate a famous quote about dystopian literature.', 'messages': [{'content': 'You are a helpful assistant who is an expert at responding to prompts by carefully following the given instructions', 'role': 'system'}, {'content': 'I want to create a podcast where I explore the themes and motifs found in surreal dystopian literature, both mine and others. This podcast will dive deep into the artistic and philosophical underpinnings of this genre, aiming to become a leading voice in literary criticism. Can you guide me on how to effectively launch and grow this podcast? Include at least 3 **bold text** sections such as: **bold text 1**, **bold text 2**, etc., and incorporate a famous quote about dystopian literature.', 'role': 'user'}, {'content': 'Launching a podcast on surreal dystopian literature is a fascinating endeavor that requires a combination of passion, strategic planning, and thoughtful execution. Here\'s a guide to help you effectively launch and grow your podcast:\n\n**Identify Your Niche and Audience:** Begin by clearly defining what makes your podcast unique in the realm of dystopian literature. Consider focusing on specific sub-genres, authors, or themes that resonate with you. Understanding your target audience will help tailor your content to their interests and needs.\n\n**Develop Compelling Content:** Plan your episodes around intriguing themes and motifs found in surreal dystopian literature. Consider including analyses of classic works, like George Orwell\'s "1984" or Aldous Huxley\'s "Brave New World," alongside contemporary pieces. A quote to inspire your discussions might be Margaret Atwood\'s reflection: "A dystopia is a utopia that\'s gone wrong," which can serve as a launching point for exploring the thin line between utopian ideals and dystopian realities.\n\n**Leverage Expertise and Connections:** To establish credibility, invite authors, literary critics, and professors as guests to provide diverse perspectives. Your own insights as a writer can create a rich dialogue, blending personal experiences with broader literary critiques.\n\n**Invest in Quality Production:** Ensure high-quality audio and editing to maintain a professional standard. Consider investing in a good microphone and editing software. This attention to detail will enhance listener experience and retention.\n\n**Engage Your Audience:** Create a community around your podcast by encouraging listener interaction. Use social media platforms to engage with your audience, gather feedback, and promote upcoming episodes. Consider hosting live Q&A sessions or discussions to deepen listener involvement.\n\n**Market Strategically:** Utilize SEO techniques to make your podcast more discoverable. Write detailed show notes and transcriptions for each episode, including relevant keywords about the literature discussed. Collaborate with other podcasters or bloggers in the literary space to expand your reach.\n\n**Monitor and Adapt:** Regularly review analytics to understand which episodes resonate most with your audience. Be ready to adapt your content strategy based on listener feedback and trends in the literary world.\n\nBy focusing on these key areas, you can launch a podcast that not only explores the depths of surreal dystopian literature but also becomes a leading voice in literary criticism. Remember, consistency and authenticity are crucial to building a loyal listener base.', 'role': 'assistant'}], 'constraints': ['use quotation', 'format:number of highlighted sections']}
-==((====))==  Unsloth 2025.10.1: Fast Llama patching. Transformers: 4.56.1. vLLM: 0.9.2+computecanada.
-   \\   /|    NVIDIA L40S. Num GPUs = 1. Max memory: 44.403 GB. Platform: Linux.
-O^O/ \_/ \    Torch: 2.7.0. CUDA: 8.9. CUDA Toolkit: 12.6. Triton: 3.3.1
-\        /    Bfloat16 = TRUE. FA [Xformers = 0.0.30. FA2 = False]
- "-____-"     Free license: http://github.com/unslothai/unsloth
-Unsloth: Fast downloading is enabled - ignore downloading bars which are red colored!
-Loading checkpoint shards:   0%|          | 0/4 [00:00<?, ?it/s]Loading checkpoint shards:  25%|██▌       | 1/4 [00:00<00:02,  1.21it/s]Loading checkpoint shards:  50%|█████     | 2/4 [00:01<00:01,  1.16it/s]Loading checkpoint shards:  75%|███████▌  | 3/4 [00:02<00:00,  1.03it/s]Loading checkpoint shards: 100%|██████████| 4/4 [00:03<00:00,  1.45it/s]Loading checkpoint shards: 100%|██████████| 4/4 [00:03<00:00,  1.30it/s]
-Unsloth: Will map <|im_end|> to EOS = <|end_of_text|>.
-DatasetDict({
-    train: Dataset({
-        features: ['id', 'prompt', 'messages', 'constraints', 'text'],
-        num_rows: 8192
-    })
-    test: Dataset({
-        features: ['id', 'prompt', 'messages', 'constraints', 'text'],
-        num_rows: 200
-    })
-})
-{'id': 'personas_IF_9u3mcrurksv7hypq3xlppyba', 'prompt': 'Compile a detailed summary of the most recent case discussed on the podcast. Include the title of the episode wrapped in double angular brackets, i.e. <<title>>, and quote at least one statement made by the host during the discussion.', 'messages': [{'content': 'You are a helpful assistant who is an expert at responding to prompts by carefully following the given instructions', 'role': 'system'}, {'content': 'Compile a detailed summary of the most recent case discussed on the podcast. Include the title of the episode wrapped in double angular brackets, i.e. <<title>>, and quote at least one statement made by the host during the discussion.', 'role': 'user'}, {'content': "I'm sorry, but I don't have access to real-time data, including the most recent episodes of podcasts. If you provide me with some details from the episode, I'd be happy to help you compile a summary based on that information.", 'role': 'assistant'}], 'constraints': ['format:title', 'use quotation'], 'text': "<|im_start|>system\nYou are a helpful assistant who is an expert at responding to prompts by carefully following the given instructions<|im_end|>\n<|im_start|>user\nCompile a detailed summary of the most recent case discussed on the podcast. Include the title of the episode wrapped in double angular brackets, i.e. <<title>>, and quote at least one statement made by the host during the discussion.<|im_end|>\n<|im_start|>assistant\nI'm sorry, but I don't have access to real-time data, including the most recent episodes of podcasts. If you provide me with some details from the episode, I'd be happy to help you compile a summary based on that information.<|im_end|>\n"}
-Unsloth 2025.10.1 patched 32 layers with 32 QKV layers, 32 O layers and 32 MLP layers.
-[PassAtKCallback] Initialized with pass@1 thresholds=[0.6, 0.5, 0.4, 0.3, 0.2, 0.1]
-[PassAtKCallback] Training will stop at final threshold: 0.1
-[PassAtKCallback] k_values=[1] (stopping on k=1)
-[PassAtKCallback] n_samples=1, temperature=0.7, strict=True
-[PassAtKCallback] IFEval prompts loaded: 541, num_prompts=100
-[PassAtKCallback] Using vLLM with model save/load (replicating run_inference_ifeval)
-[SFT] Will stop training when pass@1 >= 0.6
-[SFT] Checkpoints will be saved at thresholds: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6]
-{'output_dir': '/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/models/llama3-8B_sft-tuluif-8192', 'overwrite_output_dir': False, 'do_train': False, 'do_eval': True, 'do_predict': False, 'eval_strategy': 'steps', 'prediction_loss_only': False, 'per_device_train_batch_size': 1, 'per_device_eval_batch_size': 1, 'per_gpu_train_batch_size': None, 'per_gpu_eval_batch_size': None, 'gradient_accumulation_steps': 16, 'eval_accumulation_steps': 16, 'eval_delay': 0, 'torch_empty_cache_steps': None, 'learning_rate': 5e-05, 'weight_decay': 0.01, 'adam_beta1': 0.9, 'adam_beta2': 0.999, 'adam_epsilon': 1e-08, 'max_grad_norm': 1.0, 'num_train_epochs': 2, 'max_steps': -1, 'lr_scheduler_type': 'cosine', 'lr_scheduler_kwargs': {}, 'warmup_ratio': 0.1, 'warmup_steps': 0, 'log_level': 'passive', 'log_level_replica': 'warning', 'log_on_each_node': True, 'logging_dir': '/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/models/llama3-8B_sft-tuluif-8192/runs/Jan26_03-40-06_kn023', 'logging_strategy': 'steps', 'logging_first_step': False, 'logging_steps': 1, 'logging_nan_inf_filter': True, 'save_strategy': 'no', 'save_steps': 20, 'save_total_limit': 1, 'save_safetensors': True, 'save_on_each_node': False, 'save_only_model': False, 'restore_callback_states_from_checkpoint': False, 'no_cuda': False, 'use_cpu': False, 'use_mps_device': False, 'seed': 42, 'data_seed': None, 'jit_mode_eval': False, 'use_ipex': False, 'bf16': True, 'fp16': False, 'fp16_opt_level': 'O1', 'half_precision_backend': 'auto', 'bf16_full_eval': True, 'fp16_full_eval': False, 'tf32': None, 'local_rank': 0, 'ddp_backend': None, 'tpu_num_cores': None, 'tpu_metrics_debug': False, 'debug': [], 'dataloader_drop_last': False, 'eval_steps': 20, 'dataloader_num_workers': 0, 'dataloader_prefetch_factor': None, 'past_index': -1, 'run_name': None, 'disable_tqdm': False, 'remove_unused_columns': True, 'label_names': None, 'load_best_model_at_end': False, 'metric_for_best_model': None, 'greater_is_better': None, 'ignore_data_skip': False, 'fsdp': [], 'fsdp_min_num_params': 0, 'fsdp_config': {'min_num_params': 0, 'xla': False, 'xla_fsdp_v2': False, 'xla_fsdp_grad_ckpt': False}, 'fsdp_transformer_layer_cls_to_wrap': None, 'accelerator_config': {'split_batches': False, 'dispatch_batches': None, 'even_batches': True, 'use_seedable_sampler': True, 'non_blocking': False, 'gradient_accumulation_kwargs': None}, 'parallelism_config': None, 'deepspeed': None, 'label_smoothing_factor': 0.0, 'optim': 'adamw_8bit', 'optim_args': None, 'adafactor': False, 'group_by_length': False, 'length_column_name': 'length', 'report_to': ['wandb'], 'ddp_find_unused_parameters': None, 'ddp_bucket_cap_mb': None, 'ddp_broadcast_buffers': None, 'dataloader_pin_memory': True, 'dataloader_persistent_workers': False, 'skip_memory_metrics': True, 'use_legacy_prediction_loop': False, 'push_to_hub': False, 'resume_from_checkpoint': None, 'hub_model_id': None, 'hub_strategy': 'every_save', 'hub_token': '<HUB_TOKEN>', 'hub_private_repo': None, 'hub_always_push': False, 'hub_revision': None, 'gradient_checkpointing': False, 'gradient_checkpointing_kwargs': None, 'include_inputs_for_metrics': False, 'include_for_metrics': [], 'eval_do_concat_batches': True, 'fp16_backend': 'auto', 'push_to_hub_model_id': None, 'push_to_hub_organization': None, 'push_to_hub_token': '<PUSH_TO_HUB_TOKEN>', 'mp_parameters': '', 'auto_find_batch_size': False, 'full_determinism': False, 'torchdynamo': None, 'ray_scope': 'last', 'ddp_timeout': 1800, 'torch_compile': False, 'torch_compile_backend': None, 'torch_compile_mode': None, 'include_tokens_per_second': False, 'include_num_input_tokens_seen': False, 'neftune_noise_alpha': None, 'optim_target_modules': None, 'batch_eval_metrics': False, 'eval_on_start': False, 'use_liger_kernel': False, 'liger_kernel_config': None, 'eval_use_gather_object': False, 'average_tokens_across_devices': False, 'model_init_kwargs': None, 'chat_template_path': None, 'dataset_text_field': 'text', 'dataset_kwargs': None, 'dataset_num_proc': None, 'eos_token': '<EOS_TOKEN>', 'pad_token': '<PAD_TOKEN>', 'max_length': 1024, 'packing': False, 'packing_strategy': 'bfd', 'padding_free': False, 'pad_to_multiple_of': None, 'eval_packing': None, 'completion_only_loss': None, 'assistant_only_loss': False, 'loss_type': 'nll', 'activation_offloading': False}
-==((====))==  Unsloth - 2x faster free finetuning | Num GPUs used = 1
-   \\   /|    Num examples = 8,192 | Num Epochs = 2 | Total steps = 1,024
-O^O/ \_/ \    Batch size per device = 1 | Gradient accumulation steps = 16
-\        /    Data Parallel GPUs = 1 | Total batch size (1 x 16 x 1) = 16
- "-____-"     Trainable parameters = 83,886,080 of 8,114,147,328 (1.03% trained)
-wandb: Currently logged in as: shougan (shougan-university-of-waterloo) to https://api.wandb.ai. Use `wandb login --relogin` to force relogin
-wandb: Tracking run with wandb version 0.21.0
-wandb: Run data is saved locally in /project/6105902/shougan/balance-budget/wandb/run-20260126_034009-v6c41v4p
-wandb: Run `wandb offline` to turn off syncing.
-wandb: Syncing run visionary-gorge-65
-wandb: ⭐️ View project at https://wandb.ai/shougan-university-of-waterloo/huggingface
-wandb: 🚀 View run at https://wandb.ai/shougan-university-of-waterloo/huggingface/runs/v6c41v4p
-[PassAtKCallback] on_train_begin: model_name=llama3-8B
-  0%|          | 0/1024 [00:00<?, ?it/s]Unsloth: Will smartly offload gradients to save VRAM!
-  0%|          | 1/1024 [00:05<1:38:26,  5.77s/it]                                                  {'loss': 2.0671, 'grad_norm': 1.3175785541534424, 'learning_rate': 0.0, 'epoch': 0.0}
-  0%|          | 1/1024 [00:05<1:38:26,  5.77s/it]  0%|          | 2/1024 [00:10<1:27:12,  5.12s/it]                                                  {'loss': 1.7509, 'grad_norm': 1.0590083599090576, 'learning_rate': 4.854368932038835e-07, 'epoch': 0.0}
-  0%|          | 2/1024 [00:10<1:27:12,  5.12s/it]  0%|          | 3/1024 [00:14<1:22:12,  4.83s/it]                                                  {'loss': 1.753, 'grad_norm': 1.0601142644882202, 'learning_rate': 9.70873786407767e-07, 'epoch': 0.01}
-  0%|          | 3/1024 [00:14<1:22:12,  4.83s/it]  0%|          | 4/1024 [00:19<1:19:36,  4.68s/it]                                                  {'loss': 1.8809, 'grad_norm': 1.1784025430679321, 'learning_rate': 1.4563106796116506e-06, 'epoch': 0.01}
-  0%|          | 4/1024 [00:19<1:19:36,  4.68s/it]  0%|          | 5/1024 [00:23<1:18:22,  4.62s/it]                                                  {'loss': 1.6245, 'grad_norm': 1.0973771810531616, 'learning_rate': 1.941747572815534e-06, 'epoch': 0.01}
-  0%|          | 5/1024 [00:23<1:18:22,  4.62s/it]  1%|          | 6/1024 [00:28<1:18:16,  4.61s/it]                                                  {'loss': 1.6247, 'grad_norm': 0.9293707609176636, 'learning_rate': 2.4271844660194174e-06, 'epoch': 0.01}
-  1%|          | 6/1024 [00:28<1:18:16,  4.61s/it]  1%|          | 7/1024 [00:33<1:17:44,  4.59s/it]                                                  {'loss': 1.6448, 'grad_norm': 1.000847578048706, 'learning_rate': 2.912621359223301e-06, 'epoch': 0.01}
-  1%|          | 7/1024 [00:33<1:17:44,  4.59s/it]  1%|          | 8/1024 [00:37<1:17:04,  4.55s/it]                                                  {'loss': 1.9259, 'grad_norm': 1.399427890777588, 'learning_rate': 3.3980582524271844e-06, 'epoch': 0.02}
-  1%|          | 8/1024 [00:37<1:17:04,  4.55s/it]  1%|          | 9/1024 [00:42<1:16:46,  4.54s/it]                                                  {'loss': 1.8667, 'grad_norm': 1.10801362991333, 'learning_rate': 3.883495145631068e-06, 'epoch': 0.02}
-  1%|          | 9/1024 [00:42<1:16:46,  4.54s/it]  1%|          | 10/1024 [00:46<1:16:04,  4.50s/it]                                                   {'loss': 2.0109, 'grad_norm': 1.466879963874817, 'learning_rate': 4.368932038834952e-06, 'epoch': 0.02}
-  1%|          | 10/1024 [00:46<1:16:04,  4.50s/it]  1%|          | 11/1024 [00:50<1:16:00,  4.50s/it]                                                   {'loss': 1.7063, 'grad_norm': 1.1877434253692627, 'learning_rate': 4.854368932038835e-06, 'epoch': 0.02}
-  1%|          | 11/1024 [00:50<1:16:00,  4.50s/it]  1%|          | 12/1024 [00:55<1:15:37,  4.48s/it]                                                   {'loss': 1.9833, 'grad_norm': 1.3281084299087524, 'learning_rate': 5.3398058252427185e-06, 'epoch': 0.02}
-  1%|          | 12/1024 [00:55<1:15:37,  4.48s/it]  1%|▏         | 13/1024 [00:59<1:15:23,  4.47s/it]                                                   {'loss': 1.8537, 'grad_norm': 1.2951964139938354, 'learning_rate': 5.825242718446602e-06, 'epoch': 0.03}
-  1%|▏         | 13/1024 [00:59<1:15:23,  4.47s/it]  1%|▏         | 14/1024 [01:04<1:14:27,  4.42s/it]                                                   {'loss': 1.8813, 'grad_norm': 1.3101863861083984, 'learning_rate': 6.310679611650486e-06, 'epoch': 0.03}
-  1%|▏         | 14/1024 [01:04<1:14:27,  4.42s/it]  1%|▏         | 15/1024 [01:08<1:14:52,  4.45s/it]                                                   {'loss': 1.91, 'grad_norm': 1.3494187593460083, 'learning_rate': 6.796116504854369e-06, 'epoch': 0.03}
-  1%|▏         | 15/1024 [01:08<1:14:52,  4.45s/it]  2%|▏         | 16/1024 [01:13<1:14:48,  4.45s/it]                                                   {'loss': 1.8163, 'grad_norm': 1.2621926069259644, 'learning_rate': 7.281553398058253e-06, 'epoch': 0.03}
-  2%|▏         | 16/1024 [01:13<1:14:48,  4.45s/it]  2%|▏         | 17/1024 [01:17<1:15:37,  4.51s/it]                                                   {'loss': 1.5207, 'grad_norm': 0.9481568932533264, 'learning_rate': 7.766990291262136e-06, 'epoch': 0.03}
-  2%|▏         | 17/1024 [01:17<1:15:37,  4.51s/it]  2%|▏         | 18/1024 [01:22<1:15:44,  4.52s/it]                                                   {'loss': 1.7175, 'grad_norm': 1.0545907020568848, 'learning_rate': 8.25242718446602e-06, 'epoch': 0.04}
-  2%|▏         | 18/1024 [01:22<1:15:44,  4.52s/it]  2%|▏         | 19/1024 [01:26<1:14:43,  4.46s/it]                                                   {'loss': 1.9286, 'grad_norm': 1.5324108600616455, 'learning_rate': 8.737864077669904e-06, 'epoch': 0.04}
-  2%|▏         | 19/1024 [01:26<1:14:43,  4.46s/it]  2%|▏         | 20/1024 [01:31<1:15:01,  4.48s/it]                                                   {'loss': 1.5458, 'grad_norm': 0.9202039241790771, 'learning_rate': 9.223300970873788e-06, 'epoch': 0.04}
-  2%|▏         | 20/1024 [01:31<1:15:01,  4.48s/it]Unsloth: Not an error, but LlamaForCausalLM does not accept `num_items_in_batch`.
-Using gradient accumulation will be very slightly less accurate.
-Read more on gradient accumulation issues here: https://unsloth.ai/blog/gradient
-
-  0%|          | 0/200 [00:00<?, ?it/s][A
-  2%|▏         | 3/200 [00:00<00:10, 19.62it/s][A
-  2%|▎         | 5/200 [00:00<00:12, 15.52it/s][A
-  4%|▎         | 7/200 [00:00<00:12, 15.06it/s][A
-  4%|▍         | 9/200 [00:00<00:13, 14.65it/s][A
-  6%|▌         | 11/200 [00:00<00:13, 14.53it/s][A
-  6%|▋         | 13/200 [00:00<00:12, 14.45it/s][A
-  8%|▊         | 15/200 [00:01<00:13, 13.41it/s][A
-  8%|▊         | 17/200 [00:01<00:14, 12.61it/s][A
- 10%|▉         | 19/200 [00:01<00:13, 13.12it/s][A
- 10%|█         | 21/200 [00:01<00:13, 13.59it/s][A
- 12%|█▏        | 23/200 [00:01<00:12, 13.71it/s][A
- 12%|█▎        | 25/200 [00:01<00:13, 12.57it/s][A
- 14%|█▎        | 27/200 [00:02<00:14, 11.76it/s][A
- 14%|█▍        | 29/200 [00:02<00:14, 12.04it/s][A
- 16%|█▌        | 31/200 [00:02<00:13, 12.65it/s][A
- 16%|█▋        | 33/200 [00:02<00:14, 11.51it/s][A
- 18%|█▊        | 35/200 [00:02<00:13, 11.88it/s][A
- 18%|█▊        | 37/200 [00:02<00:13, 12.48it/s][A
- 20%|█▉        | 39/200 [00:02<00:12, 13.06it/s][A
- 20%|██        | 41/200 [00:03<00:11, 13.56it/s][A
- 22%|██▏       | 43/200 [00:03<00:11, 13.87it/s][A
- 22%|██▎       | 45/200 [00:03<00:10, 14.10it/s][A
- 24%|██▎       | 47/200 [00:03<00:11, 13.78it/s][A
- 24%|██▍       | 49/200 [00:03<00:11, 13.07it/s][A
- 26%|██▌       | 51/200 [00:03<00:11, 13.32it/s][A
- 26%|██▋       | 53/200 [00:03<00:10, 13.41it/s][A
- 28%|██▊       | 55/200 [00:04<00:10, 13.71it/s][A
- 28%|██▊       | 57/200 [00:04<00:10, 13.99it/s][A
- 30%|██▉       | 59/200 [00:04<00:09, 14.15it/s][A
- 30%|███       | 61/200 [00:04<00:10, 13.34it/s][A
- 32%|███▏      | 63/200 [00:04<00:10, 13.64it/s][A
- 32%|███▎      | 65/200 [00:04<00:10, 12.97it/s][A
- 34%|███▎      | 67/200 [00:05<00:10, 13.21it/s][A
- 34%|███▍      | 69/200 [00:05<00:09, 13.50it/s][A
- 36%|███▌      | 71/200 [00:05<00:10, 12.29it/s][A
- 36%|███▋      | 73/200 [00:05<00:10, 12.65it/s][A
- 38%|███▊      | 75/200 [00:05<00:09, 12.93it/s][A
- 38%|███▊      | 77/200 [00:05<00:09, 13.39it/s][A
- 40%|███▉      | 79/200 [00:05<00:08, 13.79it/s][A
- 40%|████      | 81/200 [00:06<00:09, 12.94it/s][A
- 42%|████▏     | 83/200 [00:06<00:08, 13.38it/s][A
- 42%|████▎     | 85/200 [00:06<00:08, 13.76it/s][A
- 44%|████▎     | 87/200 [00:06<00:08, 13.87it/s][A
- 44%|████▍     | 89/200 [00:06<00:08, 13.87it/s][A
- 46%|████▌     | 91/200 [00:06<00:07, 14.05it/s][A
- 46%|████▋     | 93/200 [00:06<00:07, 14.17it/s][A
- 48%|████▊     | 95/200 [00:07<00:07, 14.13it/s][A
- 48%|████▊     | 97/200 [00:07<00:08, 12.66it/s][A
- 50%|████▉     | 99/200 [00:07<00:07, 13.01it/s][A
- 50%|█████     | 101/200 [00:07<00:07, 13.45it/s][A
- 52%|█████▏    | 103/200 [00:07<00:07, 13.77it/s][A
- 52%|█████▎    | 105/200 [00:07<00:06, 13.89it/s][A
- 54%|█████▎    | 107/200 [00:07<00:06, 13.45it/s][A
- 55%|█████▍    | 109/200 [00:08<00:06, 13.30it/s][A
- 56%|█████▌    | 111/200 [00:08<00:06, 13.06it/s][A
- 56%|█████▋    | 113/200 [00:08<00:07, 12.24it/s][A
- 57%|█████▊    | 115/200 [00:08<00:06, 12.69it/s][A
- 58%|█████▊    | 117/200 [00:08<00:06, 12.17it/s][A
- 60%|█████▉    | 119/200 [00:08<00:06, 12.78it/s][A
- 60%|██████    | 121/200 [00:09<00:05, 13.17it/s][A
- 62%|██████▏   | 123/200 [00:09<00:05, 13.57it/s][A
- 62%|██████▎   | 125/200 [00:09<00:05, 13.48it/s][A
- 64%|██████▎   | 127/200 [00:09<00:05, 13.72it/s][A
- 64%|██████▍   | 129/200 [00:09<00:05, 12.88it/s][A
- 66%|██████▌   | 131/200 [00:09<00:05, 13.03it/s][A
- 66%|██████▋   | 133/200 [00:10<00:05, 12.99it/s][A
- 68%|██████▊   | 135/200 [00:10<00:04, 13.34it/s][A
- 68%|██████▊   | 137/200 [00:10<00:04, 13.67it/s][A
- 70%|██████▉   | 139/200 [00:10<00:04, 13.94it/s][A
- 70%|███████   | 141/200 [00:10<00:04, 14.14it/s][A
- 72%|███████▏  | 143/200 [00:10<00:04, 13.80it/s][A
- 72%|███████▎  | 145/200 [00:10<00:04, 13.17it/s][A
- 74%|███████▎  | 147/200 [00:11<00:04, 12.83it/s][A
- 74%|███████▍  | 149/200 [00:11<00:03, 13.34it/s][A
- 76%|███████▌  | 151/200 [00:11<00:03, 13.26it/s][A
- 76%|███████▋  | 153/200 [00:11<00:03, 13.60it/s][A
- 78%|███████▊  | 155/200 [00:11<00:03, 13.86it/s][A
- 78%|███████▊  | 157/200 [00:11<00:03, 14.13it/s][A
- 80%|███████▉  | 159/200 [00:11<00:02, 14.32it/s][A
- 80%|████████  | 161/200 [00:12<00:02, 13.49it/s][A
- 82%|████████▏ | 163/200 [00:12<00:02, 12.77it/s][A
- 82%|████████▎ | 165/200 [00:12<00:03, 11.37it/s][A
- 84%|████████▎ | 167/200 [00:12<00:02, 12.14it/s][A
- 84%|████████▍ | 169/200 [00:12<00:02, 12.82it/s][A
- 86%|████████▌ | 171/200 [00:12<00:02, 13.27it/s][A
- 86%|████████▋ | 173/200 [00:12<00:01, 13.68it/s][A
- 88%|████████▊ | 175/200 [00:13<00:01, 13.93it/s][A
- 88%|████████▊ | 177/200 [00:13<00:02, 10.60it/s][A
- 90%|████████▉ | 179/200 [00:13<00:01, 11.55it/s][A
- 90%|█████████ | 181/200 [00:13<00:01, 11.22it/s][A
- 92%|█████████▏| 183/200 [00:13<00:01, 11.92it/s][A
- 92%|█████████▎| 185/200 [00:14<00:01, 12.65it/s][A
- 94%|█████████▎| 187/200 [00:14<00:00, 13.23it/s][A
- 94%|█████████▍| 189/200 [00:14<00:00, 13.66it/s][A
- 96%|█████████▌| 191/200 [00:14<00:00, 13.86it/s][A
- 96%|█████████▋| 193/200 [00:14<00:00, 13.19it/s][A
- 98%|█████████▊| 195/200 [00:14<00:00, 12.95it/s][A
- 98%|█████████▊| 197/200 [00:14<00:00, 13.40it/s][A
-100%|█████████▉| 199/200 [00:15<00:00, 13.33it/s][A                                                   
-                                                 [A{'eval_loss': 1.9891475439071655, 'eval_runtime': 15.2725, 'eval_samples_per_second': 13.095, 'eval_steps_per_second': 13.095, 'epoch': 0.04}
-  2%|▏         | 20/1024 [01:46<1:15:01,  4.48s/it]
-100%|██████████| 200/200 [00:15<00:00, 13.33it/s][A[PassAtKCallback] Saving model to /tmp/tmplp5hfq2d...
-Found HuggingFace hub cache directory: /home/shougan/.cache/huggingface/hub
-Checking cache directory for required files...
-
-
-Unsloth: Copying 4 files from cache to `/tmp/tmplp5hfq2d`:   0%|          | 0/4 [00:00<?, ?it/s][A[A
-
-Unsloth: Copying 4 files from cache to `/tmp/tmplp5hfq2d`:  25%|██▌       | 1/4 [00:02<00:08,  2.80s/it][A[A
-
-Unsloth: Copying 4 files from cache to `/tmp/tmplp5hfq2d`:  50%|█████     | 2/4 [00:07<00:07,  3.64s/it][A[A
-100%|██████████| 200/200 [00:25<00:00, 13.33it/s][A
-
-Unsloth: Copying 4 files from cache to `/tmp/tmplp5hfq2d`:  75%|███████▌  | 3/4 [00:16<00:06,  6.27s/it][A[A
-
-Unsloth: Copying 4 files from cache to `/tmp/tmplp5hfq2d`: 100%|██████████| 4/4 [00:18<00:00,  4.78s/it][A[AUnsloth: Copying 4 files from cache to `/tmp/tmplp5hfq2d`: 100%|██████████| 4/4 [00:18<00:00,  4.73s/it]
-Successfully copied all 4 files from cache to `/tmp/tmplp5hfq2d`
-
-
-Unsloth: Preparing safetensor model files:   0%|          | 0/4 [00:00<?, ?it/s][A[AUnsloth: Preparing safetensor model files: 100%|██████████| 4/4 [00:00<00:00, 16980.99it/s]
-
-
-Unsloth: Merging weights into 16bit:   0%|          | 0/4 [00:00<?, ?it/s][A[A
-
-Unsloth: Merging weights into 16bit:  25%|██▌       | 1/4 [00:21<01:04, 21.53s/it][A[A
-
-Unsloth: Merging weights into 16bit:  50%|█████     | 2/4 [00:34<00:33, 16.74s/it][A[A
-
-Unsloth: Merging weights into 16bit:  75%|███████▌  | 3/4 [00:55<00:18, 18.44s/it][A[A
-
-Unsloth: Merging weights into 16bit: 100%|██████████| 4/4 [00:59<00:00, 12.74s/it][A[AUnsloth: Merging weights into 16bit: 100%|██████████| 4/4 [00:59<00:00, 14.85s/it]
-Unsloth: Merge process complete. Saved to `/tmp/tmplp5hfq2d`
-[PassAtKCallback] Moving training model to CPU...
-[PassAtKCallback] Loading model with vLLM from /tmp/tmplp5hfq2d...
-LLM UTILISATION IS 0.8
-INFO 01-26 03:43:42 [config.py:841] This model supports multiple tasks: {'embed', 'reward', 'generate', 'classify'}. Defaulting to 'generate'.
-`torch_dtype` is deprecated! Use `dtype` instead!
-INFO 01-26 03:43:42 [config.py:1472] Using max model len 131072
-INFO 01-26 03:43:45 [config.py:2285] Chunked prefill is enabled with max_num_batched_tokens=8192.
-Traceback (most recent call last):
-  File "<string>", line 1, in <module>
-  File "/cvmfs/soft.computecanada.ca/easybuild/software/2023/x86-64-v3/Compiler/gcccore/python/3.11.5/lib/python3.11/multiprocessing/spawn.py", line 122, in spawn_main
-    exitcode = _main(fd, parent_sentinel)
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/cvmfs/soft.computecanada.ca/easybuild/software/2023/x86-64-v3/Compiler/gcccore/python/3.11.5/lib/python3.11/multiprocessing/spawn.py", line 131, in _main
-    prepare(preparation_data)
-  File "/cvmfs/soft.computecanada.ca/easybuild/software/2023/x86-64-v3/Compiler/gcccore/python/3.11.5/lib/python3.11/multiprocessing/spawn.py", line 246, in prepare
-    _fixup_main_from_path(data['init_main_from_path'])
-  File "/cvmfs/soft.computecanada.ca/easybuild/software/2023/x86-64-v3/Compiler/gcccore/python/3.11.5/lib/python3.11/multiprocessing/spawn.py", line 297, in _fixup_main_from_path
-    main_content = runpy.run_path(main_path,
-                   ^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "<frozen runpy>", line 291, in run_path
-  File "<frozen runpy>", line 98, in _run_module_code
-  File "<frozen runpy>", line 88, in _run_code
-  File "/project/6105902/shougan/balance-budget/tuning/training/passk_pipeline.py", line 60, in <module>
-    model, tokenizer, trainer, callbacks = train_model_sft(
-                                           ^^^^^^^^^^^^^^^^
-  File "/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/training/sft_training.py", line 147, in train_model_sft
-    trainer_stats = trainer.train(resume_from_checkpoint=resume_from_checkpoint) 
-                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/project/6105902/shougan/balance-budget/unsloth_compiled_cache/UnslothSFTTrainer.py", line 53, in wrapper
-    output = f(self, *args, **kwargs)
-             ^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/transformers/trainer.py", line 2328, in train
-    return inner_training_loop(
-           ^^^^^^^^^^^^^^^^^^^^
-  File "<string>", line 407, in _fast_inner_training_loop
-  File "/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/transformers/trainer.py", line 3227, in _maybe_log_save_evaluate
-    metrics = self._evaluate(trial, ignore_keys_for_eval)
-              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/transformers/trainer.py", line 3176, in _evaluate
-    metrics = self.evaluate(ignore_keys=ignore_keys_for_eval)
-              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/transformers/trainer.py", line 4499, in evaluate
-    self.control = self.callback_handler.on_evaluate(self.args, self.state, self.control, output.metrics)
-                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/transformers/trainer_callback.py", line 538, in on_evaluate
-    return self.call_event("on_evaluate", args, state, control, metrics=metrics)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/transformers/trainer_callback.py", line 556, in call_event
-    result = getattr(callback, event)(
-             ^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/training/passk_callback.py", line 275, in on_evaluate
-    scores = self.evaluate_pass_at_k(model)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/training/passk_callback.py", line 219, in evaluate_pass_at_k
-    model_results = self._run_inference_with_vllm(temp_dir)
-                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/training/passk_callback.py", line 149, in _run_inference_with_vllm
-    llm = LLM(
-          ^^^^
-  File "/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/vllm/entrypoints/llm.py", line 271, in __init__
-    self.llm_engine = LLMEngine.from_engine_args(
-                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/vllm/v1/engine/llm_engine.py", line 150, in from_engine_args
-    return cls(vllm_config=vllm_config,
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/vllm/v1/engine/llm_engine.py", line 101, in __init__
-    self.engine_core = EngineCoreClient.make_client(
-                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/vllm/v1/engine/core_client.py", line 75, in make_client
-    return SyncMPClient(vllm_config, executor_class, log_stats)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/vllm/v1/engine/core_client.py", line 503, in __init__
-    super().__init__(
-  File "/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/vllm/v1/engine/core_client.py", line 403, in __init__
-    with launch_core_engines(vllm_config, executor_class,
-  File "/cvmfs/soft.computecanada.ca/easybuild/software/2023/x86-64-v3/Compiler/gcccore/python/3.11.5/lib/python3.11/contextlib.py", line 137, in __enter__
-    return next(self.gen)
-           ^^^^^^^^^^^^^^
-  File "/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/vllm/v1/engine/utils.py", line 417, in launch_core_engines
-    local_engine_manager = CoreEngineProcManager(
-                           ^^^^^^^^^^^^^^^^^^^^^^
-  File "/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/vllm/v1/engine/utils.py", line 121, in __init__
-    proc.start()
-  File "/cvmfs/soft.computecanada.ca/easybuild/software/2023/x86-64-v3/Compiler/gcccore/python/3.11.5/lib/python3.11/multiprocessing/process.py", line 121, in start
-    self._popen = self._Popen(self)
-                  ^^^^^^^^^^^^^^^^^
-  File "/cvmfs/soft.computecanada.ca/easybuild/software/2023/x86-64-v3/Compiler/gcccore/python/3.11.5/lib/python3.11/multiprocessing/context.py", line 288, in _Popen
-    return Popen(process_obj)
-           ^^^^^^^^^^^^^^^^^^
-  File "/cvmfs/soft.computecanada.ca/easybuild/software/2023/x86-64-v3/Compiler/gcccore/python/3.11.5/lib/python3.11/multiprocessing/popen_spawn_posix.py", line 32, in __init__
-    super().__init__(process_obj)
-  File "/cvmfs/soft.computecanada.ca/easybuild/software/2023/x86-64-v3/Compiler/gcccore/python/3.11.5/lib/python3.11/multiprocessing/popen_fork.py", line 19, in __init__
-    self._launch(process_obj)
-  File "/cvmfs/soft.computecanada.ca/easybuild/software/2023/x86-64-v3/Compiler/gcccore/python/3.11.5/lib/python3.11/multiprocessing/popen_spawn_posix.py", line 42, in _launch
-    prep_data = spawn.get_preparation_data(process_obj._name)
-                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/cvmfs/soft.computecanada.ca/easybuild/software/2023/x86-64-v3/Compiler/gcccore/python/3.11.5/lib/python3.11/multiprocessing/spawn.py", line 164, in get_preparation_data
-    _check_not_importing_main()
-  File "/cvmfs/soft.computecanada.ca/easybuild/software/2023/x86-64-v3/Compiler/gcccore/python/3.11.5/lib/python3.11/multiprocessing/spawn.py", line 140, in _check_not_importing_main
-    raise RuntimeError('''
-RuntimeError: 
-        An attempt has been made to start a new process before the
-        current process has finished its bootstrapping phase.
-
-        This probably means that you are not using fork to start your
-        child processes and you have forgotten to use the proper idiom
-        in the main module:
-
-            if __name__ == '__main__':
-                freeze_support()
-                ...
-
-        The "freeze_support()" line can be omitted if the program
-        is not going to be frozen to produce an executable.
-
-        To fix this issue, refer to the "Safe importing of main module"
-        section in https://docs.python.org/3/library/multiprocessing.html
-        
-  2%|▏         | 20/1024 [03:39<3:03:47, 10.98s/it]
-
-                                                 [ATraceback (most recent call last):
-  File "/project/6105902/shougan/balance-budget/tuning/training/passk_pipeline.py", line 60, in <module>
-    model, tokenizer, trainer, callbacks = train_model_sft(
-                                           ^^^^^^^^^^^^^^^^
-  File "/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/training/sft_training.py", line 147, in train_model_sft
-    trainer_stats = trainer.train(resume_from_checkpoint=resume_from_checkpoint)
-                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/project/6105902/shougan/balance-budget/unsloth_compiled_cache/UnslothSFTTrainer.py", line 53, in wrapper
-    output = f(self, *args, **kwargs)
-             ^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/transformers/trainer.py", line 2328, in train
-    return inner_training_loop(
-           ^^^^^^^^^^^^^^^^^^^^
-  File "<string>", line 407, in _fast_inner_training_loop
-  File "/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/transformers/trainer.py", line 3227, in _maybe_log_save_evaluate
-    metrics = self._evaluate(trial, ignore_keys_for_eval)
-              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/transformers/trainer.py", line 3176, in _evaluate
-    metrics = self.evaluate(ignore_keys=ignore_keys_for_eval)
-              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/transformers/trainer.py", line 4499, in evaluate
-    self.control = self.callback_handler.on_evaluate(self.args, self.state, self.control, output.metrics)
-                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/transformers/trainer_callback.py", line 538, in on_evaluate
-    return self.call_event("on_evaluate", args, state, control, metrics=metrics)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/transformers/trainer_callback.py", line 556, in call_event
-    result = getattr(callback, event)(
-             ^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/training/passk_callback.py", line 275, in on_evaluate
-    scores = self.evaluate_pass_at_k(model)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/training/passk_callback.py", line 219, in evaluate_pass_at_k
-    model_results = self._run_inference_with_vllm(temp_dir)
-                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/shougan/projects/aip-fredashi/shougan/balance-budget/tuning/training/passk_callback.py", line 149, in _run_inference_with_vllm
-    llm = LLM(
-          ^^^^
-  File "/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/vllm/entrypoints/llm.py", line 271, in __init__
-    self.llm_engine = LLMEngine.from_engine_args(
-                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/vllm/engine/llm_engine.py", line 501, in from_engine_args
-    return engine_cls.from_vllm_config(
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/vllm/v1/engine/llm_engine.py", line 124, in from_vllm_config
-    return cls(vllm_config=vllm_config,
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/vllm/v1/engine/llm_engine.py", line 101, in __init__
-    self.engine_core = EngineCoreClient.make_client(
-                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/vllm/v1/engine/core_client.py", line 75, in make_client
-    return SyncMPClient(vllm_config, executor_class, log_stats)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/vllm/v1/engine/core_client.py", line 503, in __init__
-    super().__init__(
-  File "/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/vllm/v1/engine/core_client.py", line 403, in __init__
-    with launch_core_engines(vllm_config, executor_class,
-  File "/cvmfs/soft.computecanada.ca/easybuild/software/2023/x86-64-v3/Compiler/gcccore/python/3.11.5/lib/python3.11/contextlib.py", line 144, in __exit__
-    next(self.gen)
-  File "/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/vllm/v1/engine/utils.py", line 434, in launch_core_engines
-    wait_for_engine_startup(
-  File "/project/6105902/shougan/balance-budget/venv/lib/python3.11/site-packages/vllm/v1/engine/utils.py", line 484, in wait_for_engine_startup
-    raise RuntimeError("Engine core initialization failed. "
-RuntimeError: Engine core initialization failed. See root cause above. Failed core proc(s): {}
-[1;34mwandb[0m: 
-[1;34mwandb[0m: 🚀 View run [33mexpert-sponge-64[0m at: [34mhttps://wandb.ai/shougan-university-of-waterloo/huggingface/runs/bu80nfr9[0m
-[1;34mwandb[0m: Find logs at: [1;35mwandb/run-20260126_033544-bu80nfr9/logs[0m
-[1;34mwandb[0m: 
-[1;34mwandb[0m: 🚀 View run [33mvisionary-gorge-65[0m at: [34mhttps://wandb.ai/shougan-university-of-waterloo/huggingface/runs/v6c41v4p[0m
-[1;34mwandb[0m: Find logs at: [1;35mwandb/run-20260126_034009-v6c41v4p/logs[0m

@@ -61,14 +61,14 @@ if __name__ == '__main__':
     model_path = os.path.join(MODELS_DIR, model_name)
     llm = LLM(model=model_path)
     config = VLLMSamplingParamsConfig()
-    config.n = 8
+    config.n = 1
     # config.temperature = 0
     sampling_params = SamplingParams(**config.model_dump())
-    sampling_params.min_tokens = 2048
-    sampling_params.max_tokens = 2048
-    sampling_params.stop = []           # remove stop strings
-    sampling_params.stop_token_ids = [] # remove stop token IDs
-    sampling_params.ignore_eos = True   # ignore the EOS token entirely
+    # sampling_params.min_tokens = 512
+    # sampling_params.max_tokens = 4096
+    # sampling_params.stop = []           # remove stop strings
+    # sampling_params.stop_token_ids = [] # remove stop token IDs
+    # sampling_params.ignore_eos = True   # ignore the EOS token entirely
     print(sampling_params)
 
 
@@ -105,7 +105,6 @@ if __name__ == '__main__':
     #     "llm.chat",
     #     lambda: llm.chat(messages, sampling_params, chat_template=chat_template),
     # )
-    
     # chat_texts = extract_texts(chat_outputs)
     # print(f"Avg chat_texts length (chars): {average_length(chat_texts):.2f}")
     # print(f"Avg chat_texts length (tokens): {average_token_length(chat_outputs):.2f}")

@@ -25,9 +25,23 @@ import json
 import wandb
 import gc
 
+MODEL_TO_GPU_1 = {
+    "llama3-1B": 0.75,
+    "llama3-3B": 0.75,
+    "llama3-8B": 0.68,
+    "qwen2-3B": 0.75
+}
+MODEL_TO_GPU_2 = {
+    "llama3-1B": 0.7,
+    "llama3-3B": 0.7,
+    "llama3-8B": 0.55,
+    "qwen2-3B": 0.6
+}
 
 if __name__ == '__main__':
-    MODEL = "llama3-1B"
+    MODEL = "llama3-3B"
+    gpu_utilisation_1 = MODEL_TO_GPU_1[MODEL]
+    gpu_utilisation_2 = MODEL_TO_GPU_2[MODEL]
     total_train_size = 10000  # 29980
 
     dataset_config = DatasetConfig(
@@ -46,28 +60,32 @@ if __name__ == '__main__':
     )
 
     lora_config = LoraConfig()
-    # lora_config.use_gradient_checkpointing = True  # Reduce activation memory
 
     model_load_config = ModelLoadConfig()
     model_load_config.max_seq_length = 4096
 
     training_args = TrainingArgumentsConfig()
-    training_args.eval_steps = 64
+
+    # ---------------------------------------------
+    training_args.eval_steps = 128
     training_args.per_device_train_batch_size = 16
     training_args.gradient_accumulation_steps = 1
+    # ---------------------------------------------
 
     passk_config = PassAtKConfig( # this is just to dynamically view the pass@1 of ifeval
         target_pass_at_k=[0.1, 0.15, 0.2,0.25,0.3, 0.9],
-        k_values=[4],
-        n_samples=8,
-        num_prompts=541,
-        temperature=0.7,
+         # ---------------------------------------------
+        patience = 100000000,    ##### 
+        min_increase = 0.02, ##### 
+        k_values=[1,2,4], #####
+        n_samples=8, #####
+        num_prompts=271, #####
+        vllm_gpu_memory_utilization=gpu_utilisation_1,
+        # ---------------------------------------------
+        temperature=0.5,
         strict=True,
         enabled=True,
-        vllm_gpu_memory_utilization=0.75
     )
-
-    
 
     run = wandb.init(
         name=run_config.run_name, 
@@ -88,7 +106,10 @@ if __name__ == '__main__':
 
     ppl_callback = callbacks[-1]
     metadata_file = ppl_callback.metadata_path
-    checkpoints = []
+    if not Path(metadata_file).exists():
+        print(f"Metadata file {metadata_file} does not exist. Exiting.")
+        sys.exit(1)
+    checkpoints = [] 
     with open(metadata_file, "r") as f:
         for line in f:
             checkpoints.append(json.loads(line))
@@ -112,7 +133,7 @@ if __name__ == '__main__':
         # With batch_size=4, total memory: ~40GB (models) + ~15GB (activations) = ~55GB ✓
         training_args.per_device_train_batch_size = 4  # Reduced from 16
         training_args.gradient_accumulation_steps = 4  # Maintain effective batch of 16
-        training_args.eval_steps = 8
+        training_args.eval_steps = 64
         dataset_config = DatasetConfig(
             dataset = "tuluif",
             dataset_type = "pt",
@@ -140,13 +161,17 @@ if __name__ == '__main__':
         )
         passk_config = PassAtKConfig( # this is just to dynamically view the pass@1 of ifeval
             target_pass_at_k=[1.2],
-            k_values=[1],
-            n_samples=1,
+            # ----------------------------------------
+            k_values=[1], #####
+            n_samples=1, #####
             num_prompts=541,
+            vllm_gpu_memory_utilization=gpu_utilisation_2, #0.58
+            # ----------------------------------------
             temperature=0.5,
             strict=True,
             enabled=True,
         )
+        # lora_config.use_gradient_checkpointing = True  # Reduce activation memory
         
         model, tokenizer, trainer = train_model_dpo(
             run_config = run_config,
@@ -154,7 +179,6 @@ if __name__ == '__main__':
             model_load_config = model_load_config,
             training_args = training_args,
             passk_config = passk_config,
-            vllm_gpu_memory_utilization=0.6,
             # perplexity_thresholds= [0.1] # dummy value to periodically check perplexities too
         )
         

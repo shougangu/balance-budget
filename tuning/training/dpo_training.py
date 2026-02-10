@@ -94,7 +94,7 @@ def train_model_dpo(
             max_tokens=passk_config.max_tokens,
             strict=passk_config.strict,
             model_name=run_config.model_name,
-            base_model_hf=run_config.model_name_hf,
+            base_model_hf=model_path,
             use_persistent_vllm=getattr(passk_config, 'use_persistent_vllm', True),
             vllm_gpu_memory_utilization=getattr(passk_config, 'vllm_gpu_memory_utilization', 0.4),
         )
@@ -110,7 +110,7 @@ def train_model_dpo(
             perplexity_thresholds=perplexity_thresholds,
             test_dataset=raw_test_dataset,
             tokenizer=chat_template_func(tokenizer),
-            num_samples=200,  
+            num_samples=541,  
         )
         callbacks.append(perplexity_callback)
         print(f"[DPO] Perplexity thresholds: {perplexity_thresholds}")
@@ -213,8 +213,8 @@ if __name__ == "__main__":
             lora_config=lora_config,
             model_load_config=model_load_config,
             training_args=training_args,
-            perplexity_thresholds=[0.1],  # Set to a value like 1.5 to enable
-            passk_config=passk_config,
+            # perplexity_thresholds=[0.1],  # Set to a value like 1.5 to enable
+            # passk_config=passk_config,
         )
         
 

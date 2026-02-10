@@ -6,7 +6,7 @@ import os
 
 BaseModel.model_config['protected_namespaces'] = ()
 
-EFFECTIVE_BATCH_SIZE = 128  # Increased for H100/L40 GPUs
+EFFECTIVE_BATCH_SIZE = 16  # Increased for H100/L40 GPUs
 
 def sft_batch_size(dataset_size: int):
     return 2  # H100/L40 can handle larger per-device batch sizes
@@ -15,7 +15,7 @@ def dpo_batch_size(dataset_size: int):
     return 2  # H100/L40 can handle larger per-device batch sizes
 
 def effective_batch_size(dataset_size: int):
-    return 128  # Increased for H100/L40 GPUs
+    return 16  # Increased for H100/L40 GPUs
 
 class ModelLoadConfig(BaseModel):
     max_seq_length: str = 1024 
@@ -67,6 +67,8 @@ class DPOTrainingConfig(TrainingArgumentsConfig):
 class PassAtKConfig(BaseModel):
     """Configuration for pass@k evaluation callback."""
     target_pass_at_k: list[float] = [0.8]  # Target pass@k score to stop training (0.0 to 1.0)
+    patience : int = None  # Number of evaluations to wait for improvement before stopping
+    min_increase : float = 0.0  # Minimum increase in pass@k
     k_values: list[int] = [1]  # The k values for pass@k evaluation. First value is used for stopping.
     n_samples: int = 16  # Number of samples to generate per prompt
     num_prompts: int = 50  # Number of prompts to evaluate (subset for speed)

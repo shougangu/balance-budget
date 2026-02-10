@@ -61,59 +61,8 @@ def run_inference_ifeval(model_name: str, n_samples: int = 1, temperature: float
     return responses
 
 if __name__ == "__main__":
-    # model_name = "llama3-8B_llama3-8B_ppl-5.00_sft-320_pt-tuluif-3776"
-    # print(f"Running ifeval for {model_name}")
-    # run_inference_ifeval(model_name)
-    
-    # model_name = "llama3-8B_llama3-8B_ppl-4.00_sft-480_pt-tuluif-3616"
-    # print(f"Running ifeval for {model_name}")
-    # run_inference_ifeval(model_name)
 
-    # model_name = "llama3-8B_llama3-8B_ppl-3.75_sft-640_pt-tuluif-3456"
-    # print(f"Running ifeval for {model_name}")
-    # run_inference_ifeval(model_name)
-
-    # model_name = "llama3-8B_llama3-8B_ppl-3.50_sft-800_pt-tuluif-3296"
-    # print(f"Running ifeval for {model_name}")
-    # run_inference_ifeval(model_name)
-
-    # model_name = "llama3-8B_llama3-8B_ppl-3.25_sft-1120_pt-tuluif-2976"
-    # print(f"Running ifeval for {model_name}")
-    # run_inference_ifeval(model_name)
-
-    # model_name = "llama3-8B_llama3-8B_ppl-3.00_sft-2880_pt-tuluif-1216"
-    # print(f"Running ifeval for {model_name}")
-    # run_inference_ifeval(model_name)
-
-    # model_name = "llama3-8B_llama3-8B_pass@1-0.20_sft-400_pt-tuluif-1648"
-    # print(f"Running ifeval for {model_name}")
-    # run_inference_ifeval(model_name)
-
-    # model_name = "llama3-8B_llama3-8B_pass@1-0.40_sft-800_pt-tuluif-1248"
-    # print(f"Running ifeval for {model_name}")
-    # run_inference_ifeval(model_name)
-
-    # model_name = "llama3-8B_llama3-8B_pass@1-0.50_sft-1200_pt-tuluif-848"
-    # print(f"Running ifeval for {model_name}")
-    # run_inference_ifeval(model_name)
-    
-    # model_name = "llama3-8B_llama3-8B_pass@1-0.60_sft-2000_pt-tuluif-48"
-    # print(f"Running ifeval for {model_name}")
-    # run_inference_ifeval(model_name)
-    
-    model_name = "llama3-8B_llama3-8B_pass@1-0.20_sft-400_pt-tuluif-3696"
-    print(f"Running ifeval for {model_name}")
-    run_inference_ifeval(model_name)
-    
-    model_name = "llama3-8B_llama3-8B_pass@1-0.40_sft-800_pt-tuluif-3296"
-    print(f"Running ifeval for {model_name}")
-    run_inference_ifeval(model_name)
-    
-    model_name = "llama3-8B_llama3-8B_pass@1-0.50_sft-1200_pt-tuluif-2896"
-    print(f"Running ifeval for {model_name}")
-    run_inference_ifeval(model_name)
-    
-    model_name = "llama3-8B_llama3-8B_pass@1-0.60_sft-2000_pt-tuluif-2096"
+    model_name =  "qwen2-7B"
     print(f"Running ifeval for {model_name}")
     run_inference_ifeval(model_name)
     

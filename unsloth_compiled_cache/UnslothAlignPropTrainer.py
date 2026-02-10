@@ -230,7 +230,7 @@ class UnslothAlignPropConfig(AlignPropConfig):
     
     def __init__(
         self,
-        exp_name = 'vllm_benchmark',
+        exp_name = 'ifeval_inference',
         run_name = '',
         seed = 3407,
         log_with = None,

@@ -62,9 +62,11 @@ def train_model_sft(
 
     # Setup callbacks
     callbacks = []
-    if passk_config is not None and passk_config.enabled:
+    if passk_config is not None:
         passk_callback = PassAtKStoppingCallback(
             target_pass_at_k=passk_config.target_pass_at_k,
+            patience=passk_config.patience,
+            min_increase=passk_config.min_increase,
             tokenizer=chat_template_func(tokenizer),
             k_values=passk_config.k_values,
             n_samples=passk_config.n_samples,
@@ -78,8 +80,6 @@ def train_model_sft(
             vllm_gpu_memory_utilization=getattr(passk_config, 'vllm_gpu_memory_utilization', 0.4),
         )
         callbacks.append(passk_callback)
-        print(f"[SFT] Will stop training when pass@{passk_config.k_values[0]} >= {passk_config.target_pass_at_k[-1]}")
-        print(f"[SFT] Checkpoints will be saved at thresholds: {passk_config.target_pass_at_k}")
 
     if perplexity_thresholds is not None:
         # Load raw dataset (without chat template applied) for perplexity evaluation
@@ -90,7 +90,7 @@ def train_model_sft(
             perplexity_thresholds=perplexity_thresholds,
             test_dataset=raw_test_dataset,
             tokenizer=chat_template_func(tokenizer),
-            num_samples=200,  
+            num_samples=541,  
         )
         callbacks.append(perplexity_callback)
         print(f"[SFT] Perplexity thresholds: {perplexity_thresholds}")
@@ -168,7 +168,7 @@ if __name__ == "__main__":
     dataset_config = DatasetConfig(
         dataset = "tuluif",
         dataset_type = "sft",
-        train_size = 8192, # 29980
+        train_size = 10000, # 29980
     )
 
     run_config = SFTRunConfig(
@@ -207,13 +207,13 @@ if __name__ == "__main__":
     # )
 
 
-    perplexity_thresholds = [7.0,6.0, 5.75, 5.5, 5.25, 5.0, 4.75, 4.5, 4.25,4.0, 3.9, 3.8, 3.7, 3.6,3.55,3.5,3.45,3.4,3.35,3.3, 3.25, 3.2, 3.15, 3.1]
+    # perplexity_thresholds = [7.0,6.0, 5.75, 5.5, 5.25, 5.0, 4.75, 4.5, 4.25,4.0, 3.9, 3.8, 3.7, 3.6,3.55,3.5,3.45,3.4,3.35,3.3, 3.25, 3.2, 3.15, 3.1]
     model, tokenizer, trainer = train_model_sft(
         run_config = run_config,
         lora_config = lora_config,
         model_load_config = model_load_config,
         training_args = training_args,
-        perplexity_thresholds = perplexity_thresholds, 
+        # perplexity_thresholds = perplexity_thresholds, 
     )
     metadata_file = trainer.callbacks[-1].metadata_path
     print(f"SFT training complete. Metadata file: {metadata_file}")
