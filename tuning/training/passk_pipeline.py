@@ -86,8 +86,8 @@ if __name__ == '__main__':
             passk_config = passk_config
         )   
 
-    ppl_callback = callbacks[-1]
-    metadata_file = ppl_callback.metadata_path
+    passk_callback = next(c for c in callbacks if isinstance(c, PassAtKStoppingCallback))
+    metadata_file = passk_callback.metadata_path
     checkpoints = []
     with open(metadata_file, "r") as f:
         for line in f:
@@ -148,7 +148,7 @@ if __name__ == '__main__':
             enabled=True,
         )
         
-        model, tokenizer, trainer = train_model_dpo(
+        model, tokenizer, trainer, _ = train_model_dpo(
             run_config = run_config,
             lora_config = lora_config,
             model_load_config = model_load_config,

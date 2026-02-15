@@ -1,44 +1,44 @@
 import os
-import json
 import datetime
-import subprocess
 
 import torch
 import torch.nn.functional as F
 import numpy as np
-from typing import List
 from transformers import TrainerCallback, TrainerControl, TrainerState
 from transformers.training_args import TrainingArguments
 import wandb
 
-from tuning.config import MODELS_DIR, MODELS_METADATA_DIR
+from tuning.config import MODELS_METADATA_DIR
+from tuning.training.callback_utils import save_sweetspot_checkpoint
+from tuning.training.config_training import PerplexityConfig
 
 class PerplexityStoppingCallback(TrainerCallback):
     def __init__(
         self, 
-        perplexity_thresholds: List[float], 
+        config: PerplexityConfig,
         test_dataset, 
         tokenizer, 
-        num_samples: int = 100,
         model_name: str = None,
-        prevWindow: int = None,
     ):
         # Sort thresholds in ascending order (hardest to easiest: 2.0, 2.5, 3.0)
         # Lower perplexity = harder to reach, so we process from smallest to largest
-        self.perplexity_thresholds = sorted(perplexity_thresholds, reverse=False)
+        self.perplexity_thresholds = sorted(config.perplexity_thresholds, reverse=False)
         self.test_dataset = test_dataset
         self.tokenizer = tokenizer
-        self.num_samples = num_samples
+        self.num_samples = config.num_samples
         self.metadata_path = None
         self.model_name = model_name
         self.prevResults = []
-        self.prevWindow = prevWindow
+        self.patience = config.patience
+        self.min_decrease = config.min_decrease
 
         print(f"[PerplexityCallback] Initialized with perplexity_thresholds={self.perplexity_thresholds}")
         print(f"[PerplexityCallback] Training will stop when hardest threshold is reached: {self.perplexity_thresholds[0]}")
-        print(f"[PerplexityCallback] num_samples={num_samples}")
+        print(f"[PerplexityCallback] num_samples={self.num_samples}")
+        print(f"[PerplexityCallback] patience={self.patience}")
+        print(f"[PerplexityCallback] min_decrease={self.min_decrease}")
         print(f"[PerplexityCallback] Test dataset size: {len(test_dataset)}")
-        print(f"Dataset sample 1st one: {test_dataset[0]}")
+        print(f"[PerplexityCallback] Dataset sample 1st one: {test_dataset[0]}")
 
         
     
@@ -49,46 +49,27 @@ class PerplexityStoppingCallback(TrainerCallback):
         now = datetime.datetime.now().strftime("%m%d_%H%M")
         self.metadata_path = os.path.join(MODELS_METADATA_DIR, f"{self.model_name}_ppl-{now}.json") 
     
-    def _save_sweetspot_checkpoint(self, model, threshold: float, state: TrainerState, args: TrainingArguments):
-        train_batch_size = args.per_device_train_batch_size
-        grad_accum = args.gradient_accumulation_steps
-        world_size = getattr(args, "world_size", 1)
-        data_points_seen = int(state.global_step * train_batch_size * grad_accum * world_size // 2)
-
-        # Use data_points_seen as the checkpoint name suffix (e.g., llama3-8B_sft-tuluif-500)
-        checkpoint_name = f"{self.model_name}_ppl-{threshold:.2f}_sft-{data_points_seen}"
-        if self.prevWindow:
-            checkpoint_name = f"{self.model_name}_pplWindow-{self.prevWindow}_sft-{data_points_seen}"
-        checkpoint_path = os.path.join(MODELS_DIR, checkpoint_name)
-
-        print(f"[PerplexityCallback] Saving sweetspot checkpoint to {checkpoint_path}")
-        
-        # Save using Unsloth's merged 16bit method (consistent with PassAtKCallback)
-        model.save_pretrained_merged(checkpoint_path, self.tokenizer, save_method="merged_16bit")
-        
-        with open(f"{checkpoint_path}/training_config.json", "w") as f:
-            json.dump(args.to_dict(), f, indent=4)
-
-        # Write metadata marker file for orchestrator/downstream DPO
-        metadata = {
-            "threshold_type": "perplexity",
-            "threshold_value": threshold,
-            "global_step": state.global_step,
-            "checkpoint_path": checkpoint_path,
-            "data_points_seen": data_points_seen,
-        }
-        with open(self.metadata_path, "a") as f:
-            f.write(json.dumps(metadata)+"\n")
-        
-        print(f"[PerplexityCallback] Sweetspot checkpoint saved with metadata at {self.metadata_path}")
-        return checkpoint_path
+    def _save_sweetspot_checkpoint(self, model, threshold, state: TrainerState, args: TrainingArguments):
+        return save_sweetspot_checkpoint(
+            model=model,
+            tokenizer=self.tokenizer,
+            model_name=self.model_name,
+            threshold_label=threshold,
+            state=state,
+            args=args,
+            metadata_path=self.metadata_path,
+            extra_metadata={
+                "threshold_type": "perplexity",
+                "threshold_value": threshold,
+            },
+        )
     
     def compute_perplexity(self, log_probs):
         if len(log_probs) == 0:
             return float('inf')
         avg_neg_logp = -sum(log_probs) / len(log_probs)
         return np.exp(avg_neg_logp)
-    
+
     def evaluate_perplexity(self, model):
         """Evaluate average perplexity on test samples."""
         model.eval()
@@ -101,14 +82,14 @@ class PerplexityStoppingCallback(TrainerCallback):
             prompt_messages = [messages[0], messages[1]]  # system + user
             response_message = messages[2]  # assistant
 
-
             prompt_str = self.tokenizer.apply_chat_template(
                 prompt_messages, tokenize=False, add_generation_prompt=True
             )
+
             prompt_ids = self.tokenizer.encode(
                 prompt_str, return_tensors="pt", add_special_tokens=False
             ).to(model.device)
-            
+
             messages_with_response = prompt_messages + [response_message]
             full_text = self.tokenizer.apply_chat_template(
                 messages_with_response, tokenize=False, add_generation_prompt=False
@@ -127,9 +108,9 @@ class PerplexityStoppingCallback(TrainerCallback):
             
             log_probs = F.log_softmax(relevant_logits, dim=-1)
             response_log_probs = []
-            for i in range(len(response_ids)):
-                token_id_i = response_ids[i].item()
-                log_prob_i = log_probs[i, token_id_i].item()
+            for token_idx in range(len(response_ids)):
+                token_id_i = response_ids[token_idx].item()
+                log_prob_i = log_probs[token_idx, token_id_i].item()
                 response_log_probs.append(log_prob_i)
             perplexities.append(self.compute_perplexity(response_log_probs))
         
@@ -148,8 +129,6 @@ class PerplexityStoppingCallback(TrainerCallback):
         if model is None:
             model = kwargs.get("model")
         if model is None:
-            model = self._trainer
-        if model is None:
             print("[PerplexityCallback] Warning: model is None, skipping ppl check")
             return control
         
@@ -162,7 +141,7 @@ class PerplexityStoppingCallback(TrainerCallback):
         # Check each threshold and save checkpoint if crossed (Fork Strategy)
         # Thresholds are sorted ascending (hardest to easiest: 2.0, 2.5, 3.0)
         # We iterate to find the hardest threshold that current_perplexity has reached
-        if not self.prevWindow:
+        if not self.patience:
             reached_threshold = None
             reached_index = None
 
@@ -190,10 +169,16 @@ class PerplexityStoppingCallback(TrainerCallback):
                 else:
                     print(f"[PerplexityCallback] Continuing training to next threshold: {self.perplexity_thresholds[0]}")
         
-        if self.prevWindow:
-            if len(self.prevResults) > self.prevWindow:
-                if self.prevResults[-self.prevWindow] == min(self.prevResults[-self.prevWindow:]):
-                    print(f"[PerplexityCallback] No improvement in last {self.prevWindow} evaluations. Stopping training.")
-                    self._save_sweetspot_checkpoint(model, threshold, state, args)
+        if self.patience:
+            if len(self.prevResults) > self.patience:
+                early_stopping = True
+                for old, new in zip(self.prevResults[-self.patience-1:], self.prevResults[-self.patience:]):
+                    if old - new >= self.min_decrease:
+                        early_stopping = False
+                if early_stopping:
+                    checkpoint_path = self._save_sweetspot_checkpoint(model, f"{self.patience}@{self.min_decrease}", state, args)
+                    print(f"[PerplexityCallback] No significant improvement in the last {self.patience} evaluations. Stopping training.")
+                    print(f"[PerplexityCallback] Previous PPL scores: {self.prevResults[-self.patience-1:]}")
+                    print(f"[PerplexityCallback] Final checkpoint saved at {checkpoint_path}")
                     control.should_training_stop = True
         return control

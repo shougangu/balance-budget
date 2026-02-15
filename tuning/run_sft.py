@@ -1,5 +1,5 @@
 import wandb
-from tuning.training.config_training import ModelLoadConfig, LoraConfig, PassAtKConfig, SFTRunConfig, TrainingArgumentsConfig, DatasetConfig
+from tuning.training.config_training import ModelLoadConfig, LoraConfig, PassAtKConfig, PerplexityConfig, SFTRunConfig, TrainingArgumentsConfig, DatasetConfig
 from tuning.config import HF_MODEL_MAP
 from tuning.training.sft_training import train_model_sft
 from tuning.run_inference import run_inference
@@ -64,7 +64,7 @@ if __name__ == "__main__":
                 lora_config = lora_config,
                 model_load_config = model_load_config,
                 training_args = training_args,
-                perplexity_thresholds = [3.3,3.2,3.1,3.0]
+                perplexity_config = PerplexityConfig(perplexity_thresholds=[3.3,3.2,3.1,3.0])
             )
             import gc, torch, subprocess
             del model

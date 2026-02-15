@@ -56,12 +56,30 @@ class TrainingArgumentsConfig(BaseModel):
     load_best_model_at_end: bool = False
     dataloader_drop_last: bool = False
 
+    def to_hf_args(self, output_dir: str) -> dict:
+        """Return kwargs for TrainingArguments/DPOConfig constructor."""
+        from unsloth import is_bfloat16_supported
+        d = self.model_dump()
+        d.pop("beta", None)  # beta is DPO-specific, not a TrainingArguments field
+        d["output_dir"] = output_dir
+        d["fp16"] = not is_bfloat16_supported()
+        d["bf16"] = is_bfloat16_supported()
+        d["seed"] = 42
+        return d
+
 
 class DPOTrainingConfig(TrainingArgumentsConfig):
     beta: float = 1
     learning_rate: float = 5e-6
     num_train_epochs: int = 2
     per_device_eval_batch_size: int = 2
+
+    def to_hf_args(self, output_dir: str) -> dict:
+        """Return kwargs for DPOConfig constructor, including beta."""
+        d = super().to_hf_args(output_dir)
+        d["beta"] = self.beta
+        d["save_strategy"] = "no"
+        return d
 
 
 class PassAtKConfig(BaseModel):
@@ -70,14 +88,23 @@ class PassAtKConfig(BaseModel):
     patience : int = None  # Number of evaluations to wait for improvement before stopping
     min_increase : float = 0.0  # Minimum increase in pass@k
     k_values: list[int] = [1]  # The k values for pass@k evaluation. First value is used for stopping.
-    n_samples: int = 16  # Number of samples to generate per prompt
-    num_prompts: int = 50  # Number of prompts to evaluate (subset for speed)
-    temperature: float = 0.7  # Sampling temperature for generation
+    n_samples: int = 1  # Number of samples to generate per prompt
+    num_prompts: int = 541  # Number of prompts to evaluate (subset for speed)
+    temperature: float = 0.5  # Sampling temperature for generation
     max_tokens: int = 1024  # Maximum tokens to generate per response
     strict: bool = True  # Use strict (True) or loose (False) IFEval evaluation
     enabled: bool = True  # Whether to enable the callback
     use_persistent_vllm: bool = True  # Keep vLLM engine alive between evals (saves cold-start time)
     vllm_gpu_memory_utilization: float = 0.4  # GPU memory fraction for vLLM (conservative for coexistence with training)
+
+
+class PerplexityConfig(BaseModel):
+    """Configuration for perplexity evaluation callback."""
+    perplexity_thresholds: list[float] = [3.0, 2.5, 2.0]
+    num_samples: int = 100
+    patience: int = None        # Window size for early stopping (None = use thresholds only)
+    min_decrease: float = 0.0   # Minimum perplexity decrease to count as improvement
+    enabled: bool = True
 
 
 class DatasetConfig(BaseModel):

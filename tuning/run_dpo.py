@@ -1,6 +1,6 @@
 import wandb
 import argparse
-from tuning.training.config_training import ModelLoadConfig, LoraConfig, PTRunConfig, DPOTrainingConfig, DatasetConfig, PassAtKConfig, SFTRunConfig
+from tuning.training.config_training import ModelLoadConfig, LoraConfig, PTRunConfig, DPOTrainingConfig, DatasetConfig, PassAtKConfig, PerplexityConfig, SFTRunConfig
 from tuning.config import HF_MODEL_MAP
 from tuning.run_inference import run_inference
 from tuning.run_evaluation import run_evaluation
@@ -85,7 +85,7 @@ if __name__ == "__main__":
                     model_load_config = model_load_config,
                     training_args = training_args,
                     passk_config = passk_config,
-                    perplexity_thresholds= [0.1]
+                    perplexity_config= PerplexityConfig(perplexity_thresholds=[0.1])
                 )
             elif run_config.pft_method == "kto":
                 train_model_kto(

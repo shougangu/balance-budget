@@ -178,3 +178,4 @@ cython_debug/
 /data/tmp
 tuning/analysis/gspread.json
 *.out
+unsloth_compiled_cache
