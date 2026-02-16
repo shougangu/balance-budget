@@ -28,7 +28,7 @@ from tuning.utils.gpu import cleanup_gpu
 
 MODEL_TO_GPU_1 = {
     "llama3-1B": 0.75,
-    "llama3-3B": 0.5,
+    "llama3-3B": 0.68,
     "llama3-8B": 0.68,
     "qwen2-3B": 0.75
 }
@@ -52,10 +52,11 @@ if __name__ == '__main__':
     )
 
     run_config = SFTRunConfig(
+
+        chat_template="chatml",
         dataset_config = dataset_config,
         model_name_hf = HF_MODEL_MAP[MODEL],  # Use HuggingFace model name, not local path
         model_name = MODEL,  # Base model name for output directory construction
-        chat_template = "chatml",
         do_training=True,
         do_inference=False,
         do_evaluation=False,
@@ -78,11 +79,11 @@ if __name__ == '__main__':
     passk_config = PassAtKConfig( # this is just to dynamically view the pass@1 of ifeval
         target_pass_at_k=[0.1, 0.15, 0.2,0.25,0.3, 0.9],
          # ---------------------------------------------
-        patience = 2,    ##### 
+        patience = 100000,    ##### 
         min_increase = 0.02, ##### 
-        k_values=[1], #####
-        n_samples=1, #####
-        num_prompts=541, #####
+        k_values=[4,2,1], #####
+        n_samples=8, #####
+        num_prompts=270, #####
         vllm_gpu_memory_utilization=gpu_utilisation_1,
         # ---------------------------------------------
         temperature=0.5,

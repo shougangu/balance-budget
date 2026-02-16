@@ -1,5 +1,6 @@
 
-from trl import SFTTrainer, SFTConfig
+from trl import SFTTrainer
+from transformers import TrainingArguments
 from tuning.data.train_dataset import get_train_dataset
 from tuning.training.config_training import ModelLoadConfig, LoraConfig, SFTRunConfig, TrainingArgumentsConfig, PassAtKConfig, PerplexityConfig, DatasetConfig, sft_batch_size, effective_batch_size
 from tuning.training.perplexity_callback import PerplexityStoppingCallback
@@ -62,7 +63,7 @@ def train_model_sft(
         dataset_num_proc = 2,
         packing = False,
         callbacks = callbacks if callbacks else None,
-        args = SFTConfig(
+        args = TrainingArguments(
             **training_args.to_hf_args(output_dir=run_config.output_dir),
         ),
     )

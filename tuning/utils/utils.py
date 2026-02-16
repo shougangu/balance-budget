@@ -1,3 +1,39 @@
+LLAMA_31_SIMPLE_TEMPLATE = """\
+{% if 'role' in messages[0] %}{{- bos_token }}\
+{%- if messages[0]['role'] == 'system' %}\
+    {%- set system_message = messages[0]['content'] %}\
+    {%- set messages = messages[1:] %}\
+{%- else %}\
+    {%- set system_message = "" %}\
+{%- endif %}\
+{{- "<|start_header_id|>system<|end_header_id|>\\n\\n" }}\
+{{- system_message }}\
+{{- "<|eot_id|>" }}\
+{%- for message in messages %}\
+    {{- '<|start_header_id|>' + message['role'] + '<|end_header_id|>\\n\\n'+ message['content'] + '<|eot_id|>' }}\
+{%- endfor %}\
+{%- if add_generation_prompt %}\
+    {{- '<|start_header_id|>assistant<|end_header_id|>\\n\\n' }}\
+{%- endif %}\
+{% else %}{{- bos_token }}\
+{%- if messages[0]['from'] == 'system' %}\
+    {%- set system_message = messages[0]['value'] %}\
+    {%- set messages = messages[1:] %}\
+{%- else %}\
+    {%- set system_message = "" %}\
+{%- endif %}\
+{{- "<|start_header_id|>system<|end_header_id|>\\n\\n" }}\
+{{- system_message }}\
+{{- "<|eot_id|>" }}\
+{%- for message in messages %}\
+    {{- '<|start_header_id|>' + message['from'] + '<|end_header_id|>\\n\\n'+ message['value'] + '<|eot_id|>' }}\
+{%- endfor %}\
+{%- if add_generation_prompt %}\
+    {{- '<|start_header_id|>assistant<|end_header_id|>\\n\\n' }}\
+{%- endif %}\
+{% endif %}\
+"""
+
 
 def chat_template_func(tokenizer, chat_template="chatml"):
     from unsloth.chat_templates import get_chat_template
@@ -8,6 +44,9 @@ def chat_template_func(tokenizer, chat_template="chatml"):
         mapping = {"role" : "from", "content" : "value", "user" : "human", "assistant" : "gpt"}, # ShareGPT style
         map_eos_token = False, # Maps <|im_end|> to </s> instead
     )
+
+    if chat_template == "llama-3.1":
+        tokenizer.chat_template = LLAMA_31_SIMPLE_TEMPLATE
 
     return tokenizer
 

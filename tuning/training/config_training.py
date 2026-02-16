@@ -38,7 +38,7 @@ class TrainingArgumentsConfig(BaseModel):
     # sft training parameters
     per_device_train_batch_size: int = 16
     gradient_accumulation_steps: int = EFFECTIVE_BATCH_SIZE // per_device_train_batch_size # one opt step uses effective_batch_size data
-    per_device_eval_batch_size: int = 16
+    per_device_eval_batch_size: int = 4
     eval_strategy: str = "steps"
     eval_steps: float = 4
     logging_steps: int = 1
@@ -55,6 +55,9 @@ class TrainingArgumentsConfig(BaseModel):
     save_total_limit: int = 1
     load_best_model_at_end: bool = False
     dataloader_drop_last: bool = False
+    # eval_accumulation_steps: int = 1
+    # prediction_loss_only: bool = True
+    # eval_do_concat_batches: bool = False
 
     def to_hf_args(self, output_dir: str) -> dict:
         """Return kwargs for TrainingArguments/DPOConfig constructor."""
