@@ -14,6 +14,7 @@ from typing import List, Optional, Union
 from pathlib import Path
 from tuning.config import DATASETS_DIR, HF_MODEL_MAP
 import os
+from tuning.utils.gpu import cleanup_gpu
 from tuning.training.config_training import DatasetConfig, SFTRunConfig
 from tuning.config import MODELS_DIR
 from tuning.training.sft_training import train_model_sft
@@ -97,6 +98,7 @@ if __name__ == '__main__':
     del model, tokenizer, trainer, callbacks # this deletes the references to such objects
     gc.collect() # then we force the GC
     torch.cuda.empty_cache() # and we release the GPU CUDA cache
+    cleanup_gpu(destroy_vllm = True)
     print(subprocess.check_output("nvidia-smi").decode()) # check GPU memory after cleanup
 
     for checkpoint in checkpoints:    

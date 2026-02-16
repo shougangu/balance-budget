@@ -1,4 +1,5 @@
 
+import torch
 import wandb
 from unsloth import PatchDPOTrainer
 from tuning.config import MODELS_DIR
@@ -54,14 +55,14 @@ def train_model_dpo(
         )
         callbacks.append(passk_callback)
 
-    if perplexity_config is not None and perplexity_config.enabled:
-        perplexity_callback = PerplexityStoppingCallback(
-            config=perplexity_config,
-            test_dataset=raw_dataset["test"],
-            tokenizer=tokenizer,
-            model_name=run_config.model_name,
-        )
-        callbacks.append(perplexity_callback)
+    # if perplexity_config is not None and perplexity_config.enabled:
+    #     perplexity_callback = PerplexityStoppingCallback(
+    #         config=perplexity_config,
+    #         test_dataset=raw_dataset["test"],
+    #         tokenizer=tokenizer,
+    #         model_name=run_config.model_name,
+    #     )
+    #     callbacks.append(perplexity_callback)
 
     trainer = DPOTrainer(
         model = model,
@@ -74,7 +75,16 @@ def train_model_dpo(
         args = DPOConfig(**training_args.to_hf_args(output_dir=run_config.output_dir)),
     )
 
-    trainer_stats = trainer.train()
+    try:
+        trainer_stats = trainer.train()
+    except KeyboardInterrupt:
+        if wandb.run:
+            wandb.run.tags = list(wandb.run.tags) + ["interrupted"]
+        raise
+    except torch.cuda.OutOfMemoryError:
+        if wandb.run:
+            wandb.run.tags = list(wandb.run.tags) + ["oom"]
+        raise
 
     save_trained_model(model, tokenizer, trainer, run_config.output_dir)
 

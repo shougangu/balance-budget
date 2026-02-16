@@ -10,6 +10,8 @@ from tuning.utils.utils import chat_template_func, apply_chat_template, get_resp
 from typing import List, Optional
 from pathlib import Path
 from tuning.config import HF_MODEL_MAP, MODELS_DIR, resolve_chat_template
+import torch
+import wandb
 
 
 def train_model_sft(
@@ -82,7 +84,16 @@ def train_model_sft(
             resume_from_checkpoint = str(max(checkpoints, key=lambda x: int(x.name.split("-")[1])))
             print(f"[SFT] Resuming from checkpoint: {resume_from_checkpoint}")
 
-    trainer_stats = trainer.train(resume_from_checkpoint=resume_from_checkpoint)
+    try:
+        trainer_stats = trainer.train(resume_from_checkpoint=resume_from_checkpoint)
+    except KeyboardInterrupt:
+        if wandb.run:
+            wandb.run.tags = list(wandb.run.tags) + ["interrupted"]
+        raise
+    except torch.cuda.OutOfMemoryError:
+        if wandb.run:
+            wandb.run.tags = list(wandb.run.tags) + ["oom"]
+        raise
 
     save_trained_model(model, tokenizer, trainer, run_config.output_dir)
 

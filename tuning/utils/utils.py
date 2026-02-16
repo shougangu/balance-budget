@@ -60,6 +60,12 @@ def apply_chat_template(tokenizer, dataset):
         return {"text": texts}
 
     dataset = dataset.map(_format, batched=True)
+    # Remove "messages" column so TRL SFTTrainer doesn't redundantly
+    # re-process the dataset (spawning num_proc=os.cpu_count() workers
+    # which causes OOM on SLURM nodes with many cores but limited --mem).
+    for split in dataset:
+        if "messages" in dataset[split].column_names:
+            dataset[split] = dataset[split].remove_columns("messages")
     return dataset
 
 

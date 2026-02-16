@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep:*)",
+      "Bash(python:*)",
+      "Bash(python -c:*)",
+      "Bash(python -c \"import ast; ast.parse\\(open\\(''tuning/training/config_training.py''\\).read\\(\\)\\); print\\(''config_training.py: OK''\\)\")",
+      "Bash(python3:*)"
+    ]
+  }
+}

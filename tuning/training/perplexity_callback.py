@@ -29,14 +29,12 @@ class PerplexityStoppingCallback(TrainerCallback):
         self.metadata_path = None
         self.model_name = model_name
         self.prevResults = []
-        self.patience = config.patience
-        self.min_decrease = config.min_decrease
+        self.early_tuples = list(config.early_tuples) if config.early_tuples else None
 
         print(f"[PerplexityCallback] Initialized with perplexity_thresholds={self.perplexity_thresholds}")
         print(f"[PerplexityCallback] Training will stop when hardest threshold is reached: {self.perplexity_thresholds[0]}")
         print(f"[PerplexityCallback] num_samples={self.num_samples}")
-        print(f"[PerplexityCallback] patience={self.patience}")
-        print(f"[PerplexityCallback] min_decrease={self.min_decrease}")
+        print(f"[PerplexityCallback] early_tuples={self.early_tuples}")
         print(f"[PerplexityCallback] Test dataset size: {len(test_dataset)}")
         print(f"[PerplexityCallback] Dataset sample 1st one: {test_dataset[0]}")
 
@@ -54,7 +52,7 @@ class PerplexityStoppingCallback(TrainerCallback):
             model=model,
             tokenizer=self.tokenizer,
             model_name=self.model_name,
-            threshold_label=threshold,
+            threshold_label=f"ppl-{threshold}",
             state=state,
             args=args,
             metadata_path=self.metadata_path,
@@ -141,7 +139,7 @@ class PerplexityStoppingCallback(TrainerCallback):
         # Check each threshold and save checkpoint if crossed (Fork Strategy)
         # Thresholds are sorted ascending (hardest to easiest: 2.0, 2.5, 3.0)
         # We iterate to find the hardest threshold that current_perplexity has reached
-        if not self.patience:
+        if not self.early_tuples:
             reached_threshold = None
             reached_index = None
 
@@ -168,17 +166,24 @@ class PerplexityStoppingCallback(TrainerCallback):
                     control.should_training_stop = True
                 else:
                     print(f"[PerplexityCallback] Continuing training to next threshold: {self.perplexity_thresholds[0]}")
-        
-        if self.patience:
-            if len(self.prevResults) > self.patience:
-                early_stopping = True
-                for old, new in zip(self.prevResults[-self.patience-1:], self.prevResults[-self.patience:]):
-                    if old - new >= self.min_decrease:
-                        early_stopping = False
-                if early_stopping:
-                    checkpoint_path = self._save_sweetspot_checkpoint(model, f"{self.patience}@{self.min_decrease}", state, args)
-                    print(f"[PerplexityCallback] No significant improvement in the last {self.patience} evaluations. Stopping training.")
-                    print(f"[PerplexityCallback] Previous PPL scores: {self.prevResults[-self.patience-1:]}")
-                    print(f"[PerplexityCallback] Final checkpoint saved at {checkpoint_path}")
-                    control.should_training_stop = True
+
+        if self.early_tuples is not None:
+            triggered = []
+            for idx, (patience, min_decrease) in enumerate(self.early_tuples):
+                if len(self.prevResults) > patience:
+                    early_stopping = True
+                    for old, new in zip(self.prevResults[-patience-1:], self.prevResults[-patience:]):
+                        if old - new >= min_decrease:
+                            early_stopping = False
+                            break
+                    if early_stopping:
+                        label = f"{patience}@{min_decrease}"
+                        checkpoint_path = self._save_sweetspot_checkpoint(model, label, state, args)
+                        print(f"[PerplexityCallback] Early tuple ({patience}, {min_decrease}) triggered. Checkpoint: {checkpoint_path}")
+                        triggered.append(idx)
+            for idx in reversed(triggered):
+                self.early_tuples.pop(idx)
+            if len(self.early_tuples) == 0:
+                print(f"[PerplexityCallback] All early_tuples triggered! Stopping training.")
+                control.should_training_stop = True
         return control

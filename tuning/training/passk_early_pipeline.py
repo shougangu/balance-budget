@@ -28,9 +28,9 @@ from tuning.utils.gpu import cleanup_gpu
 
 MODEL_TO_GPU_1 = {
     "llama3-1B": 0.75,
-    "llama3-3B": 0.68,
+    "llama3-3B": 0.62,
     "llama3-8B": 0.68,
-    "qwen2-3B": 0.75
+    "qwen2-3B": 0.62
 }
 MODEL_TO_GPU_2 = {
     "llama3-1B": 0.7,
@@ -43,7 +43,7 @@ if __name__ == '__main__':
     MODEL = "llama3-3B"
     gpu_utilisation_1 = MODEL_TO_GPU_1[MODEL]
     gpu_utilisation_2 = MODEL_TO_GPU_2[MODEL]
-    total_train_size = 10000  # 29980
+    total_train_size = 10240  # 29980
 
     dataset_config = DatasetConfig(
         dataset = "tuluif",
@@ -52,7 +52,6 @@ if __name__ == '__main__':
     )
 
     run_config = SFTRunConfig(
-
         chat_template="chatml",
         dataset_config = dataset_config,
         model_name_hf = HF_MODEL_MAP[MODEL],  # Use HuggingFace model name, not local path
@@ -71,7 +70,7 @@ if __name__ == '__main__':
     training_args = TrainingArgumentsConfig()
 
     # ---------------------------------------------
-    training_args.eval_steps = 128
+    training_args.eval_steps = 4
     training_args.per_device_train_batch_size = 16
     training_args.gradient_accumulation_steps = 1
     # ---------------------------------------------
@@ -79,10 +78,9 @@ if __name__ == '__main__':
     passk_config = PassAtKConfig( # this is just to dynamically view the pass@1 of ifeval
         target_pass_at_k=[0.1, 0.15, 0.2,0.25,0.3, 0.9],
          # ---------------------------------------------
-        patience = 100000,    ##### 
-        min_increase = 0.02, ##### 
-        k_values=[4,2,1], #####
-        n_samples=8, #####
+        early_tuples = [(1, 0.02)], #####
+        k_values=[1], #####
+        n_samples=1, #####
         num_prompts=270, #####
         vllm_gpu_memory_utilization=gpu_utilisation_1,
         # ---------------------------------------------
@@ -151,6 +149,7 @@ if __name__ == '__main__':
             task_name = "ifeval"
         )
         run_config = PTRunConfig(
+            chat_template="chatml",
             dataset_config = dataset_config,
             model_name_hf = HF_MODEL_MAP[MODEL],  
             model_name = MODEL,  

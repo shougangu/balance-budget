@@ -30,8 +30,10 @@ MODEL_TO_GPU_2 = {
 }
 
 if __name__ == '__main__':
-    MODEL = "llama3-3B"
-    total_train_size = 9999
+    MODEL = "qwen2-3B"
+    gpu_utilisation_1 = MODEL_TO_GPU_1[MODEL]
+    gpu_utilisation_2 = MODEL_TO_GPU_2[MODEL]
+    total_train_size = 10240
 
     dataset_config = DatasetConfig(
         dataset = "tuluif",
@@ -40,6 +42,7 @@ if __name__ == '__main__':
     )
 
     run_config = SFTRunConfig(
+        chat_template="chatml",
         dataset_config = dataset_config,
         model_name_hf = HF_MODEL_MAP[MODEL],
         model_name = MODEL,
@@ -47,12 +50,11 @@ if __name__ == '__main__':
         do_inference=False,
         do_evaluation=False,
     )
-
+    
     perplexity_config = PerplexityConfig(
         perplexity_thresholds=[6.0, 5.0, 4.0, 3.75, 3.5, 3.25, 3.0],
         num_samples=541,
-        patience=1000000000000000,
-        min_decrease=0.25,
+        early_tuples=[(1, 0.02), (2, 0.02), (3, 0.02), (4, 0.02), (5, 0.02)],
         enabled=True,
     )
 
@@ -62,6 +64,7 @@ if __name__ == '__main__':
         n_samples=1,
         num_prompts=541,
         temperature=0.5,
+        vllm_gpu_memory_utilization=gpu_utilisation_1,
         strict=True,
         enabled=True,
     )
@@ -70,7 +73,9 @@ if __name__ == '__main__':
     model_load_config = ModelLoadConfig()
     model_load_config.max_seq_length = 4096
     training_args = TrainingArgumentsConfig()
-
+    training_args.eval_steps = 32
+    training_args.per_device_train_batch_size = 16
+    training_args.gradient_accumulation_steps = 1
     run = wandb.init(
         name=run_config.run_name,
         project="tuning",
@@ -96,7 +101,9 @@ if __name__ == '__main__':
     print(checkpoints)
 
     del model, tokenizer, trainer, callbacks
-    cleanup_gpu()
+    gc.collect()
+    torch.cuda.empty_cache()
+    cleanup_gpu(destroy_vllm = True)
     print(subprocess.check_output("nvidia-smi").decode())
 
     for checkpoint in checkpoints:
@@ -107,7 +114,7 @@ if __name__ == '__main__':
 
         training_args.per_device_train_batch_size = 4
         training_args.gradient_accumulation_steps = 4
-        training_args.eval_steps = 25
+        training_args.eval_steps = 64
 
         dataset_config = DatasetConfig(
             dataset = "tuluif",
@@ -126,6 +133,7 @@ if __name__ == '__main__':
             task_name = "ifeval",
         )
         run_config = PTRunConfig(
+            chat_template = "chatml",
             dataset_config = dataset_config,
             model_name_hf = HF_MODEL_MAP[MODEL],
             model_name = MODEL,
@@ -140,6 +148,7 @@ if __name__ == '__main__':
             n_samples=1,
             num_prompts=541,
             temperature=0.5,
+            vllm_gpu_memory_utilization=gpu_utilisation_2, #0.58
             strict=True,
             enabled=True,
         )

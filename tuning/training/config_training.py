@@ -38,7 +38,7 @@ class TrainingArgumentsConfig(BaseModel):
     # sft training parameters
     per_device_train_batch_size: int = 16
     gradient_accumulation_steps: int = EFFECTIVE_BATCH_SIZE // per_device_train_batch_size # one opt step uses effective_batch_size data
-    per_device_eval_batch_size: int = 4
+    per_device_eval_batch_size: int = 2
     eval_strategy: str = "steps"
     eval_steps: float = 4
     logging_steps: int = 1
@@ -55,9 +55,9 @@ class TrainingArgumentsConfig(BaseModel):
     save_total_limit: int = 1
     load_best_model_at_end: bool = False
     dataloader_drop_last: bool = False
-    # eval_accumulation_steps: int = 1
-    # prediction_loss_only: bool = True
-    # eval_do_concat_batches: bool = False
+    eval_accumulation_steps: int = 1
+    prediction_loss_only: bool = True
+    eval_do_concat_batches: bool = False
 
     def to_hf_args(self, output_dir: str) -> dict:
         """Return kwargs for TrainingArguments/DPOConfig constructor."""
@@ -76,20 +76,21 @@ class DPOTrainingConfig(TrainingArgumentsConfig):
     learning_rate: float = 5e-6
     num_train_epochs: int = 2
     per_device_eval_batch_size: int = 2
+    dataset_num_proc: int = 2
 
     def to_hf_args(self, output_dir: str) -> dict:
         """Return kwargs for DPOConfig constructor, including beta."""
         d = super().to_hf_args(output_dir)
         d["beta"] = self.beta
         d["save_strategy"] = "no"
+        d["dataset_num_proc"] = self.dataset_num_proc
         return d
 
 
 class PassAtKConfig(BaseModel):
     """Configuration for pass@k evaluation callback."""
     target_pass_at_k: list[float] = [0.8]  # Target pass@k score to stop training (0.0 to 1.0)
-    patience : int = None  # Number of evaluations to wait for improvement before stopping
-    min_increase : float = 0.0  # Minimum increase in pass@k
+    early_tuples: list[tuple[int, float]] | None = None  # Each tuple: (patience, min_increase)
     k_values: list[int] = [1]  # The k values for pass@k evaluation. First value is used for stopping.
     n_samples: int = 1  # Number of samples to generate per prompt
     num_prompts: int = 541  # Number of prompts to evaluate (subset for speed)
@@ -105,8 +106,7 @@ class PerplexityConfig(BaseModel):
     """Configuration for perplexity evaluation callback."""
     perplexity_thresholds: list[float] = [3.0, 2.5, 2.0]
     num_samples: int = 100
-    patience: int = None        # Window size for early stopping (None = use thresholds only)
-    min_decrease: float = 0.0   # Minimum perplexity decrease to count as improvement
+    early_tuples: list[tuple[int, float]] | None = None  # Each tuple: (patience, min_decrease)
     enabled: bool = True
 
 

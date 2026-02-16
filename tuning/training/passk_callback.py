@@ -66,8 +66,7 @@ class PassAtKStoppingCallback(TrainerCallback):
         # Sort thresholds in descending order (hardest to easiest: 0.7, 0.5, 0.3)
         # Higher pass@k = harder to reach, so we process from largest to smallest
         self.target_pass_at_k_thresholds = sorted(config.target_pass_at_k, reverse=True)
-        self.patience = config.patience
-        self.min_increase = config.min_increase
+        self.early_tuples = list(config.early_tuples) if config.early_tuples else None
         self.tokenizer = tokenizer
         self.k_values = config.k_values
         self.stopping_k = self.k_values[0]  # First k value is used for stopping
@@ -100,13 +99,13 @@ class PassAtKStoppingCallback(TrainerCallback):
         }
 
         mode_str = "persistent" if self.use_persistent_vllm else "non-persistent"
-        if not self.patience:
+        if not self.early_tuples:
             print(f"[PassAtKCallback] Initialized with pass@{self.stopping_k} thresholds={self.target_pass_at_k_thresholds}")
             print(f"[PassAtKCallback] Training will stop when hardest threshold is reached: {self.target_pass_at_k_thresholds[0]}")
             print(f"[PassAtKCallback] k_values={self.k_values} (stopping on k={self.stopping_k})")
         else:
-            print(f"[PassAtKCallback] Initialized with patience={self.patience}, min_increase={self.min_increase}")
-            print(f"[PassAtKCallback] Training will stop if pass@{self.stopping_k} does not improve by {self.min_increase} for {self.patience} evaluations in a row")
+            print(f"[PassAtKCallback] Initialized with early_tuples={self.early_tuples}")
+            print(f"[PassAtKCallback] Training will stop when all early_tuples have triggered")
             print(f"[PassAtKCallback] k_values={self.k_values} (stopping on k={self.stopping_k})")
 
         print(f"[PassAtKCallback] n_samples={self.n_samples}, temperature={self.temperature}, strict={self.strict}")
@@ -381,7 +380,7 @@ class PassAtKStoppingCallback(TrainerCallback):
         # Check each threshold and save checkpoint if crossed (Fork Strategy)
         # Thresholds are sorted descending (hardest to easiest: 0.7, 0.5, 0.3)
         # We iterate to find the hardest threshold that current pass@k has reached
-        if not self.patience:
+        if not self.early_tuples:
             current_pass_at_k = scores[f"pass_at_{self.stopping_k}"]
             reached_threshold = None
             reached_index = None
@@ -406,18 +405,25 @@ class PassAtKStoppingCallback(TrainerCallback):
                 else:
                     print(f"[PassAtKCallback] Continuing training to next threshold: {self.target_pass_at_k_thresholds[0]}")
 
-        if self.patience:
-            if len(self.prevResults) > self.patience:
-                early_stopping = True
-                for old,new in zip(self.prevResults[-self.patience-1:], self.prevResults[-self.patience:]):
-                    if new - old >= self.min_increase:
-                        early_stopping = False
-                if early_stopping:
-                    checkpoint_path = self._save_sweetspot_checkpoint(model, f"{self.patience}@{self.min_increase}", state, args)
-                    print(f"[PassAtKCallback] No significant improvement in the last {self.patience} evaluations. Stopping training.")
-                    print(f"[PassAtKCallback] Previous pass@{self.stopping_k} scores: {self.prevResults[-self.patience-1:]}")
-                    print(f"[PassAtKCallback] Final checkpoint saved at {checkpoint_path}")
-                    control.should_training_stop = True
+        if self.early_tuples is not None:
+            triggered = []
+            for idx, (patience, min_increase) in enumerate(self.early_tuples):
+                if len(self.prevResults) > patience:
+                    early_stopping = True
+                    for old, new in zip(self.prevResults[-patience-1:], self.prevResults[-patience:]):
+                        if new - old >= min_increase:
+                            early_stopping = False
+                            break
+                    if early_stopping:
+                        label = f"{patience}@{min_increase}"
+                        checkpoint_path = self._save_sweetspot_checkpoint(model, label, state, args)
+                        print(f"[PassAtKCallback] Early tuple ({patience}, {min_increase}) triggered. Checkpoint: {checkpoint_path}")
+                        triggered.append(idx)
+            for idx in reversed(triggered):
+                self.early_tuples.pop(idx)
+            if len(self.early_tuples) == 0:
+                print(f"[PassAtKCallback] All early_tuples triggered! Stopping training.")
+                control.should_training_stop = True
 
         self._last_eval_step = state.global_step
         return control
