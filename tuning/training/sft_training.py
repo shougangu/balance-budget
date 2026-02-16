@@ -9,7 +9,7 @@ from tuning.training.model_utils import load_model_with_lora, save_trained_model
 from tuning.utils.utils import apply_chat_template, chat_template_func
 from typing import List, Optional
 from pathlib import Path
-from tuning.config import HF_MODEL_MAP, MODELS_DIR
+from tuning.config import HF_MODEL_MAP, MODELS_DIR, resolve_chat_template
 
 
 def train_model_sft(
@@ -28,14 +28,17 @@ def train_model_sft(
         model_load_config=model_load_config,
         lora_config=lora_config,
     )
+    chat_template = resolve_chat_template(run_config.model_name, run_config.chat_template)
+    tokenizer = chat_template_func(tokenizer, chat_template=chat_template)
 
     dataset = apply_chat_template(tokenizer, dataset)
+    print(f"Example SFT input after applying chat template:\n{dataset['train'][0]['text']}") 
 
     callbacks = []
     if passk_config is not None and passk_config.enabled:
         passk_callback = PassAtKStoppingCallback(
             config=passk_config,
-            tokenizer=chat_template_func(tokenizer),
+            tokenizer=tokenizer,
             model_name=run_config.model_name,
             base_model_hf=run_config.model_name_hf,
         )
@@ -45,14 +48,14 @@ def train_model_sft(
         perplexity_callback = PerplexityStoppingCallback(
             config=perplexity_config,
             test_dataset=dataset["test"],
-            tokenizer=chat_template_func(tokenizer),
+            tokenizer=tokenizer,
             model_name=run_config.model_name,
         )
         callbacks.append(perplexity_callback)
 
     trainer = SFTTrainer(
         model = model,
-        tokenizer = chat_template_func(tokenizer), # processing_class ? 
+        tokenizer = tokenizer, # processing_class ? 
         train_dataset = dataset["train"],
         eval_dataset = dataset["test"],
         dataset_text_field = "text",
@@ -62,6 +65,8 @@ def train_model_sft(
         callbacks = callbacks if callbacks else None,
         args = TrainingArguments(**training_args.to_hf_args(output_dir=run_config.output_dir)),
     )
+    
+
 
     print(trainer.args.to_dict())
 

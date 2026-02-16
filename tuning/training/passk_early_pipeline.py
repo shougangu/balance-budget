@@ -43,7 +43,7 @@ if __name__ == '__main__':
     MODEL = "llama3-3B"
     gpu_utilisation_1 = MODEL_TO_GPU_1[MODEL]
     gpu_utilisation_2 = MODEL_TO_GPU_2[MODEL]
-    total_train_size = 10000  # 29980
+    total_train_size = 29950  # 29980
 
     dataset_config = DatasetConfig(
         dataset = "tuluif",
@@ -55,10 +55,12 @@ if __name__ == '__main__':
         dataset_config = dataset_config,
         model_name_hf = HF_MODEL_MAP[MODEL],  # Use HuggingFace model name, not local path
         model_name = MODEL,  # Base model name for output directory construction
+        chat_template = "chatml",
         do_training=True,
         do_inference=False,
         do_evaluation=False,
     )
+    print(f"Run config: {run_config}")
 
     lora_config = LoraConfig()
 
@@ -68,7 +70,7 @@ if __name__ == '__main__':
     training_args = TrainingArgumentsConfig()
 
     # ---------------------------------------------
-    training_args.eval_steps = 64
+    training_args.eval_steps = 128
     training_args.per_device_train_batch_size = 16
     training_args.gradient_accumulation_steps = 1
     # ---------------------------------------------
@@ -76,11 +78,11 @@ if __name__ == '__main__':
     passk_config = PassAtKConfig( # this is just to dynamically view the pass@1 of ifeval
         target_pass_at_k=[0.1, 0.15, 0.2,0.25,0.3, 0.9],
          # ---------------------------------------------
-        patience = 1,    ##### 
-        min_increase = 0.5, ##### 
+        patience = 1000000,    ##### 
+        min_increase = 0.02, ##### 
         k_values=[1], #####
         n_samples=1, #####
-        num_prompts=571, #####
+        num_prompts=541, #####
         vllm_gpu_memory_utilization=gpu_utilisation_1,
         # ---------------------------------------------
         temperature=0.5,
@@ -187,4 +189,3 @@ if __name__ == '__main__':
         del model, tokenizer, trainer
         cleanup_gpu()
         print(subprocess.check_output("nvidia-smi").decode())
-

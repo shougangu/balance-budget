@@ -1,12 +1,12 @@
-import re
-from unsloth.chat_templates import get_chat_template
 from datasets import DatasetDict, Dataset
 
 
-def chat_template_func(tokenizer):
+def chat_template_func(tokenizer, chat_template="chatml"):
+    from unsloth.chat_templates import get_chat_template
+
     tokenizer = get_chat_template(
         tokenizer,
-        chat_template = "chatml", # Supports zephyr, chatml, mistral, llama, alpaca, vicuna, vicuna_old, unsloth
+        chat_template = chat_template, # Supports zephyr, chatml, mistral, llama, alpaca, vicuna, vicuna_old, unsloth
         mapping = {"role" : "from", "content" : "value", "user" : "human", "assistant" : "gpt"}, # ShareGPT style
         map_eos_token = False, # Maps <|im_end|> to </s> instead
     )
@@ -20,18 +20,35 @@ def apply_chat_template(tokenizer, dataset):
         texts = [tokenizer.apply_chat_template(convo, tokenize = False, add_generation_prompt = False) for convo in convos]
         return { "text" : texts }
 
-    tokenizer = chat_template_func(tokenizer)
     dataset = dataset.map(formatting_prompts_func, batched = True,)
 
     return dataset
 
 def apply_chat_template_pt(tokenizer, dataset):
 
-    def _strip_prefix(s, pattern):
-        # Use re.escape to escape any special characters in the pattern
-        return re.sub(f"^{re.escape(pattern)}", "", s)
-    
-    tokenizer = chat_template_func(tokenizer)
+    def _extract_completion(prompt_messages, assistant_content):
+        prompt_text = tokenizer.apply_chat_template(
+            prompt_messages, tokenize=False, add_generation_prompt=True
+        )
+        full_text = tokenizer.apply_chat_template(
+            prompt_messages + [{"role": "assistant", "content": assistant_content}],
+            tokenize=False,
+            add_generation_prompt=False,
+        )
+
+        if not full_text.startswith(prompt_text):
+            template_name = getattr(
+                tokenizer,
+                "chat_template",
+                getattr(tokenizer, "template_name", "<unknown>"),
+            )
+            raise ValueError(
+                f"Chat template prefix mismatch for template '{template_name}': "
+                f"full_text does not start with prompt_text "
+                f"(prompt_len={len(prompt_text)}, full_len={len(full_text)})."
+            )
+
+        return full_text[len(prompt_text):]
 
     def formatting_prompts_func(example):
         
@@ -45,12 +62,11 @@ def apply_chat_template_pt(tokenizer, dataset):
         elif type(prompt) == list:
             message = prompt
 
-        example["prompt"] = tokenizer.apply_chat_template(message, tokenize = False, add_generation_prompt = True)
-        example["chosen"] = tokenizer.apply_chat_template([{"role": "assistant", "content": example["chosen"]}], tokenize = False, add_generation_prompt = False)
-        example["rejected"] = tokenizer.apply_chat_template([{"role": "assistant", "content": example["rejected"]}], tokenize = False, add_generation_prompt = False)
-
-        example["chosen"] = _strip_prefix(example["chosen"], "<|im_start|>assistant\n ")
-        example["rejected"] = _strip_prefix(example["rejected"], "<|im_start|>assistant\n ")
+        example["prompt"] = tokenizer.apply_chat_template(
+            message, tokenize=False, add_generation_prompt=True
+        )
+        example["chosen"] = _extract_completion(message, example["chosen"])
+        example["rejected"] = _extract_completion(message, example["rejected"])
 
         return example
 

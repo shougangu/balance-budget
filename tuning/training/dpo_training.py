@@ -10,7 +10,7 @@ from tuning.training.model_utils import load_model_with_lora, save_trained_model
 from tuning.utils.utils import apply_chat_template_pt, chat_template_func
 from trl import DPOTrainer, DPOConfig
 from typing import List, Optional
-from tuning.config import HF_MODEL_MAP
+from tuning.config import HF_MODEL_MAP, resolve_chat_template
 
 PatchDPOTrainer()
 
@@ -41,6 +41,8 @@ def train_model_dpo(
         model_load_config=model_load_config,
         lora_config=lora_config,
     )
+    chat_template = resolve_chat_template(run_config.model_name, run_config.chat_template)
+    tokenizer = chat_template_func(tokenizer, chat_template=chat_template)
 
     dataset = apply_chat_template_pt(tokenizer, raw_dataset)
 
@@ -48,7 +50,7 @@ def train_model_dpo(
     if passk_config is not None and passk_config.enabled:
         passk_callback = PassAtKStoppingCallback(
             config=passk_config,
-            tokenizer=chat_template_func(tokenizer),
+            tokenizer=tokenizer,
             model_name=run_config.model_name,
             base_model_hf=model_path,
         )
@@ -58,7 +60,7 @@ def train_model_dpo(
         perplexity_callback = PerplexityStoppingCallback(
             config=perplexity_config,
             test_dataset=raw_dataset["test"],
-            tokenizer=chat_template_func(tokenizer),
+            tokenizer=tokenizer,
             model_name=run_config.model_name,
         )
         callbacks.append(perplexity_callback)
@@ -66,7 +68,7 @@ def train_model_dpo(
     trainer = DPOTrainer(
         model = model,
         ref_model = None,
-        tokenizer = chat_template_func(tokenizer), # processing_class ? 
+        tokenizer = tokenizer, # processing_class ? 
         beta = training_args.beta,
         train_dataset = dataset["train"],
         eval_dataset = dataset["test"],

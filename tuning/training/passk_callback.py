@@ -78,6 +78,7 @@ class PassAtKStoppingCallback(TrainerCallback):
         self.model_name = model_name
         self.metadata_path = None
         self.prevResults = []
+        self._last_eval_step = -1
 
         # LoRA adapter / persistent vLLM settings
         self.use_persistent_vllm = config.use_persistent_vllm
@@ -111,6 +112,7 @@ class PassAtKStoppingCallback(TrainerCallback):
         print(f"[PassAtKCallback] n_samples={self.n_samples}, temperature={self.temperature}, strict={self.strict}")
         print(f"[PassAtKCallback] IFEval prompts loaded: {len(self.inputs_map)}, num_prompts={len(self.test_dataset)}")
         print(f"[PassAtKCallback] vLLM mode: {mode_str}, base_model_hf={base_model_hf}, gpu_mem={self.vllm_gpu_memory_utilization}")
+        print(f"[PassAtKCallback] Chat template: {self._chat_template}")
 
     def on_train_begin(self, args, state, control, **kwargs):
         if not self.model_name:
@@ -121,6 +123,15 @@ class PassAtKStoppingCallback(TrainerCallback):
 
     def on_train_end(self, args, state, control, **kwargs):
         """Cleanup persistent vLLM engine when training ends."""
+        if self._last_eval_step != state.global_step:
+            if model is None:
+                model = kwargs.get("model")
+            if model is not None:
+                print(f"[PassAtKCallback] Running final pass@k evaluation at end of training (step {state.global_step})...")
+                self.on_evaluate(args, state, control, model=model, **kwargs)
+            else:
+                print("[PassAtKCallback] Warning: model is None at on_train_end, skipping final pass@k evaluation")
+
         self._cleanup_vllm()
 
     def _init_persistent_vllm(self):
@@ -184,6 +195,17 @@ class PassAtKStoppingCallback(TrainerCallback):
         mode = "persistent" if self.use_persistent_vllm else "ephemeral"
         lora_info = f", lora_id={self._lora_request_id}" if lora_request else ""
         print(f"[PassAtKCallback] Generating {len(self.test_dataset)} prompts x {self.n_samples} samples ({mode}{lora_info})...")
+
+        # Log a sample formatted IFEval prompt to verify template
+        sample_messages = self.test_dataset["messages"][0]
+        sample_formatted = self.tokenizer.apply_chat_template(
+            sample_messages, tokenize=False, add_generation_prompt=True
+        )
+        print(f"\n{'='*60}")
+        print(f"[DEBUG] IFEval chat_template used for inference: {self._chat_template[:80]}...")
+        print(f"[DEBUG] Sample IFEval prompt (index 0):")
+        print(sample_formatted)
+        print(f"{'='*60}\n")
 
         outputs = llm.chat(
             self.test_dataset["messages"],
@@ -297,10 +319,18 @@ class PassAtKStoppingCallback(TrainerCallback):
         # Evaluate responses
         print(f"[PassAtKCallback] Evaluating responses...")
         all_results = []
+        response_token_lengths = []
         for item in model_results:
             prompt = item["prompt"]
             responses = item["responses"]
 
+            encoded_batch = self.tokenizer(
+                responses,
+                add_special_tokens=False,
+                padding=False,
+                truncation=False,
+            )
+            response_token_lengths.extend(len(ids) for ids in encoded_batch["input_ids"])
 
             eval_input = self.inputs_map[prompt]
             results = [evaluate_single_response(eval_input, r, self.strict) for r in responses]
@@ -311,6 +341,9 @@ class PassAtKStoppingCallback(TrainerCallback):
             pass_at_k_scores = [pass_at_k(len(r), sum(r), k) for r in all_results]
             scores[f"pass_at_{k}"] = np.mean(pass_at_k_scores)
         scores["num_prompts_evaluated"] = len(all_results)
+        scores["avg_response_length_tokens"] = (
+            float(np.mean(response_token_lengths)) if response_token_lengths else 0.0
+        )
 
         return scores
 
@@ -334,14 +367,16 @@ class PassAtKStoppingCallback(TrainerCallback):
         log_dict = {"train/global_step": state.global_step}
         for k in self.k_values:
             log_dict[f"eval/pass_at_{k}"] = scores[f"pass_at_{k}"]
+        log_dict["eval/avg_response_length_tokens"] = scores["avg_response_length_tokens"]
         wandb.log(log_dict)
 
         self.prevResults.append(scores[f"pass_at_{self.stopping_k}"])
 
         eval_type = "strict" if self.strict else "loose"
         scores_str = ", ".join([f"pass@{k}={scores[f'pass_at_{k}']:.4f}" for k in self.k_values])
+        avg_len = scores["avg_response_length_tokens"]
         print(f"\n[PassAtKCallback] Step {state.global_step}, Data Points {data_points_seen}: "
-              f"{scores_str} ({eval_type}, {scores['num_prompts_evaluated']} prompts)")
+              f"{scores_str}, avg_len={avg_len:.1f} tokens ({eval_type}, {scores['num_prompts_evaluated']} prompts)")
 
         # Check each threshold and save checkpoint if crossed (Fork Strategy)
         # Thresholds are sorted descending (hardest to easiest: 0.7, 0.5, 0.3)
@@ -384,4 +419,5 @@ class PassAtKStoppingCallback(TrainerCallback):
                     print(f"[PassAtKCallback] Final checkpoint saved at {checkpoint_path}")
                     control.should_training_stop = True
 
+        self._last_eval_step = state.global_step
         return control

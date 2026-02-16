@@ -1,6 +1,6 @@
 from enum import Enum
-from pydantic import BaseModel
-from tuning.config import MODELS_DIR
+from pydantic import BaseModel, model_validator
+from tuning.config import MODELS_DIR, resolve_chat_template
 from typing import Optional
 import os
 
@@ -129,11 +129,18 @@ class SFTRunConfig(BaseModel):
     model_name_hf: str = "unsloth/Meta-Llama-3.1-8B"
     dataset_config: Optional[DatasetConfig] = None
     model_name: str = "llama3-8B"
+    chat_template: Optional[str] = None
     task_name: str = "math"
     run_type: str = "sft"
     do_training: bool = False
     do_inference: bool = False
     do_evaluation: bool = False
+
+    @model_validator(mode="after")
+    def _set_default_chat_template(self):
+        if self.chat_template is None:
+            self.chat_template = resolve_chat_template(self.model_name)
+        return self
     
     @property
     def run_name(self):
@@ -152,6 +159,7 @@ class SFTRunConfig(BaseModel):
 class PTRunConfig(BaseModel):
     model_name_hf: str = "unsloth/Meta-Llama-3.1-8B"
     model_name: str = "llama3-8B"
+    chat_template: Optional[str] = None
     dataset_config: DatasetConfig = None
     sft_run_config: Optional[SFTRunConfig] = None
     run_type: str = "pt"
@@ -162,6 +170,12 @@ class PTRunConfig(BaseModel):
     pft_method: str = "dpo"
     add_beta_run_name: bool = False
     beta: float = 0.1
+
+    @model_validator(mode="after")
+    def _set_default_chat_template(self):
+        if self.chat_template is None:
+            self.chat_template = resolve_chat_template(self.model_name)
+        return self
 
     @property
     def run_name(self):

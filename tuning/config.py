@@ -1,4 +1,5 @@
 import os
+import warnings
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -30,3 +31,35 @@ HF_MODEL_MAP = {
     "llama3-3B": "unsloth/Llama-3.2-3B",
     "llama3-1B": "unsloth/Llama-3.2-1B"
 }
+
+DEFAULT_CHAT_TEMPLATE = "chatml"
+
+MODEL_CHAT_TEMPLATE_MAP = {
+    "llama3-8B": "llama-3.1",
+    "llama3-3B": "llama-3.1",
+    "llama3-1B": "llama-3.1",
+    "qwen2-14B": "chatml",
+    "qwen2-7B": "chatml",
+    "qwen2-3B": "chatml",
+    "qwen2-2B": "chatml",
+}
+
+
+def resolve_chat_template(model_name: str, override: str = None) -> str:
+    if override:
+        return override
+    if model_name in MODEL_CHAT_TEMPLATE_MAP:
+        return MODEL_CHAT_TEMPLATE_MAP[model_name]
+
+    # Support derived run names like "llama3-8B_sft-..._pt-..."
+    base_model_name = model_name.split("_", 1)[0]
+    if base_model_name in MODEL_CHAT_TEMPLATE_MAP:
+        return MODEL_CHAT_TEMPLATE_MAP[base_model_name]
+
+    warnings.warn(
+        f"No chat template mapping found for model '{model_name}'. "
+        f"Falling back to default template '{DEFAULT_CHAT_TEMPLATE}'.",
+        UserWarning,
+        stacklevel=2,
+    )
+    return DEFAULT_CHAT_TEMPLATE

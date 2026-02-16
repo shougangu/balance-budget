@@ -4,7 +4,13 @@ from tuning.config import MODELS_DIR
 from tuning.inference.config_inference import VLLMSamplingParamsConfig
 import os
 
-def load_vlm_model(model_name: str, n: int = None, temperature: float = None, max_logprobs = 20) -> LLM:
+
+def _get_templated_tokenizer(llm: LLM, chat_template: str = "chatml"):
+    tokenizer = llm.get_tokenizer()
+    return chat_template_func(tokenizer, chat_template=chat_template)
+
+
+def load_vlm_model(model_name: str, n: int = None, temperature: float = None, max_logprobs = 1) -> LLM:
     model_path = f"{MODELS_DIR}/{model_name}"
     print(f"Loading model from {model_path}")
 
@@ -29,9 +35,8 @@ def load_vlm_model(model_name: str, n: int = None, temperature: float = None, ma
 
     return llm, sampling_params
 
-def make_vllm_call(llm: LLM, sampling_params: SamplingParams, prompts: list[str]) -> list[str]:
-    tokenizer = llm.get_tokenizer()
-    tokenizer = chat_template_func(tokenizer)
+def make_vllm_call(llm: LLM, sampling_params: SamplingParams, prompts: list[str], chat_template: str = "chatml") -> list[str]:
+    tokenizer = _get_templated_tokenizer(llm, chat_template=chat_template)
     chat_template = tokenizer.chat_template
 
     outputs = llm.chat(prompts, sampling_params, chat_template=chat_template)
@@ -44,10 +49,9 @@ def make_vllm_call(llm: LLM, sampling_params: SamplingParams, prompts: list[str]
 
     return responses
 
-def tokenize_test_dataset(llm, messages):
+def tokenize_test_dataset(llm, messages, chat_template: str = "chatml"):
 
-    tokenizer = llm.get_tokenizer()
-    tokenizer = chat_template_func(tokenizer)
+    tokenizer = _get_templated_tokenizer(llm, chat_template=chat_template)
     tokenized_prompts = [
         tokenizer.apply_chat_template(message, tokenize=False, add_generation_prompt=True)
         for message in messages
@@ -55,9 +59,9 @@ def tokenize_test_dataset(llm, messages):
 
     return tokenized_prompts
 
-def generate_responses_vllm(llm: LLM, sampling_params: SamplingParams, prompts: list[str], dataset):
+def generate_responses_vllm(llm: LLM, sampling_params: SamplingParams, prompts: list[str], dataset, chat_template: str = "chatml"):
 
-    responses = make_vllm_call(llm, sampling_params, dataset)
+    responses = make_vllm_call(llm, sampling_params, dataset, chat_template=chat_template)
 
     results = []
     for prompt, response_group in zip(prompts, responses):
@@ -70,6 +74,5 @@ def generate_responses_vllm(llm: LLM, sampling_params: SamplingParams, prompts: 
             results.append({"prompt": prompt, "response": response_group})
         
     return results
-
 
 
