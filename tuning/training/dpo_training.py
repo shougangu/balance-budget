@@ -7,7 +7,7 @@ from tuning.training.config_training import PTRunConfig, LoraConfig, ModelLoadCo
 from tuning.training.perplexity_callback import PerplexityStoppingCallback
 from tuning.training.passk_callback import PassAtKStoppingCallback
 from tuning.training.model_utils import load_model_with_lora, save_trained_model
-from tuning.utils.utils import apply_chat_template_pt, chat_template_func
+from tuning.utils.utils import chat_template_func
 from trl import DPOTrainer, DPOConfig
 from typing import List, Optional
 from tuning.config import HF_MODEL_MAP, resolve_chat_template
@@ -44,8 +44,6 @@ def train_model_dpo(
     chat_template = resolve_chat_template(run_config.model_name, run_config.chat_template)
     tokenizer = chat_template_func(tokenizer, chat_template=chat_template)
 
-    dataset = apply_chat_template_pt(tokenizer, raw_dataset)
-
     callbacks = []
     if passk_config is not None and passk_config.enabled:
         passk_callback = PassAtKStoppingCallback(
@@ -68,10 +66,9 @@ def train_model_dpo(
     trainer = DPOTrainer(
         model = model,
         ref_model = None,
-        tokenizer = tokenizer, # processing_class ? 
-        beta = training_args.beta,
-        train_dataset = dataset["train"],
-        eval_dataset = dataset["test"],
+        tokenizer = tokenizer,
+        train_dataset = raw_dataset["train"],
+        eval_dataset = raw_dataset["test"],
         max_length = model_load_config.max_seq_length,
         callbacks = callbacks if callbacks else None,
         args = DPOConfig(**training_args.to_hf_args(output_dir=run_config.output_dir)),

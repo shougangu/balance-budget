@@ -4,7 +4,8 @@ from unsloth import FastLanguageModel, is_bfloat16_supported
 from tuning.config import MODELS_DIR, resolve_chat_template
 from tuning.data.train_dataset import get_train_dataset
 from tuning.training.config_training import PTRunConfig, LoraConfig, ModelLoadConfig, DatasetConfig, TrainingArgumentsConfig, dpo_batch_size, effective_batch_size
-from tuning.utils.utils import apply_chat_template_pt, chat_template_func, get_kto_rows
+from tuning.utils.utils import chat_template_func
+from datasets import Dataset, DatasetDict
 from trl import KTOTrainer, KTOConfig
 import pprint
 
@@ -43,19 +44,17 @@ def train_model_kto(
     chat_template = resolve_chat_template(run_config.model_name, run_config.chat_template)
     tokenizer = chat_template_func(tokenizer, chat_template=chat_template)
 
-    dataset = apply_chat_template_pt(tokenizer, dataset)
-    dataset = get_kto_rows(dataset)
+    def convert_to_kto(dataset_split):
+        rows = []
+        for row in dataset_split:
+            rows.append({"prompt": row["prompt"], "completion": row["chosen"], "label": True})
+            rows.append({"prompt": row["prompt"], "completion": row["rejected"], "label": False})
+        return Dataset.from_list(rows)
 
-    print(dataset["train"])
-    print(dataset["train"][0])
-
-
-    # mapping = {
-    #     "chosen" : "text_chosen",
-    #     "rejected" : "text_rejected",
-    # }
-    # dataset["train"].rename_columns(mapping)
-    # dataset["test"].rename_columns(mapping)
+    dataset = DatasetDict({
+        "train": convert_to_kto(dataset["train"]),
+        "test": convert_to_kto(dataset["test"]),
+    })
 
     pprint.pprint(dataset["train"][0])
     pprint.pprint(dataset)

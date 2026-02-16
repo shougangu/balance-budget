@@ -11,15 +11,26 @@ class TuluIFPT(HFDataset):
         prompt = examples["prompt"]
 
         return {
-            "system_message": SYSTEM_MESSAGE_INSTRUCTION_FOLLOWING,
-            "prompt": prompt,
-            "chosen": chosen[-1]["content"],
-            "rejected": rejected[-1]["content"]
-        } 
-    
+            "prompt": [
+                {"role": "system", "content": SYSTEM_MESSAGE_INSTRUCTION_FOLLOWING},
+                {"role": "user", "content": prompt},
+            ],
+            "chosen": [
+                {"role": "assistant", "content": chosen[-1]["content"]},
+            ],
+            "rejected": [
+                {"role": "assistant", "content": rejected[-1]["content"]},
+            ],
+        }
+
     def _filter_long(self, examples):
-        keep_chosen = len(examples["prompt"].split(" ")) + len(examples["chosen"].split(" ")) + len(examples["system_message"].split(" ")) < 1024
-        keep_rejected = len(examples["prompt"].split(" ")) + len(examples["rejected"].split(" ")) + len(examples["system_message"].split(" ")) < 1024
+        prompt_text = examples["prompt"][1]["content"]  # user message
+        system_text = examples["prompt"][0]["content"]  # system message
+        chosen_text = examples["chosen"][0]["content"]  # assistant message
+        rejected_text = examples["rejected"][0]["content"]  # assistant message
+
+        keep_chosen = len(prompt_text.split(" ")) + len(chosen_text.split(" ")) + len(system_text.split(" ")) < 1024
+        keep_rejected = len(prompt_text.split(" ")) + len(rejected_text.split(" ")) + len(system_text.split(" ")) < 1024
 
         return keep_chosen and keep_rejected
 
@@ -37,17 +48,22 @@ class TuluIFPT(HFDataset):
         longest_prompt = ""
         longest_response = ""
         for row in dataset:
-            total_len_c = len(row["prompt"].split(" ")) + len(row["chosen"].split(" ")) + len(row["system_message"].split(" "))
-            total_len_r = len(row["prompt"].split(" ")) + len(row["rejected"].split(" ")) + len(row["system_message"].split(" "))
-            
+            prompt_text = row["prompt"][1]["content"]
+            system_text = row["prompt"][0]["content"]
+            chosen_text = row["chosen"][0]["content"]
+            rejected_text = row["rejected"][0]["content"]
+
+            total_len_c = len(prompt_text.split(" ")) + len(chosen_text.split(" ")) + len(system_text.split(" "))
+            total_len_r = len(prompt_text.split(" ")) + len(rejected_text.split(" ")) + len(system_text.split(" "))
+
             if total_len_c > longest:
                 longest = total_len_c
-                longest_prompt = row["prompt"]
-                longest_response = row["chosen"]
+                longest_prompt = prompt_text
+                longest_response = chosen_text
             if total_len_r > longest:
                 longest = total_len_r
-                longest_prompt = row["prompt"]
-                longest_response = row["rejected"]
+                longest_prompt = prompt_text
+                longest_response = rejected_text
 
         print(f"Longest row: {longest}")
         print(f"Prompt: {longest_prompt}")

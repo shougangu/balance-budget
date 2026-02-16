@@ -6,7 +6,7 @@ from tuning.data.train_dataset import get_train_dataset
 from tuning.training.config_training import ModelLoadConfig, LoraConfig, SFTRunConfig, PTRunConfig, DPOTrainingConfig, TrainingArgumentsConfig, PassAtKConfig, sft_batch_size, effective_batch_size
 from tuning.training.perplexity_callback import PerplexityStoppingCallback
 from tuning.training.passk_callback import PassAtKStoppingCallback
-from tuning.utils.utils import apply_chat_template, chat_template_func
+from tuning.utils.utils import chat_template_func
 import json
 import sys
 from datasets import load_from_disk
@@ -52,15 +52,15 @@ if __name__ == '__main__':
     model_load_config.max_seq_length = 4096
 
     training_args = TrainingArgumentsConfig()
-    training_args.eval_steps = 64
+    training_args.eval_steps = 4
     training_args.per_device_train_batch_size = 16
     training_args.gradient_accumulation_steps = 1
 
     passk_config = PassAtKConfig( # this is just to dynamically view the pass@1 of ifeval
         target_pass_at_k=[0.1, 0.15, 0.2,0.25,0.3, 0.9],
-        k_values=[4],
-        n_samples=8,
-        num_prompts=541,
+        k_values=[1],
+        n_samples=1,
+        num_prompts=50,
         temperature=0.7,
         strict=True,
         enabled=True,

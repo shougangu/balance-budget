@@ -1,5 +1,3 @@
-from datasets import DatasetDict, Dataset
-
 
 def chat_template_func(tokenizer, chat_template="chatml"):
     from unsloth.chat_templates import get_chat_template
@@ -13,91 +11,35 @@ def chat_template_func(tokenizer, chat_template="chatml"):
 
     return tokenizer
 
+
 def apply_chat_template(tokenizer, dataset):
+    def _format(examples):
+        texts = [
+            tokenizer.apply_chat_template(convo, tokenize=False, add_generation_prompt=False)
+            for convo in examples["messages"]
+        ]
+        return {"text": texts}
 
-    def formatting_prompts_func(examples):
-        convos = examples["messages"]
-        texts = [tokenizer.apply_chat_template(convo, tokenize = False, add_generation_prompt = False) for convo in convos]
-        return { "text" : texts }
-
-    dataset = dataset.map(formatting_prompts_func, batched = True,)
-
-    return dataset
-
-def apply_chat_template_pt(tokenizer, dataset):
-
-    def _extract_completion(prompt_messages, assistant_content):
-        prompt_text = tokenizer.apply_chat_template(
-            prompt_messages, tokenize=False, add_generation_prompt=True
-        )
-        full_text = tokenizer.apply_chat_template(
-            prompt_messages + [{"role": "assistant", "content": assistant_content}],
-            tokenize=False,
-            add_generation_prompt=False,
-        )
-
-        if not full_text.startswith(prompt_text):
-            template_name = getattr(
-                tokenizer,
-                "chat_template",
-                getattr(tokenizer, "template_name", "<unknown>"),
-            )
-            raise ValueError(
-                f"Chat template prefix mismatch for template '{template_name}': "
-                f"full_text does not start with prompt_text "
-                f"(prompt_len={len(prompt_text)}, full_len={len(full_text)})."
-            )
-
-        return full_text[len(prompt_text):]
-
-    def formatting_prompts_func(example):
-        
-        prompt = example["prompt"]
-
-        if type(prompt) == str:
-            message = [
-                {"role": "system", "content": example["system_message"]},
-                {"role": "user", "content": example["prompt"]},
-            ]
-        elif type(prompt) == list:
-            message = prompt
-
-        example["prompt"] = tokenizer.apply_chat_template(
-            message, tokenize=False, add_generation_prompt=True
-        )
-        example["chosen"] = _extract_completion(message, example["chosen"])
-        example["rejected"] = _extract_completion(message, example["rejected"])
-
-        return example
-
-
-    dataset = dataset.map(formatting_prompts_func, batched = False)
+    dataset = dataset.map(_format, batched=True)
     return dataset
 
 
-def get_kto_rows(dataset):
-    def get_rows(dataset_split):
-        rows = []
-        for prompt, chosen, rejected in zip(dataset_split["prompt"], dataset_split["chosen"], dataset_split["rejected"]): 
-            rows.extend([
-                {
-                    "prompt": prompt[100:],
-                    "completion": chosen,
-                    "label": True,
-                },
-                {
-                    "prompt": prompt[100:],
-                    "completion": rejected,
-                    "label": False,
-                }
-            ])
+RESPONSE_DELIMITERS = {
+    "chatml": {
+        "instruction_part": "<|im_start|>user\n",
+        "response_part": "<|im_start|>assistant\n",
+    },
+    "llama-3.1": {
+        "instruction_part": "<|start_header_id|>user<|end_header_id|>\n\n",
+        "response_part": "<|start_header_id|>assistant<|end_header_id|>\n\n",
+    },
+}
 
-        return rows
-    
-    dataset_kto = DatasetDict()
-    dataset_kto["train"] = Dataset.from_list(get_rows(dataset["train"]))
-    dataset_kto["test"] = Dataset.from_list(get_rows(dataset["test"]))
 
-    print(dataset_kto["train"][0])
-    return dataset_kto
-        
+def get_response_delimiters(chat_template: str) -> dict:
+    if chat_template not in RESPONSE_DELIMITERS:
+        raise ValueError(
+            f"No response delimiters defined for chat template '{chat_template}'. "
+            f"Supported: {list(RESPONSE_DELIMITERS.keys())}"
+        )
+    return RESPONSE_DELIMITERS[chat_template]

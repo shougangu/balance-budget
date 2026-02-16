@@ -1,12 +1,11 @@
 
-from trl import SFTTrainer
-from transformers import TrainingArguments
+from trl import SFTTrainer, SFTConfig
 from tuning.data.train_dataset import get_train_dataset
 from tuning.training.config_training import ModelLoadConfig, LoraConfig, SFTRunConfig, TrainingArgumentsConfig, PassAtKConfig, PerplexityConfig, DatasetConfig, sft_batch_size, effective_batch_size
 from tuning.training.perplexity_callback import PerplexityStoppingCallback
 from tuning.training.passk_callback import PassAtKStoppingCallback
 from tuning.training.model_utils import load_model_with_lora, save_trained_model
-from tuning.utils.utils import apply_chat_template, chat_template_func
+from tuning.utils.utils import chat_template_func, apply_chat_template, get_response_delimiters
 from typing import List, Optional
 from pathlib import Path
 from tuning.config import HF_MODEL_MAP, MODELS_DIR, resolve_chat_template
@@ -32,7 +31,7 @@ def train_model_sft(
     tokenizer = chat_template_func(tokenizer, chat_template=chat_template)
 
     dataset = apply_chat_template(tokenizer, dataset)
-    print(f"Example SFT input after applying chat template:\n{dataset['train'][0]['text']}") 
+    print(f"Example SFT input:\n{dataset['train'][0]['text']}")
 
     callbacks = []
     if passk_config is not None and passk_config.enabled:
@@ -55,7 +54,7 @@ def train_model_sft(
 
     trainer = SFTTrainer(
         model = model,
-        tokenizer = tokenizer, # processing_class ? 
+        tokenizer = tokenizer,
         train_dataset = dataset["train"],
         eval_dataset = dataset["test"],
         dataset_text_field = "text",
@@ -63,10 +62,14 @@ def train_model_sft(
         dataset_num_proc = 2,
         packing = False,
         callbacks = callbacks if callbacks else None,
-        args = TrainingArguments(**training_args.to_hf_args(output_dir=run_config.output_dir)),
+        args = SFTConfig(
+            **training_args.to_hf_args(output_dir=run_config.output_dir),
+        ),
     )
-    
 
+    # Mask non-response tokens in labels using template-specific delimiters
+    from unsloth import train_on_responses_only
+    train_on_responses_only(trainer, **get_response_delimiters(chat_template))
 
     print(trainer.args.to_dict())
 

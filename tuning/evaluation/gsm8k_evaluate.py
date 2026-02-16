@@ -67,4 +67,4 @@ if __name__ == "__main__":
     import time
 
     print("Starting GSM8K evaluation")
-    # gsm8k_evaluate("llama3-8B_pt-gsm8k-10000")
+    gsm8k_evaluate("llama3-1B_1@0.25_sft-64")

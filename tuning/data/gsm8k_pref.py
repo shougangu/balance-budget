@@ -20,11 +20,17 @@ class GSM8KPT(HFDataset):
             for correct in correct_set:
                 for incorrect in incorrect_set:
                     pairwise_rows.append({
-                        "system_message": SYSTEM_MESSAGE_GSM8K,
-                        "prompt": prompt,
-                        "chosen": correct,
-                        "rejected": incorrect,
-                        "reference": ref
+                        "prompt": [
+                            {"role": "system", "content": SYSTEM_MESSAGE_GSM8K},
+                            {"role": "user", "content": prompt},
+                        ],
+                        "chosen": [
+                            {"role": "assistant", "content": correct},
+                        ],
+                        "rejected": [
+                            {"role": "assistant", "content": incorrect},
+                        ],
+                        "reference": ref,
                     })
         
         return pairwise_rows

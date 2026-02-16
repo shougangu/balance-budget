@@ -6,7 +6,7 @@ from tuning.data.train_dataset import get_train_dataset
 from tuning.training.config_training import ModelLoadConfig, LoraConfig, SFTRunConfig, PTRunConfig, DPOTrainingConfig, TrainingArgumentsConfig, PassAtKConfig, sft_batch_size, effective_batch_size
 from tuning.training.perplexity_callback import PerplexityStoppingCallback
 from tuning.training.passk_callback import PassAtKStoppingCallback
-from tuning.utils.utils import apply_chat_template, chat_template_func
+from tuning.utils.utils import chat_template_func
 import json
 import sys
 from datasets import load_from_disk
@@ -28,7 +28,7 @@ from tuning.utils.gpu import cleanup_gpu
 
 MODEL_TO_GPU_1 = {
     "llama3-1B": 0.75,
-    "llama3-3B": 0.75,
+    "llama3-3B": 0.5,
     "llama3-8B": 0.68,
     "qwen2-3B": 0.75
 }
@@ -43,7 +43,7 @@ if __name__ == '__main__':
     MODEL = "llama3-3B"
     gpu_utilisation_1 = MODEL_TO_GPU_1[MODEL]
     gpu_utilisation_2 = MODEL_TO_GPU_2[MODEL]
-    total_train_size = 29950  # 29980
+    total_train_size = 10000  # 29980
 
     dataset_config = DatasetConfig(
         dataset = "tuluif",
@@ -78,7 +78,7 @@ if __name__ == '__main__':
     passk_config = PassAtKConfig( # this is just to dynamically view the pass@1 of ifeval
         target_pass_at_k=[0.1, 0.15, 0.2,0.25,0.3, 0.9],
          # ---------------------------------------------
-        patience = 1000000,    ##### 
+        patience = 2,    ##### 
         min_increase = 0.02, ##### 
         k_values=[1], #####
         n_samples=1, #####

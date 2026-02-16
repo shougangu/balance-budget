@@ -1,6 +1,6 @@
 from tuning.inference.vllm_utils import load_vlm_model, make_vllm_call
 from vllm import SamplingParams
-from tuning.utils.utils import apply_chat_template, chat_template_func
+from tuning.utils.utils import chat_template_func
 from tuning.config import IFEVAL_OUTPUTS_DIR, RESPONSES_FILENAME
 from tuning.utils.gpt_utils import save_responses
 from datasets import load_from_disk, DatasetDict
