@@ -17,6 +17,7 @@ import wandb
 import gc
 import torch
 from pathlib import Path
+from tuning.training.wandb_utils import get_early_pairs, early_pair_tag
 
 def get_early_pairs(config):
     early_tuples = getattr(config, "early_tuples", None)

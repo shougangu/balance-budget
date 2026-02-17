@@ -1,3 +1,12 @@
+import os
+# Save full GPU list for multi-GPU inference workers, then restrict training to GPU 0.
+# Must happen before any CUDA/torch imports.
+_ALL_VISIBLE_GPUS = os.environ.get("CUDA_VISIBLE_DEVICES", "")
+if _ALL_VISIBLE_GPUS:
+    # Stash the full list so PassAtKCallback workers can find all GPUs
+    os.environ["CUDA_VISIBLE_DEVICES_ALL"] = _ALL_VISIBLE_GPUS
+    os.environ["CUDA_VISIBLE_DEVICES"] = _ALL_VISIBLE_GPUS.split(",")[0]
+
 from unsloth import FastLanguageModel, is_bfloat16_supported
 
 from trl import SFTTrainer
@@ -13,7 +22,6 @@ from datasets import load_from_disk
 from typing import List, Optional, Union
 from pathlib import Path
 from tuning.config import DATASETS_DIR, HF_MODEL_MAP
-import os
 from tuning.training.config_training import DatasetConfig, SFTRunConfig
 from tuning.config import MODELS_DIR
 from tuning.training.sft_training import train_model_sft
@@ -25,6 +33,7 @@ import json
 import wandb
 import gc
 from tuning.utils.gpu import cleanup_gpu
+from tuning.training.wandb_utils import get_early_pairs, early_pair_tag
 
 MODEL_TO_GPU_1 = {
     "llama3-1B": 0.75,
@@ -34,8 +43,8 @@ MODEL_TO_GPU_1 = {
 }
 MODEL_TO_GPU_2 = {
     "llama3-1B": 0.7,
-    "llama3-3B": 0.68,
-    "llama3-8B": 0.45,
+    "llama3-3B": 0.64, # this is really tight, can reach 80.7/81.6
+    "llama3-8B": 0.45, 
     "qwen2-3B": 0.6
 }
 
@@ -65,12 +74,12 @@ if __name__ == '__main__':
     lora_config = LoraConfig()
 
     model_load_config = ModelLoadConfig()
-    model_load_config.max_seq_length = 4096
+    # model_load_config.max_seq_length = 4096
 
     training_args = TrainingArgumentsConfig()
 
     # ---------------------------------------------
-    training_args.eval_steps = 4
+    training_args.eval_steps = 64
     training_args.per_device_train_batch_size = 16
     training_args.gradient_accumulation_steps = 1
     # ---------------------------------------------
@@ -78,23 +87,30 @@ if __name__ == '__main__':
     passk_config = PassAtKConfig( # this is just to dynamically view the pass@1 of ifeval
         target_pass_at_k=[0.1, 0.15, 0.2,0.25,0.3, 0.9],
          # ---------------------------------------------
-        early_tuples = [(1, 0.02)], #####
-        k_values=[1], #####
-        n_samples=1, #####
+        early_tuples = [(1, 0.02), (2,0.02), (3,0.02), (4,0.02), (5,0.02)], #####
+        k_values=[32,16,8,4,2,1], #####
+        n_samples=32, #/####
         num_prompts=270, #####
         vllm_gpu_memory_utilization=gpu_utilisation_1,
         # ---------------------------------------------
-        temperature=0.5,
+        temperature=0.7,
         strict=True,
         enabled=True,
+        num_inference_gpus=4,
     )
 
+    sft_early_pairs = get_early_pairs(passk_config)
     run = wandb.init(
-        name=run_config.run_name, 
+        name=run_config.model_name,
         project="tuning", 
-        # reinit=True,
+        job_type="sft",
+        tags=["passk", "sft", early_pair_tag(sft_early_pairs)],
         # Optional: Pass config here so it's logged even if training crashes early
-        config=run_config.__dict__ if hasattr(run_config, "__dict__") else {} 
+        config={
+            "pipeline_type": "passk",
+            "stage": "sft",
+            "early_pairs": sft_early_pairs,
+        },
     )
 
     with run:
@@ -172,14 +188,28 @@ if __name__ == '__main__':
         )
         # lora_config.use_gradient_checkpointing = True  # Reduce activation memory
         
-        model, tokenizer, trainer, _ = train_model_dpo(
-            run_config = run_config,
-            lora_config = lora_config,
-            model_load_config = model_load_config,
-            training_args = training_args,
-            passk_config = passk_config,
-            # perplexity_thresholds= [0.1] # dummy value to periodically check perplexities too
+        dpo_early_pairs = get_early_pairs(passk_config)
+        run = wandb.init(
+            name=run_config.model_name,
+            project="tuning",
+            job_type="dpo",
+            tags=["passk", "dpo", early_pair_tag(dpo_early_pairs)],
+            config={
+                "pipeline_type": "passk",
+                "stage": "dpo",
+                "early_pairs": dpo_early_pairs,
+            },
+            reinit=True,
         )
+        with run:
+            model, tokenizer, trainer, _ = train_model_dpo(
+                run_config = run_config,
+                lora_config = lora_config,
+                model_load_config = model_load_config,
+                training_args = training_args,
+                passk_config = passk_config,
+                # perplexity_thresholds= [0.1] # dummy value to periodically check perplexities too
+            )
         
         try:
             wandb.finish()
