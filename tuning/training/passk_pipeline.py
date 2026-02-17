@@ -26,6 +26,18 @@ import json
 import wandb
 import gc
 
+def get_early_pairs(config):
+    early_tuples = getattr(config, "early_tuples", None)
+    if not early_tuples:
+        return []
+    return [[int(p), float(t)] for p, t in early_tuples]
+
+
+def early_pair_tag(early_pairs):
+    if not early_pairs:
+        return "early_pair:none"
+    return "early_pair:" + ",".join(f"{p}@{t:g}" for p, t in early_pairs)
+
 
 if __name__ == '__main__':
     MODEL = "llama3-1B"
@@ -70,12 +82,18 @@ if __name__ == '__main__':
 
     
 
+    sft_early_pairs = get_early_pairs(passk_config)
     run = wandb.init(
-        name=run_config.run_name, 
+        name=run_config.model_name,
         project="tuning", 
-        # reinit=True,
+        job_type="sft",
+        tags=["passk", "sft", early_pair_tag(sft_early_pairs)],
         # Optional: Pass config here so it's logged even if training crashes early
-        config=run_config.__dict__ if hasattr(run_config, "__dict__") else {} 
+        config={
+            "pipeline_type": "passk",
+            "stage": "sft",
+            "early_pairs": sft_early_pairs,
+        },
     )
 
     with run:
@@ -150,15 +168,29 @@ if __name__ == '__main__':
             enabled=True,
         )
         
-        model, tokenizer, trainer, _ = train_model_dpo(
-            run_config = run_config,
-            lora_config = lora_config,
-            model_load_config = model_load_config,
-            training_args = training_args,
-            passk_config = passk_config,
-            vllm_gpu_memory_utilization=0.6,
-            # perplexity_thresholds= [0.1] # dummy value to periodically check perplexities too
+        dpo_early_pairs = get_early_pairs(passk_config)
+        run = wandb.init(
+            name=run_config.model_name,
+            project="tuning",
+            job_type="dpo",
+            tags=["passk", "dpo", early_pair_tag(dpo_early_pairs)],
+            config={
+                "pipeline_type": "passk",
+                "stage": "dpo",
+                "early_pairs": dpo_early_pairs,
+            },
+            reinit=True,
         )
+        with run:
+            model, tokenizer, trainer, _ = train_model_dpo(
+                run_config = run_config,
+                lora_config = lora_config,
+                model_load_config = model_load_config,
+                training_args = training_args,
+                passk_config = passk_config,
+                vllm_gpu_memory_utilization=0.6,
+                # perplexity_thresholds= [0.1] # dummy value to periodically check perplexities too
+            )
         
         # Clean up W&B after training
         try:
@@ -170,4 +202,3 @@ if __name__ == '__main__':
         gc.collect()
         torch.cuda.empty_cache()
         print(subprocess.check_output("nvidia-smi").decode()) # check GPU memory after cleanup
-

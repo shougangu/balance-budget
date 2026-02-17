@@ -14,7 +14,21 @@ from tuning.utils.gpu import cleanup_gpu
 import json
 import subprocess
 import wandb
+import gc
+import torch
 from pathlib import Path
+
+def get_early_pairs(config):
+    early_tuples = getattr(config, "early_tuples", None)
+    if not early_tuples:
+        return []
+    return [[int(p), float(t)] for p, t in early_tuples]
+
+
+def early_pair_tag(early_pairs):
+    if not early_pairs:
+        return "early_pair:none"
+    return "early_pair:" + ",".join(f"{p}@{t:g}" for p, t in early_pairs)
 
 MODEL_TO_GPU_1 = {
     "llama3-1B": 0.75,
@@ -76,10 +90,17 @@ if __name__ == '__main__':
     training_args.eval_steps = 32
     training_args.per_device_train_batch_size = 16
     training_args.gradient_accumulation_steps = 1
+    sft_early_pairs = get_early_pairs(perplexity_config)
     run = wandb.init(
-        name=run_config.run_name,
+        name=run_config.model_name,
         project="tuning",
-        config=run_config.__dict__ if hasattr(run_config, "__dict__") else {},
+        job_type="sft",
+        tags=["ppl", "sft", early_pair_tag(sft_early_pairs)],
+        config={
+            "pipeline_type": "ppl",
+            "stage": "sft",
+            "early_pairs": sft_early_pairs,
+        },
     )
 
     with run:
@@ -153,14 +174,28 @@ if __name__ == '__main__':
             enabled=True,
         )
 
-        model, tokenizer, trainer, _ = train_model_dpo(
-            run_config = run_config,
-            lora_config = lora_config,
-            model_load_config = model_load_config,
-            training_args = training_args,
-            perplexity_config = perplexity_config,
-            # passk_config = passk_config,
+        dpo_early_pairs = get_early_pairs(perplexity_config)
+        run = wandb.init(
+            name=run_config.model_name,
+            project="tuning",
+            job_type="dpo",
+            tags=["ppl", "dpo", early_pair_tag(dpo_early_pairs)],
+            config={
+                "pipeline_type": "ppl",
+                "stage": "dpo",
+                "early_pairs": dpo_early_pairs,
+            },
+            reinit=True,
         )
+        with run:
+            model, tokenizer, trainer, _ = train_model_dpo(
+                run_config = run_config,
+                lora_config = lora_config,
+                model_load_config = model_load_config,
+                training_args = training_args,
+                perplexity_config = perplexity_config,
+                # passk_config = passk_config,
+            )
 
         try:
             wandb.finish()
