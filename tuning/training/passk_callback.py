@@ -229,16 +229,20 @@ class PassAtKStoppingCallback(TrainerCallback):
 
     def _cleanup_ephemeral_vllm(self, llm):
         """Destroy an ephemeral vLLM engine and free GPU memory."""
+        from vllm.distributed.parallel_state import destroy_model_parallel
+        destroy_model_parallel()
         del llm
-        cleanup_gpu(destroy_vllm=True)
+        cleanup_gpu()
 
     def _cleanup_vllm(self):
         """Destroy the persistent vLLM engine and free GPU memory."""
         if self._vllm_engine is not None:
             print(f"[PassAtKCallback] Cleaning up persistent vLLM engine...")
+            from vllm.distributed.parallel_state import destroy_model_parallel
+            destroy_model_parallel()
             del self._vllm_engine
             self._vllm_engine = None
-            cleanup_gpu(destroy_vllm=True)
+            cleanup_gpu()
             print(f"[PassAtKCallback] vLLM engine cleaned up")
 
     def _format_outputs(self, outputs) -> List[Dict]:
