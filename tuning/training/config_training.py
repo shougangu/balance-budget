@@ -56,8 +56,8 @@ class TrainingArgumentsConfig(BaseModel):
     load_best_model_at_end: bool = False
     dataloader_drop_last: bool = False
     eval_accumulation_steps: int = 1
-    prediction_loss_only: bool = True
-    eval_do_concat_batches: bool = False
+    # prediction_loss_only: bool = True
+    # eval_do_concat_batches: bool = False
 
     def to_hf_args(self, output_dir: str) -> dict:
         """Return kwargs for TrainingArguments/DPOConfig constructor."""
@@ -100,6 +100,7 @@ class PassAtKConfig(BaseModel):
     enabled: bool = True  # Whether to enable the callback
     use_persistent_vllm: bool = True  # Keep vLLM engine alive between evals (saves cold-start time)
     vllm_gpu_memory_utilization: float = 0.4  # GPU memory fraction for vLLM (conservative for coexistence with training)
+    num_inference_gpus: int = 1  # Number of GPUs for data-parallel vLLM inference (>1 forces ephemeral mode)
 
 
 class PerplexityConfig(BaseModel):

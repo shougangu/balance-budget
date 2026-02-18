@@ -79,7 +79,7 @@ if __name__ == '__main__':
     training_args = TrainingArgumentsConfig()
 
     # ---------------------------------------------
-    training_args.eval_steps = 64
+    training_args.eval_steps = 1
     training_args.per_device_train_batch_size = 16
     training_args.gradient_accumulation_steps = 1
     # ---------------------------------------------
@@ -87,27 +87,28 @@ if __name__ == '__main__':
     passk_config = PassAtKConfig( # this is just to dynamically view the pass@1 of ifeval
         target_pass_at_k=[0.1, 0.15, 0.2,0.25,0.3, 0.9],
          # ---------------------------------------------
-        early_tuples = [(1, 0.02), (2,0.02), (3,0.02), (4,0.02), (5,0.02)], #####
-        k_values=[32,16,8,4,2,1], #####
+        early_tuples = [(1, 0.02)], #####
+        k_values=[32,1,16,8,4,2], #####
         n_samples=32, #/####
-        num_prompts=270, #####
+        num_prompts=1, #####
         vllm_gpu_memory_utilization=gpu_utilisation_1,
         # ---------------------------------------------
         temperature=0.7,
         strict=True,
         enabled=True,
-        num_inference_gpus=4,
+        num_inference_gpus=8,
     )
+    pass_tag = f"p{passk_config.k_values[0]}"
 
     sft_early_pairs = get_early_pairs(passk_config)
     run = wandb.init(
         name=run_config.model_name,
         project="tuning", 
         job_type="sft",
-        tags=["passk", "sft", early_pair_tag(sft_early_pairs)],
+        tags=["sft", pass_tag, early_pair_tag(sft_early_pairs)],
         # Optional: Pass config here so it's logged even if training crashes early
         config={
-            "pipeline_type": "passk",
+            "pipeline_type": pass_tag,
             "stage": "sft",
             "early_pairs": sft_early_pairs,
         },
@@ -177,15 +178,16 @@ if __name__ == '__main__':
         passk_config = PassAtKConfig( # this is just to dynamically view the pass@1 of ifeval
             target_pass_at_k=[1.2],
             # ----------------------------------------
-            k_values=[1], #####
-            n_samples=1, #####
-            num_prompts=541,
+            k_values=[32,1,16,8,4,2], #####
+            n_samples=32, #/####
+            num_prompts=270, #####
             vllm_gpu_memory_utilization=gpu_utilisation_2, #0.58
             # ----------------------------------------
             temperature=0.5,
             strict=True,
             enabled=True,
         )
+        
         # lora_config.use_gradient_checkpointing = True  # Reduce activation memory
         
         dpo_early_pairs = get_early_pairs(passk_config)
@@ -193,9 +195,9 @@ if __name__ == '__main__':
             name=run_config.model_name,
             project="tuning",
             job_type="dpo",
-            tags=["passk", "dpo", early_pair_tag(dpo_early_pairs)],
+            tags=["dpo", pass_tag, "("+checkpoint["threshold_value"]+")"],
             config={
-                "pipeline_type": "passk",
+                "pipeline_type": pass_tag,
                 "stage": "dpo",
                 "early_pairs": dpo_early_pairs,
             },

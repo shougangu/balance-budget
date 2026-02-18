@@ -11,4 +11,4 @@ def get_early_pairs(config: Any) -> list[list[float]]:
 def early_pair_tag(early_pairs: list[list[float]]) -> str:
     if not early_pairs:
         return "early_pair:none"
-    return "early_pair:" + ",".join(f"{int(p)}@{float(t):g}" for p, t in early_pairs)
+    return "(" + ",".join(f"{int(p)}@{float(t):g}" for p, t in early_pairs) + ")"

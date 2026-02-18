@@ -12,7 +12,7 @@ from tuning.utils.utils import chat_template_func
 from trl import DPOTrainer, DPOConfig
 from typing import List, Optional
 from tuning.config import HF_MODEL_MAP, resolve_chat_template
-
+import subprocess
 PatchDPOTrainer()
 
 
@@ -22,6 +22,7 @@ def train_model_dpo(
     model_load_config: ModelLoadConfig = None,
     training_args: DPOTrainingConfig = None,
     perplexity_config = None,  # PerplexityConfig object
+    perplexity_test_dataset = None,  # SFT-formatted test dataset for perplexity eval
     passk_config = None,  # PassAtKConfig object
 ):
     # Resolve model path: SFT checkpoint or base HF model
@@ -55,14 +56,14 @@ def train_model_dpo(
         )
         callbacks.append(passk_callback)
 
-    # if perplexity_config is not None and perplexity_config.enabled:
-    #     perplexity_callback = PerplexityStoppingCallback(
-    #         config=perplexity_config,
-    #         test_dataset=raw_dataset["test"],
-    #         tokenizer=tokenizer,
-    #         model_name=run_config.model_name,
-    #     )
-    #     callbacks.append(perplexity_callback)
+    if perplexity_config is not None and perplexity_config.enabled:
+        perplexity_callback = PerplexityStoppingCallback(
+            config=perplexity_config,
+            test_dataset=perplexity_test_dataset,
+            tokenizer=tokenizer,
+            model_name=run_config.model_name,
+        )
+        callbacks.append(perplexity_callback)
 
     trainer = DPOTrainer(
         model = model,
@@ -82,6 +83,7 @@ def train_model_dpo(
             wandb.run.tags = list(wandb.run.tags) + ["interrupted"]
         raise
     except torch.cuda.OutOfMemoryError:
+        print(subprocess.check_output("nvidia-smi").decode())
         if wandb.run:
             wandb.run.tags = list(wandb.run.tags) + ["oom"]
         raise

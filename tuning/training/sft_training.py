@@ -12,7 +12,7 @@ from pathlib import Path
 from tuning.config import HF_MODEL_MAP, MODELS_DIR, resolve_chat_template
 import torch
 import wandb
-
+import subprocess
 
 def train_model_sft(
     run_config: SFTRunConfig = None,
@@ -91,6 +91,7 @@ def train_model_sft(
             wandb.run.tags = list(wandb.run.tags) + ["interrupted"]
         raise
     except torch.cuda.OutOfMemoryError:
+        print(subprocess.check_output("nvidia-smi").decode())
         if wandb.run:
             wandb.run.tags = list(wandb.run.tags) + ["oom"]
         raise

@@ -164,6 +164,7 @@ if __name__ == '__main__':
             pft_method = "dpo",
             do_training = True,
         )
+        
         passk_config = PassAtKConfig(
             target_pass_at_k=[1.2],
             k_values=[1],
@@ -194,7 +195,7 @@ if __name__ == '__main__':
                 lora_config = lora_config,
                 model_load_config = model_load_config,
                 training_args = training_args,
-                perplexity_config = perplexity_config,
+                # perplexity_config = perplexity_config,
                 # passk_config = passk_config,
             )
 

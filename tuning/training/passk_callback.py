@@ -6,6 +6,7 @@ import shutil
 import os
 import json
 import datetime
+import multiprocessing as mp
 from typing import List, Dict
 from pathlib import Path
 from transformers import TrainerCallback, TrainerControl, TrainerState
@@ -39,6 +40,91 @@ def evaluate_single_response(inp: evaluation_lib.InputExample, response: str, st
     else:
         result = evaluation_lib.test_instruction_following_loose(inp, prompt_to_response)
     return result.follow_all_instructions
+
+
+def partition_prompts(messages: List, num_chunks: int) -> List[List]:
+    """Split a list of messages into num_chunks roughly-equal chunks.
+
+    If num_chunks > len(messages), only len(messages) chunks are returned (1 item each).
+    """
+    n = len(messages)
+    num_chunks = min(num_chunks, n)
+    chunks = []
+    base_size = n // num_chunks
+    remainder = n % num_chunks
+    start = 0
+    for i in range(num_chunks):
+        size = base_size + (1 if i < remainder else 0)
+        chunks.append(messages[start:start + size])
+        start += size
+    return chunks
+
+
+def _data_parallel_worker(worker_id, cuda_device, messages_chunk, base_model_hf, adapter_path,
+                          n_samples, temperature, max_tokens, chat_template,
+                          lora_max_rank, gpu_memory_utilization, result_queue):
+    """Worker function for data-parallel vLLM inference. Runs in a subprocess.
+
+    Each worker pins itself to a single GPU, creates an ephemeral vLLM engine,
+    runs inference on its chunk of prompts, and returns serialized outputs.
+
+    Args:
+        worker_id: Logical worker index (0, 1, 2...) used for result ordering.
+        cuda_device: The actual CUDA device string (e.g. "3") from SLURM allocation.
+    """
+    try:
+        os.environ["CUDA_VISIBLE_DEVICES"] = cuda_device
+
+        from vllm import LLM, SamplingParams
+        from vllm.lora.request import LoRARequest
+
+        llm = LLM(
+            model=base_model_hf,
+            enable_lora=True,
+            max_lora_rank=lora_max_rank,
+            max_loras=1,
+            gpu_memory_utilization=0.8,
+            trust_remote_code=True,
+            enforce_eager=True,
+        )
+
+        sampling_params = SamplingParams(
+            n=n_samples,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+
+        lora_request = LoRARequest(
+            lora_name=f"adapter_worker{worker_id}",
+            lora_int_id=1,
+            lora_path=adapter_path,
+        )
+
+        outputs = llm.chat(
+            messages_chunk,
+            sampling_params,
+            chat_template=chat_template,
+            lora_request=lora_request,
+        )
+
+        # Serialize outputs: extract text from each output
+        serialized = []
+        for output in outputs:
+            texts = [resp.text for resp in output.outputs]
+            serialized.append(texts)
+
+        # Cleanup
+        from vllm.distributed.parallel_state import destroy_model_parallel
+        destroy_model_parallel()
+        del llm
+        import gc
+        gc.collect()
+        torch.cuda.empty_cache()
+
+        result_queue.put((worker_id, serialized, None))
+    except Exception as e:
+        import traceback
+        result_queue.put((worker_id, None, traceback.format_exc()))
 
 
 class PassAtKStoppingCallback(TrainerCallback):
@@ -80,7 +166,22 @@ class PassAtKStoppingCallback(TrainerCallback):
         self._last_eval_step = -1
 
         # LoRA adapter / persistent vLLM settings
+        self.num_inference_gpus = config.num_inference_gpus
+        # Capture the full set of CUDA devices available for inference workers.
+        # The pipeline script saves the original SLURM allocation to CUDA_VISIBLE_DEVICES_ALL
+        # before restricting CUDA_VISIBLE_DEVICES to GPU 0 for training.
+        cuda_all = os.environ.get("CUDA_VISIBLE_DEVICES_ALL", "")
+        cuda_env = cuda_all or os.environ.get("CUDA_VISIBLE_DEVICES", "")
+        if cuda_env:
+            self._available_gpus = [g.strip() for g in cuda_env.split(",") if g.strip()]
+        else:
+            # No env var set — assume GPUs 0..N-1 are available
+            self._available_gpus = [str(i) for i in range(max(self.num_inference_gpus, 1))]
         self.use_persistent_vllm = config.use_persistent_vllm
+        if self.num_inference_gpus > 1 and self.use_persistent_vllm:
+            print(f"[PassAtKCallback] WARNING: num_inference_gpus={self.num_inference_gpus} requires ephemeral mode. "
+                  f"Overriding use_persistent_vllm=True → False.")
+            self.use_persistent_vllm = False
         self.base_model_hf = base_model_hf
         self.vllm_gpu_memory_utilization = config.vllm_gpu_memory_utilization
         self.lora_max_rank = getattr(config, 'lora_max_rank', 32)
@@ -110,7 +211,8 @@ class PassAtKStoppingCallback(TrainerCallback):
 
         print(f"[PassAtKCallback] n_samples={self.n_samples}, temperature={self.temperature}, strict={self.strict}")
         print(f"[PassAtKCallback] IFEval prompts loaded: {len(self.inputs_map)}, num_prompts={len(self.test_dataset)}")
-        print(f"[PassAtKCallback] vLLM mode: {mode_str}, base_model_hf={base_model_hf}, gpu_mem={self.vllm_gpu_memory_utilization}")
+        parallelism_str = f", data-parallel over {self.num_inference_gpus} GPUs" if self.num_inference_gpus > 1 else ""
+        print(f"[PassAtKCallback] vLLM mode: {mode_str}{parallelism_str}, base_model_hf={base_model_hf}, gpu_mem={self.vllm_gpu_memory_utilization}")
         print(f"[PassAtKCallback] Chat template: {self._chat_template}")
 
     def on_train_begin(self, args, state, control, **kwargs):
@@ -245,6 +347,84 @@ class PassAtKStoppingCallback(TrainerCallback):
             cleanup_gpu()
             print(f"[PassAtKCallback] vLLM engine cleaned up")
 
+    def _run_data_parallel_inference(self, adapter_path: str) -> List[Dict]:
+        """Run data-parallel vLLM inference across multiple GPUs.
+
+        Partitions prompts into chunks, spawns one vLLM worker process per GPU,
+        and merges results in original prompt order.
+
+        Uses self._available_gpus (SLURM-assigned device IDs) so workers pin
+        to the correct physical GPUs regardless of SLURM allocation.
+        """
+        all_messages = self.test_dataset["messages"]
+        all_prompts = self.test_dataset["prompt"]
+        num_gpus = self.num_inference_gpus
+
+        # Resolve actual CUDA device IDs from the SLURM/system allocation.
+        # The parent process may have restricted CUDA_VISIBLE_DEVICES to GPU 0
+        # for training, so we read the full list that was saved at init time.
+        available_gpus = self._available_gpus
+        if len(available_gpus) < num_gpus:
+            print(f"[PassAtKCallback] WARNING: requested {num_gpus} inference GPUs but only "
+                  f"{len(available_gpus)} available ({available_gpus}). Using {len(available_gpus)}.")
+            num_gpus = len(available_gpus)
+
+        message_chunks = partition_prompts(all_messages, num_gpus)
+        prompt_chunks = partition_prompts(all_prompts, num_gpus)
+        actual_num_workers = len(message_chunks)
+
+        print(f"[PassAtKCallback] Data-parallel inference: {len(all_messages)} prompts across {actual_num_workers} GPUs")
+        for i, chunk in enumerate(message_chunks):
+            print(f"[PassAtKCallback]   Worker {i} → CUDA device {available_gpus[i]}: {len(chunk)} prompts")
+
+        ctx = mp.get_context("spawn")
+        result_queue = ctx.Queue()
+
+        processes = []
+        for i in range(actual_num_workers):
+            p = ctx.Process(
+                target=_data_parallel_worker,
+                args=(
+                    i, available_gpus[i], message_chunks[i], self.base_model_hf,
+                    adapter_path, self.n_samples, self.temperature, self.max_tokens,
+                    self._chat_template, self.lora_max_rank,
+                    self.vllm_gpu_memory_utilization, result_queue,
+                ),
+            )
+            p.start()
+            processes.append(p)
+
+        # Collect results
+        results_by_worker = {}
+        for _ in range(actual_num_workers):
+            worker_id, serialized, error = result_queue.get()
+            if error is not None:
+                # Terminate remaining workers
+                for p in processes:
+                    if p.is_alive():
+                        p.terminate()
+                raise RuntimeError(f"[PassAtKCallback] Worker {worker_id} failed:\n{error}")
+            results_by_worker[worker_id] = serialized
+
+        for p in processes:
+            p.join(timeout=30)
+
+        # Merge results in original prompt order
+        merged = []
+        for worker_id in range(actual_num_workers):
+            chunk_texts = results_by_worker[worker_id]  # List of List[str]
+            chunk_prompts = prompt_chunks[worker_id]
+            for prompt, response_texts in zip(chunk_prompts, chunk_texts):
+                merged.append({"prompt": prompt, "responses": response_texts})
+
+        # Group by prompt (in case of duplicates)
+        grouped = defaultdict(list)
+        for item in merged:
+            grouped[item["prompt"]].extend(item["responses"])
+
+        print(f"[PassAtKCallback] Data-parallel inference complete: {len(grouped)} unique prompts")
+        return [{"prompt": p, "responses": resps} for p, resps in grouped.items()]
+
     def _format_outputs(self, outputs) -> List[Dict]:
         """Format vLLM outputs into grouped results for pass@k evaluation."""
         if self.n_samples == 1:
@@ -288,7 +468,16 @@ class PassAtKStoppingCallback(TrainerCallback):
         try:
             self._save_lora_adapter(model, temp_dir)
 
-            if self.use_persistent_vllm:
+            if self.num_inference_gpus > 1:
+                # Data-parallel mode: spawn N vLLM workers across GPUs
+                original_device = next(model.parameters()).device
+                model.cpu()
+                torch.cuda.empty_cache()
+                print(f"[PassAtKCallback] Training model offloaded to CPU for {self.num_inference_gpus}-GPU data-parallel inference")
+                model_results = self._run_data_parallel_inference(adapter_path=temp_dir)
+                model.to(original_device)
+                model.train()
+            elif self.use_persistent_vllm:
                 # Persistent mode: keep vLLM engine alive, swap LoRA adapters
                 try:
                     self._init_persistent_vllm()
