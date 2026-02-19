@@ -69,6 +69,21 @@ def apply_chat_template(tokenizer, dataset):
     return dataset
 
 
+STOP_TOKENS = {
+    "chatml": ["<|im_end|>", "<|end_of_text|>"],
+    "llama-3.1": ["<|eot_id|>", "<|end_of_text|>"],
+}
+
+
+def get_stop_tokens(chat_template: str) -> list[str]:
+    if chat_template not in STOP_TOKENS:
+        raise ValueError(
+            f"No stop tokens defined for chat template '{chat_template}'. "
+            f"Supported: {list(STOP_TOKENS.keys())}"
+        )
+    return STOP_TOKENS[chat_template]
+
+
 RESPONSE_DELIMITERS = {
     "chatml": {
         "instruction_part": "<|im_start|>user\n",

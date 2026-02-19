@@ -144,8 +144,11 @@ class SFTRunConfig(BaseModel):
     def _set_default_chat_template(self):
         if self.chat_template is None:
             self.chat_template = resolve_chat_template(self.model_name)
+        # Also set the global so inference configs auto-resolve
+        import tuning.config
+        tuning.config.DEFAULT_CHAT_TEMPLATE = self.chat_template
         return self
-    
+
     @property
     def run_name(self):
         if not self.dataset_config or not self.dataset_config.train_size:
@@ -179,6 +182,9 @@ class PTRunConfig(BaseModel):
     def _set_default_chat_template(self):
         if self.chat_template is None:
             self.chat_template = resolve_chat_template(self.model_name)
+        # Also set the global so inference configs auto-resolve
+        import tuning.config
+        tuning.config.DEFAULT_CHAT_TEMPLATE = self.chat_template
         return self
 
     @property

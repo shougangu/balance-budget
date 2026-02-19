@@ -179,3 +179,4 @@ cython_debug/
 tuning/analysis/gspread.json
 *.out
 unsloth_compiled_cache
+.claude/*

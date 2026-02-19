@@ -29,7 +29,7 @@ def run_inference_ifeval(model_name: str, n_samples: int = 1, temperature: float
         test_dataset = test_dataset.select(range(num_examples))
     resolved_template = resolve_chat_template(model_name, chat_template)
 
-    llm, sampling_params = load_vlm_model(model_name, n=n_samples, temperature=temperature)
+    llm, sampling_params = load_vlm_model(model_name, n=n_samples, temperature=temperature, chat_template=resolved_template)
     responses = generate_responses_vllm(
         llm=llm,
         sampling_params=sampling_params,

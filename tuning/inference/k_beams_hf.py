@@ -1,6 +1,6 @@
 from tuning.inference.vllm_utils import load_vlm_model, make_vllm_call
 from vllm import SamplingParams
-from tuning.utils.utils import chat_template_func
+from tuning.utils.utils import chat_template_func, get_stop_tokens
 from tuning.config import IFEVAL_OUTPUTS_DIR, RESPONSES_FILENAME
 from tuning.utils.gpt_utils import save_responses
 from datasets import load_from_disk, DatasetDict
@@ -8,6 +8,12 @@ import numpy as np
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch.nn.functional as F
+
+
+def _get_current_stop_tokens():
+    """Read stop tokens from the global DEFAULT_CHAT_TEMPLATE at runtime."""
+    import tuning.config
+    return get_stop_tokens(tuning.config.DEFAULT_CHAT_TEMPLATE)
 
 
 def get_response_logp_transformers(model, tokenizer, prompt_messages, response_text):
@@ -92,7 +98,7 @@ def get_response_logp(llm, prompt_messages, response_text=None):
             temperature=0,
             logprobs=1,
             max_tokens=4096,
-            stop=["<|eot_id|>", "<|end_of_text|>"]
+            stop=_get_current_stop_tokens()
         )
         prompt_str = tokenizer.apply_chat_template(prompt_messages, tokenize=False, add_generation_prompt=True)
         outputs = llm.generate(prompt_str, sampling_params)

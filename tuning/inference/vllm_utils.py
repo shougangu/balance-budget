@@ -10,7 +10,7 @@ def _get_templated_tokenizer(llm: LLM, chat_template: str = "chatml"):
     return chat_template_func(tokenizer, chat_template=chat_template)
 
 
-def load_vlm_model(model_name: str, n: int = None, temperature: float = None, max_logprobs = 1) -> LLM:
+def load_vlm_model(model_name: str, n: int = None, temperature: float = None, max_logprobs = 1, chat_template: str = None) -> LLM:
     model_path = f"{MODELS_DIR}/{model_name}"
     print(f"Loading model from {model_path}")
 
@@ -22,13 +22,16 @@ def load_vlm_model(model_name: str, n: int = None, temperature: float = None, ma
         max_logprobs = max_logprobs,
         gpu_memory_utilization=gpu_util
     )
-    
-    config = VLLMSamplingParamsConfig()
+
+    config_kwargs = {}
+    if chat_template is not None:
+        config_kwargs["chat_template"] = chat_template
+    config = VLLMSamplingParamsConfig(**config_kwargs)
     if n is not None:
         config.n = n
     if temperature is not None:
         config.temperature = temperature
-    
+
     sampling_params = SamplingParams(
         **config.model_dump()
     )

@@ -61,7 +61,6 @@ if __name__ == '__main__':
     )
 
     run_config = SFTRunConfig(
-        chat_template="chatml",
         dataset_config = dataset_config,
         model_name_hf = HF_MODEL_MAP[MODEL],  # Use HuggingFace model name, not local path
         model_name = MODEL,  # Base model name for output directory construction
@@ -79,7 +78,7 @@ if __name__ == '__main__':
     training_args = TrainingArgumentsConfig()
 
     # ---------------------------------------------
-    training_args.eval_steps = 1
+    training_args.eval_steps = 64
     training_args.per_device_train_batch_size = 16
     training_args.gradient_accumulation_steps = 1
     # ---------------------------------------------
@@ -87,10 +86,10 @@ if __name__ == '__main__':
     passk_config = PassAtKConfig( # this is just to dynamically view the pass@1 of ifeval
         target_pass_at_k=[0.1, 0.15, 0.2,0.25,0.3, 0.9],
          # ---------------------------------------------
-        early_tuples = [(1, 0.02)], #####
-        k_values=[32,1,16,8,4,2], #####
-        n_samples=32, #/####
-        num_prompts=1, #####
+        early_tuples = [(1, 0.02), (2,0.02), (3,0.02)], #####
+        k_values=[1], #####
+        n_samples=1, #/####
+        num_prompts=541, #####
         vllm_gpu_memory_utilization=gpu_utilisation_1,
         # ---------------------------------------------
         temperature=0.7,
@@ -166,7 +165,6 @@ if __name__ == '__main__':
             task_name = "ifeval"
         )
         run_config = PTRunConfig(
-            chat_template="chatml",
             dataset_config = dataset_config,
             model_name_hf = HF_MODEL_MAP[MODEL],  
             model_name = MODEL,  

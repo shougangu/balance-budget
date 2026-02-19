@@ -62,7 +62,8 @@ def partition_prompts(messages: List, num_chunks: int) -> List[List]:
 
 def _data_parallel_worker(worker_id, cuda_device, messages_chunk, base_model_hf, adapter_path,
                           n_samples, temperature, max_tokens, chat_template,
-                          lora_max_rank, gpu_memory_utilization, result_queue):
+                          lora_max_rank, gpu_memory_utilization, result_queue,
+                          stop_tokens=None):
     """Worker function for data-parallel vLLM inference. Runs in a subprocess.
 
     Each worker pins itself to a single GPU, creates an ephemeral vLLM engine,
@@ -88,11 +89,14 @@ def _data_parallel_worker(worker_id, cuda_device, messages_chunk, base_model_hf,
             enforce_eager=True,
         )
 
-        sampling_params = SamplingParams(
+        sp_kwargs = dict(
             n=n_samples,
             temperature=temperature,
             max_tokens=max_tokens,
         )
+        if stop_tokens:
+            sp_kwargs["stop"] = stop_tokens
+        sampling_params = SamplingParams(**sp_kwargs)
 
         lora_request = LoRARequest(
             lora_name=f"adapter_worker{worker_id}",
@@ -381,6 +385,11 @@ class PassAtKStoppingCallback(TrainerCallback):
         result_queue = ctx.Queue()
 
         processes = []
+        # Compute stop tokens here since subprocess won't have the global set
+        from tuning.utils.utils import get_stop_tokens
+        from tuning.config import DEFAULT_CHAT_TEMPLATE
+        stop_tokens = get_stop_tokens(DEFAULT_CHAT_TEMPLATE)
+
         for i in range(actual_num_workers):
             p = ctx.Process(
                 target=_data_parallel_worker,
@@ -389,6 +398,7 @@ class PassAtKStoppingCallback(TrainerCallback):
                     adapter_path, self.n_samples, self.temperature, self.max_tokens,
                     self._chat_template, self.lora_max_rank,
                     self.vllm_gpu_memory_utilization, result_queue,
+                    stop_tokens,
                 ),
             )
             p.start()
