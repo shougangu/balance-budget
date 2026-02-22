@@ -229,8 +229,7 @@ class PassAtKStoppingCallback(TrainerCallback):
     def on_train_end(self, args, state, control, **kwargs):
         """Cleanup persistent vLLM engine when training ends."""
         if self._last_eval_step != state.global_step:
-            if model is None:
-                model = kwargs.get("model")
+            model = kwargs.pop("model", None)
             if model is not None:
                 print(f"[PassAtKCallback] Running final pass@k evaluation at end of training (step {state.global_step})...")
                 self.on_evaluate(args, state, control, model=model, **kwargs)
@@ -387,8 +386,7 @@ class PassAtKStoppingCallback(TrainerCallback):
         processes = []
         # Compute stop tokens here since subprocess won't have the global set
         from tuning.utils.utils import get_stop_tokens
-        from tuning.config import DEFAULT_CHAT_TEMPLATE
-        stop_tokens = get_stop_tokens(DEFAULT_CHAT_TEMPLATE)
+        stop_tokens = get_stop_tokens()
 
         for i in range(actual_num_workers):
             p = ctx.Process(

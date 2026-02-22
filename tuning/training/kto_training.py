@@ -1,7 +1,7 @@
 import json
 import wandb
 from unsloth import FastLanguageModel, is_bfloat16_supported
-from tuning.config import MODELS_DIR, resolve_chat_template
+from tuning.config import MODELS_DIR
 from tuning.data.train_dataset import get_train_dataset
 from tuning.training.config_training import PTRunConfig, LoraConfig, ModelLoadConfig, DatasetConfig, TrainingArgumentsConfig, dpo_batch_size, effective_batch_size
 from tuning.utils.utils import chat_template_func
@@ -41,8 +41,7 @@ def train_model_kto(
         dtype = model_load_config.dtype,
         load_in_4bit = model_load_config.load_in_4bit,
     )
-    chat_template = resolve_chat_template(run_config.model_name, run_config.chat_template)
-    tokenizer = chat_template_func(tokenizer, chat_template=chat_template)
+    tokenizer = chat_template_func(tokenizer)
 
     def convert_to_kto(dataset_split):
         rows = []

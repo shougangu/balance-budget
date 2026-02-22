@@ -1,7 +1,7 @@
 import wandb
 import argparse
 from tuning.training.config_training import ModelLoadConfig, LoraConfig, PTRunConfig, DPOTrainingConfig, DatasetConfig, PassAtKConfig, PerplexityConfig, SFTRunConfig
-from tuning.config import HF_MODEL_MAP
+from tuning.config import HF_MODEL_MAP, set_chat_template
 from tuning.run_inference import run_inference
 from tuning.run_evaluation import run_evaluation
 from tuning.training.dpo_training import train_model_dpo
@@ -25,6 +25,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     print(args.__dict__)
+    set_chat_template(args.model)
     lora_config = LoraConfig()
     model_load_config = ModelLoadConfig()
     training_args = DPOTrainingConfig()

@@ -15,13 +15,12 @@ from tuning.data.train_dataset import get_train_dataset
 from tuning.training.config_training import ModelLoadConfig, LoraConfig, SFTRunConfig, PTRunConfig, DPOTrainingConfig, TrainingArgumentsConfig, PassAtKConfig, sft_batch_size, effective_batch_size
 from tuning.training.perplexity_callback import PerplexityStoppingCallback
 from tuning.training.passk_callback import PassAtKStoppingCallback
-from tuning.utils.utils import chat_template_func
 import json
 import sys
 from datasets import load_from_disk
 from typing import List, Optional, Union
 from pathlib import Path
-from tuning.config import DATASETS_DIR, HF_MODEL_MAP
+from tuning.config import DATASETS_DIR, HF_MODEL_MAP, set_chat_template
 from tuning.training.config_training import DatasetConfig, SFTRunConfig
 from tuning.config import MODELS_DIR
 from tuning.training.sft_training import train_model_sft
@@ -50,6 +49,7 @@ MODEL_TO_GPU_2 = {
 
 if __name__ == '__main__':
     MODEL = "llama3-3B"
+    set_chat_template(MODEL)
     gpu_utilisation_1 = MODEL_TO_GPU_1[MODEL]
     gpu_utilisation_2 = MODEL_TO_GPU_2[MODEL]
     total_train_size = 10240  # 29980
@@ -84,27 +84,27 @@ if __name__ == '__main__':
     # ---------------------------------------------
 
     passk_config = PassAtKConfig( # this is just to dynamically view the pass@1 of ifeval
-        target_pass_at_k=[0.1, 0.15, 0.2,0.25,0.3, 0.9],
+        target_pass_at_k=[1.2],
          # ---------------------------------------------
-        early_tuples = [(1, 0.02), (2,0.02), (3,0.02)], #####
+        early_tuples = [(100, 0.02), (200,0.02), (300,0.02)], #####
         k_values=[1], #####
         n_samples=1, #/####
         num_prompts=541, #####
         vllm_gpu_memory_utilization=gpu_utilisation_1,
         # ---------------------------------------------
-        temperature=0.7,
+        temperature=0.5,
         strict=True,
         enabled=True,
-        num_inference_gpus=8,
+        num_inference_gpus=1,
     )
     pass_tag = f"p{passk_config.k_values[0]}"
 
     sft_early_pairs = get_early_pairs(passk_config)
     run = wandb.init(
         name=run_config.model_name,
-        project="tuning", 
+        project="chat_templates", 
         job_type="sft",
-        tags=["sft", pass_tag, early_pair_tag(sft_early_pairs)],
+        tags=["sft", pass_tag, early_pair_tag(sft_early_pairs), "llama mask", "map_eos_token", "no EOS template", "no stop token id"],
         # Optional: Pass config here so it's logged even if training crashes early
         config={
             "pipeline_type": pass_tag,
@@ -176,9 +176,9 @@ if __name__ == '__main__':
         passk_config = PassAtKConfig( # this is just to dynamically view the pass@1 of ifeval
             target_pass_at_k=[1.2],
             # ----------------------------------------
-            k_values=[32,1,16,8,4,2], #####
-            n_samples=32, #/####
-            num_prompts=270, #####
+            k_values=[1], #####
+            n_samples=1, #/####
+            num_prompts=541, #####
             vllm_gpu_memory_utilization=gpu_utilisation_2, #0.58
             # ----------------------------------------
             temperature=0.5,
@@ -186,12 +186,12 @@ if __name__ == '__main__':
             enabled=True,
         )
         
-        # lora_config.use_gradient_checkpointing = True  # Reduce activation memory
+        lora_config.use_gradient_checkpointing = True  # Reduce activation memory
         
         dpo_early_pairs = get_early_pairs(passk_config)
         run = wandb.init(
             name=run_config.model_name,
-            project="tuning",
+            project="chat_templates",
             job_type="dpo",
             tags=["dpo", pass_tag, "("+checkpoint["threshold_value"]+")"],
             config={

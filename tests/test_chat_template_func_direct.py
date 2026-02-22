@@ -1,6 +1,7 @@
 import sys
 import types
 
+import tuning.config
 from tuning.utils import utils
 
 
@@ -26,11 +27,16 @@ def test_chat_template_func_direct_import_and_apply(monkeypatch):
     monkeypatch.setitem(sys.modules, "unsloth", fake_unsloth)
     monkeypatch.setitem(sys.modules, "unsloth.chat_templates", fake_chat_templates)
 
-    tokenizer = types.SimpleNamespace()
-    out = utils.chat_template_func(tokenizer, chat_template="llama")
+    original = tuning.config.DEFAULT_CHAT_TEMPLATE
+    try:
+        tuning.config.DEFAULT_CHAT_TEMPLATE = "llama"
+        tokenizer = types.SimpleNamespace()
+        out = utils.chat_template_func(tokenizer)
+    finally:
+        tuning.config.DEFAULT_CHAT_TEMPLATE = original
 
     assert out is tokenizer
     assert out.chat_template == "applied:llama"
     assert len(calls) == 1
     assert calls[0]["chat_template"] == "llama"
-    assert calls[0]["map_eos_token"] is False
+    assert calls[0]["map_eos_token"] is True

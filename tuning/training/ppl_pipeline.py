@@ -7,7 +7,7 @@ from tuning.training.config_training import (
     PerplexityConfig, DatasetConfig,
 )
 from tuning.training.perplexity_callback import PerplexityStoppingCallback
-from tuning.config import HF_MODEL_MAP
+from tuning.config import HF_MODEL_MAP, set_chat_template
 from tuning.training.sft_training import train_model_sft
 from tuning.training.dpo_training import train_model_dpo
 from tuning.utils.gpu import cleanup_gpu
@@ -18,18 +18,6 @@ import gc
 import torch
 from pathlib import Path
 from tuning.training.wandb_utils import get_early_pairs, early_pair_tag
-
-def get_early_pairs(config):
-    early_tuples = getattr(config, "early_tuples", None)
-    if not early_tuples:
-        return []
-    return [[int(p), float(t)] for p, t in early_tuples]
-
-
-def early_pair_tag(early_pairs):
-    if not early_pairs:
-        return "early_pair:none"
-    return "early_pair:" + ",".join(f"{p}@{t:g}" for p, t in early_pairs)
 
 MODEL_TO_GPU_1 = {
     "llama3-1B": 0.75,
@@ -46,6 +34,7 @@ MODEL_TO_GPU_2 = {
 
 if __name__ == '__main__':
     MODEL = "qwen2-3B"
+    set_chat_template(MODEL)
     gpu_utilisation_1 = MODEL_TO_GPU_1[MODEL]
     gpu_utilisation_2 = MODEL_TO_GPU_2[MODEL]
     total_train_size = 10240
@@ -57,7 +46,6 @@ if __name__ == '__main__':
     )
 
     run_config = SFTRunConfig(
-        chat_template="chatml",
         dataset_config = dataset_config,
         model_name_hf = HF_MODEL_MAP[MODEL],
         model_name = MODEL,
@@ -155,7 +143,6 @@ if __name__ == '__main__':
             task_name = "ifeval",
         )
         run_config = PTRunConfig(
-            chat_template = "chatml",
             dataset_config = dataset_config,
             model_name_hf = HF_MODEL_MAP[MODEL],
             model_name = MODEL,
