@@ -63,3 +63,9 @@ def resolve_chat_template(model_name: str, override: str = None) -> str:
         stacklevel=2,
     )
     return DEFAULT_CHAT_TEMPLATE
+
+
+def set_chat_template(model_name: str) -> str:
+    global DEFAULT_CHAT_TEMPLATE
+    DEFAULT_CHAT_TEMPLATE = resolve_chat_template(model_name)
+    return DEFAULT_CHAT_TEMPLATE

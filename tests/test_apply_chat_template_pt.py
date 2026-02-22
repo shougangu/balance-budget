@@ -1,17 +1,18 @@
 from datasets import Dataset, DatasetDict
 
+import tuning.config
 from tuning.utils import utils
 
 
 MODEL_TO_TEMPLATE = {
-    "llama3-8B": "llama",
+    "llama3-8B": "llama-3.1",
     "qwen2-7B": "chatml",
     "mistral-7b": "mistral",
 }
 
 TEMPLATE_ASSISTANT_TOKENS = {
     "chatml": ("<|assistant|>\n", "\n<|end|>"),
-    "llama": ("<|start_assistant|>", "<|eot|>"),
+    "llama-3.1": ("<|start_assistant|>", "<|eot|>"),
     "mistral": ("[/INST]", "</s>"),
 }
 
@@ -51,15 +52,16 @@ def _build_dataset():
 
 
 def test_apply_chat_template_pt_across_model_templates(monkeypatch):
-    def _fake_chat_template_func(tokenizer, chat_template="chatml"):
-        tokenizer.template_name = chat_template
+    def _fake_chat_template_func(tokenizer):
+        tokenizer.template_name = tuning.config.DEFAULT_CHAT_TEMPLATE
         return tokenizer
 
     monkeypatch.setattr(utils, "chat_template_func", _fake_chat_template_func)
 
     for model_name, chat_template in MODEL_TO_TEMPLATE.items():
+        tuning.config.DEFAULT_CHAT_TEMPLATE = chat_template
         tokenizer = FakeTokenizer()
-        tokenizer = utils.chat_template_func(tokenizer, chat_template=chat_template)
+        tokenizer = utils.chat_template_func(tokenizer)
         output = utils.apply_chat_template_pt(tokenizer, _build_dataset())
         assistant_prefix, assistant_suffix = TEMPLATE_ASSISTANT_TOKENS[chat_template]
         row0 = output["train"][0]
@@ -78,15 +80,16 @@ def test_apply_chat_template_pt_raises_clear_error_on_prefix_mismatch(monkeypatc
                 return f"WRAP:{text}"
             return text
 
-    def _fake_chat_template_func(tokenizer, chat_template="chatml"):
-        tokenizer.template_name = chat_template
+    def _fake_chat_template_func(tokenizer):
+        tokenizer.template_name = tuning.config.DEFAULT_CHAT_TEMPLATE
         return tokenizer
 
     monkeypatch.setattr(utils, "chat_template_func", _fake_chat_template_func)
 
     dataset = _build_dataset()
     tokenizer = MismatchTokenizer()
-    tokenizer = utils.chat_template_func(tokenizer, chat_template="chatml")
+    tuning.config.DEFAULT_CHAT_TEMPLATE = "chatml"
+    tokenizer = utils.chat_template_func(tokenizer)
 
     try:
         utils.apply_chat_template_pt(tokenizer, dataset)

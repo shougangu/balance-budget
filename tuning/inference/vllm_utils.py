@@ -5,12 +5,12 @@ from tuning.inference.config_inference import VLLMSamplingParamsConfig
 import os
 
 
-def _get_templated_tokenizer(llm: LLM, chat_template: str = "chatml"):
+def _get_templated_tokenizer(llm: LLM):
     tokenizer = llm.get_tokenizer()
-    return chat_template_func(tokenizer, chat_template=chat_template)
+    return chat_template_func(tokenizer)
 
 
-def load_vlm_model(model_name: str, n: int = None, temperature: float = None, max_logprobs = 1, chat_template: str = None) -> LLM:
+def load_vlm_model(model_name: str, n: int = None, temperature: float = None, max_logprobs=1) -> LLM:
     model_path = f"{MODELS_DIR}/{model_name}"
     print(f"Loading model from {model_path}")
 
@@ -19,14 +19,11 @@ def load_vlm_model(model_name: str, n: int = None, temperature: float = None, ma
 
     llm = LLM(
         model=model_path,
-        max_logprobs = max_logprobs,
+        max_logprobs=max_logprobs,
         gpu_memory_utilization=gpu_util
     )
 
-    config_kwargs = {}
-    if chat_template is not None:
-        config_kwargs["chat_template"] = chat_template
-    config = VLLMSamplingParamsConfig(**config_kwargs)
+    config = VLLMSamplingParamsConfig()
     if n is not None:
         config.n = n
     if temperature is not None:
@@ -38,8 +35,8 @@ def load_vlm_model(model_name: str, n: int = None, temperature: float = None, ma
 
     return llm, sampling_params
 
-def make_vllm_call(llm: LLM, sampling_params: SamplingParams, prompts: list[str], chat_template: str = "chatml") -> list[str]:
-    tokenizer = _get_templated_tokenizer(llm, chat_template=chat_template)
+def make_vllm_call(llm: LLM, sampling_params: SamplingParams, prompts: list[str]) -> list[str]:
+    tokenizer = _get_templated_tokenizer(llm)
     chat_template = tokenizer.chat_template
 
     outputs = llm.chat(prompts, sampling_params, chat_template=chat_template)
@@ -52,9 +49,9 @@ def make_vllm_call(llm: LLM, sampling_params: SamplingParams, prompts: list[str]
 
     return responses
 
-def tokenize_test_dataset(llm, messages, chat_template: str = "chatml"):
+def tokenize_test_dataset(llm, messages):
 
-    tokenizer = _get_templated_tokenizer(llm, chat_template=chat_template)
+    tokenizer = _get_templated_tokenizer(llm)
     tokenized_prompts = [
         tokenizer.apply_chat_template(message, tokenize=False, add_generation_prompt=True)
         for message in messages
@@ -62,9 +59,9 @@ def tokenize_test_dataset(llm, messages, chat_template: str = "chatml"):
 
     return tokenized_prompts
 
-def generate_responses_vllm(llm: LLM, sampling_params: SamplingParams, prompts: list[str], dataset, chat_template: str = "chatml"):
+def generate_responses_vllm(llm: LLM, sampling_params: SamplingParams, prompts: list[str], dataset):
 
-    responses = make_vllm_call(llm, sampling_params, dataset, chat_template=chat_template)
+    responses = make_vllm_call(llm, sampling_params, dataset)
 
     results = []
     for prompt, response_group in zip(prompts, responses):
@@ -77,5 +74,4 @@ def generate_responses_vllm(llm: LLM, sampling_params: SamplingParams, prompts: 
             results.append({"prompt": prompt, "response": response_group})
         
     return results
-
 

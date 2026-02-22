@@ -11,7 +11,7 @@ from tuning.training.model_utils import load_model_with_lora, save_trained_model
 from tuning.utils.utils import chat_template_func
 from trl import DPOTrainer, DPOConfig
 from typing import List, Optional
-from tuning.config import HF_MODEL_MAP, resolve_chat_template
+from tuning.config import HF_MODEL_MAP
 import subprocess
 PatchDPOTrainer()
 
@@ -43,8 +43,7 @@ def train_model_dpo(
         model_load_config=model_load_config,
         lora_config=lora_config,
     )
-    chat_template = resolve_chat_template(run_config.model_name, run_config.chat_template)
-    tokenizer = chat_template_func(tokenizer, chat_template=chat_template)
+    tokenizer = chat_template_func(tokenizer)
 
     callbacks = []
     if passk_config is not None and passk_config.enabled:
