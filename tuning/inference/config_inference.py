@@ -7,7 +7,7 @@ class VLLMSamplingParamsConfig(BaseModel):
     top_k: int = 150
     top_p: float = 0.9
     stop: list[str] = []
-    # stop_token_ids: list[int] = [128009]
+    # stop_token_ids: list[int] = [128009, 128001]
     # repetition_penalty: float = 1.1
     n: int = 1
 

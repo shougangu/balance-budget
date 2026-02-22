@@ -219,6 +219,17 @@ class PassAtKStoppingCallback(TrainerCallback):
         print(f"[PassAtKCallback] vLLM mode: {mode_str}{parallelism_str}, base_model_hf={base_model_hf}, gpu_mem={self.vllm_gpu_memory_utilization}")
         print(f"[PassAtKCallback] Chat template: {self._chat_template}")
 
+        # Log a sample formatted IFEval prompt to verify template
+        sample_messages = self.test_dataset["messages"][0]
+        sample_formatted = self.tokenizer.apply_chat_template(
+            sample_messages, tokenize=False, add_generation_prompt=True
+        )
+        print(f"\n{'='*60}")
+        print(f"[DEBUG] IFEval chat_template used for inference: {self._chat_template[:80]}...")
+        print(f"[DEBUG] Sample IFEval prompt (index 0):")
+        print(sample_formatted)
+        print(f"{'='*60}\n")
+
     def on_train_begin(self, args, state, control, **kwargs):
         if not self.model_name:
             self.model_name = kwargs.get("model")
@@ -300,16 +311,7 @@ class PassAtKStoppingCallback(TrainerCallback):
         lora_info = f", lora_id={self._lora_request_id}" if lora_request else ""
         print(f"[PassAtKCallback] Generating {len(self.test_dataset)} prompts x {self.n_samples} samples ({mode}{lora_info})...")
 
-        # Log a sample formatted IFEval prompt to verify template
-        sample_messages = self.test_dataset["messages"][0]
-        sample_formatted = self.tokenizer.apply_chat_template(
-            sample_messages, tokenize=False, add_generation_prompt=True
-        )
-        print(f"\n{'='*60}")
-        print(f"[DEBUG] IFEval chat_template used for inference: {self._chat_template[:80]}...")
-        print(f"[DEBUG] Sample IFEval prompt (index 0):")
-        print(sample_formatted)
-        print(f"{'='*60}\n")
+        
 
         outputs = llm.chat(
             self.test_dataset["messages"],
@@ -330,12 +332,45 @@ class PassAtKStoppingCallback(TrainerCallback):
             max_loras=1,
             gpu_memory_utilization=self.vllm_gpu_memory_utilization,
             trust_remote_code=True,
+            # Match persistent mode and avoid heavyweight CUDA graph capture.
+            enforce_eager=True,
         )
+
+    def _shutdown_llm_engine(self, llm):
+        """Best-effort shutdown for vLLM V0/V1 engine resources."""
+        engine = getattr(llm, "llm_engine", None)
+        if engine is None:
+            return
+
+        shutdown_errors = []
+
+        # vLLM V1 multiprocess path (engine_core client owns worker process).
+        engine_core = getattr(engine, "engine_core", None)
+        if engine_core is not None and hasattr(engine_core, "shutdown"):
+            try:
+                engine_core.shutdown()
+            except Exception as e:
+                shutdown_errors.append(f"engine_core.shutdown failed: {e}")
+
+        # vLLM V0 / in-proc path.
+        model_executor = getattr(engine, "model_executor", None)
+        if model_executor is not None and hasattr(model_executor, "shutdown"):
+            try:
+                model_executor.shutdown()
+            except Exception as e:
+                shutdown_errors.append(f"model_executor.shutdown failed: {e}")
+
+        if shutdown_errors:
+            print(f"[PassAtKCallback] WARNING: {'; '.join(shutdown_errors)}")
 
     def _cleanup_ephemeral_vllm(self, llm):
         """Destroy an ephemeral vLLM engine and free GPU memory."""
-        from vllm.distributed.parallel_state import destroy_model_parallel
-        destroy_model_parallel()
+        self._shutdown_llm_engine(llm)
+        try:
+            from vllm.distributed.parallel_state import destroy_model_parallel
+            destroy_model_parallel()
+        except Exception as e:
+            print(f"[PassAtKCallback] WARNING: destroy_model_parallel failed during ephemeral cleanup: {e}")
         del llm
         cleanup_gpu()
 
@@ -343,8 +378,12 @@ class PassAtKStoppingCallback(TrainerCallback):
         """Destroy the persistent vLLM engine and free GPU memory."""
         if self._vllm_engine is not None:
             print(f"[PassAtKCallback] Cleaning up persistent vLLM engine...")
-            from vllm.distributed.parallel_state import destroy_model_parallel
-            destroy_model_parallel()
+            self._shutdown_llm_engine(self._vllm_engine)
+            try:
+                from vllm.distributed.parallel_state import destroy_model_parallel
+                destroy_model_parallel()
+            except Exception as e:
+                print(f"[PassAtKCallback] WARNING: destroy_model_parallel failed during persistent cleanup: {e}")
             del self._vllm_engine
             self._vllm_engine = None
             cleanup_gpu()
@@ -482,9 +521,11 @@ class PassAtKStoppingCallback(TrainerCallback):
                 model.cpu()
                 torch.cuda.empty_cache()
                 print(f"[PassAtKCallback] Training model offloaded to CPU for {self.num_inference_gpus}-GPU data-parallel inference")
-                model_results = self._run_data_parallel_inference(adapter_path=temp_dir)
-                model.to(original_device)
-                model.train()
+                try:
+                    model_results = self._run_data_parallel_inference(adapter_path=temp_dir)
+                finally:
+                    model.to(original_device)
+                    model.train()
             elif self.use_persistent_vllm:
                 # Persistent mode: keep vLLM engine alive, swap LoRA adapters
                 try:
@@ -498,21 +539,29 @@ class PassAtKStoppingCallback(TrainerCallback):
                     original_device = next(model.parameters()).device
                     model.cpu()
                     torch.cuda.empty_cache()
-                    llm = self._create_ephemeral_vllm()
-                    model_results = self._run_vllm_inference(llm, adapter_path=temp_dir)
-                    self._cleanup_ephemeral_vllm(llm)
-                    model.to(original_device)
-                    model.train()
+                    llm = None
+                    try:
+                        llm = self._create_ephemeral_vllm()
+                        model_results = self._run_vllm_inference(llm, adapter_path=temp_dir)
+                    finally:
+                        if llm is not None:
+                            self._cleanup_ephemeral_vllm(llm)
+                        model.to(original_device)
+                        model.train()
             else:
                 # Ephemeral mode: create/destroy vLLM each eval
                 original_device = next(model.parameters()).device
                 model.cpu()
                 torch.cuda.empty_cache()
-                llm = self._create_ephemeral_vllm()
-                model_results = self._run_vllm_inference(llm, adapter_path=temp_dir)
-                self._cleanup_ephemeral_vllm(llm)
-                model.to(original_device)
-                model.train()
+                llm = None
+                try:
+                    llm = self._create_ephemeral_vllm()
+                    model_results = self._run_vllm_inference(llm, adapter_path=temp_dir)
+                finally:
+                    if llm is not None:
+                        self._cleanup_ephemeral_vllm(llm)
+                    model.to(original_device)
+                    model.train()
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
