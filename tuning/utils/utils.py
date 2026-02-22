@@ -17,6 +17,8 @@ LLAMA_31_SIMPLE_TEMPLATE = """\
 {%- endfor %}\
 {%- if add_generation_prompt %}\
     {{- '<|start_header_id|>assistant<|end_header_id|>\\n\\n' }}\
+{%- else %}\
+    {{- "<|end_of_text|>" }}\
 {%- endif %}\
 {% else %}{{- bos_token }}\
 {%- if messages[0]['from'] == 'system' %}\
@@ -33,6 +35,8 @@ LLAMA_31_SIMPLE_TEMPLATE = """\
 {%- endfor %}\
 {%- if add_generation_prompt %}\
     {{- '<|start_header_id|>assistant<|end_header_id|>\\n\\n' }}\
+{%- else %}\
+    {{- "<|end_of_text|>" }}\
 {%- endif %}\
 {% endif %}\
 """
