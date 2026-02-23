@@ -23,6 +23,7 @@ def train_model_sft(
     passk_config = None,  # PassAtKConfig object
 ):
     dataset = get_train_dataset(run_config)
+    raw_eval_dataset = dataset["test"]
 
     model, tokenizer = load_model_with_lora(
         model_path=run_config.model_name_hf,
@@ -48,7 +49,7 @@ def train_model_sft(
     if perplexity_config is not None and perplexity_config.enabled:
         perplexity_callback = PerplexityStoppingCallback(
             config=perplexity_config,
-            test_dataset=dataset["test"],
+            test_dataset=raw_eval_dataset,
             tokenizer=tokenizer,
             model_name=run_config.model_name,
         )

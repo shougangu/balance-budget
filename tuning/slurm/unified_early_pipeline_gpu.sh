@@ -11,4 +11,7 @@ set -euo pipefail
 cd "$SLURM_SUBMIT_DIR"
 export PYTHONUNBUFFERED=1
 
-python tuning/training/unified_early_pipeline.py "$@"
+python tuning/training/unified_early_pipeline.py \
+    --sft-passk-num-inference-gpus 4 \
+    --dpo-passk-num-inference-gpus 4 \
+    "$@"
