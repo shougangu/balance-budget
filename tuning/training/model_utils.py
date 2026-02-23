@@ -16,8 +16,8 @@ def load_model_with_lora(model_path, model_name, model_load_config, lora_config)
     )
 
     target_modules = list(lora_config.target_modules)
-    if model_name == "qwen2-7B":
-        target_modules = target_modules + ["embed_tokens", "lm_head"]
+    # if model_name == "qwen2-7B":
+    #     target_modules = target_modules + ["embed_tokens", "lm_head"]
 
     model = FastLanguageModel.get_peft_model(
         model,
@@ -38,5 +38,5 @@ def load_model_with_lora(model_path, model_name, model_load_config, lora_config)
 def save_trained_model(model, tokenizer, trainer, output_dir):
     """Save merged model and training config to output_dir."""
     model.save_pretrained_merged(output_dir, tokenizer, save_method="merged_16bit")
-    with open(f"{output_dir}/training_config.json", "w") as f:
+    with open(f"{output_dir}/training_config.j3son", "w") as f:
         json.dump(trainer.args.to_dict(), f, indent=4)

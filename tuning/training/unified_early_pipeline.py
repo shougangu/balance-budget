@@ -19,14 +19,14 @@ from pathlib import Path
 
 MODEL_TO_GPU_1 = {
     "llama3-1B": 0.75,
-    "llama3-3B": 0.65,
+    "llama3-3B": 0.65,    # (0.65 gives 76% peak with non-persistent vLLM with one 97% spike?)
     "llama3-8B": 0.68,
-    "qwen2-3B": 0.65,
+    "qwen2-3B": 0.65,     # (0.65 gives 76% peak with non-persistence but one 91% spike?)
     "qwen2-7B": 0.55,
 }
 MODEL_TO_GPU_2 = {
     "llama3-1B": 0.7,
-    "llama3-3B": 0.62,  # this is really tight, can reach 80.7/81.6
+    "llama3-3B": 0.62,  # can reach 
     "llama3-8B": 0.45,
     "qwen2-3B": 0.62,
     "qwen2-7B": 0.45,
@@ -124,6 +124,7 @@ def _parse_args(argv=None):
     parser.add_argument("--dpo-ppl-thresholds", type=float, nargs="+", default=[1.0])
     parser.add_argument("--dpo-ppl-num-samples", type=int, default=541)
     parser.add_argument("--dpo-ppl-early", type=parse_early_tuple, nargs="*", default=[])
+
 
     return parser.parse_args(argv)
 
@@ -392,14 +393,20 @@ def run_dpo(args, checkpoints):
                 perplexity_config=ppl_config,
             )
 
+        trainer.accelerator.free_memory()
         wandb.finish(quiet=True)
         del model, tokenizer, trainer, _
         cleanup_gpu()
         print(subprocess.check_output("nvidia-smi").decode())
+        import torch
+        alloc = torch.cuda.memory_allocated() / (1024**3)
+        reserved = torch.cuda.memory_reserved() / (1024**3)
+        print(f"[Memory] allocated={alloc:.1f}GiB reserved={reserved:.1f}GiB")
 
 
 def main():
     args = _parse_args()
+    print(args)
 
     if not any([args.run_sft, args.run_dpo, args.run_all]):
         args.run_sft = True

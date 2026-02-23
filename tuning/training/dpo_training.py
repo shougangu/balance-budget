@@ -9,7 +9,7 @@ from tuning.training.perplexity_callback import PerplexityStoppingCallback
 from tuning.training.passk_callback import PassAtKStoppingCallback
 from tuning.training.model_utils import load_model_with_lora, save_trained_model
 from tuning.utils.utils import chat_template_func
-from trl import DPOTrainer, DPOConfig
+from trl import DPOTrainer, DPOConfig # DPOConfig is a wrapper around TrainingArguments with some DPO-specific defaults
 from typing import List, Optional
 from tuning.config import HF_MODEL_MAP
 import subprocess
