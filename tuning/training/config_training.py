@@ -86,16 +86,20 @@ class DPOTrainingConfig(TrainingArgumentsConfig):
         return d
 
 
-class PassAtKConfig(BaseModel):
-    """Configuration for pass@k evaluation callback."""
-    target_pass_at_k: list[float] = [0.8]  # Target pass@k score to stop training (0.0 to 1.0)
-    early_tuples: list[tuple[int, float]] | None = None  # Each tuple: (patience, min_increase)
+class IFEvalConfig(BaseModel):
+    """Configuration for IFEval pass@k evaluation."""
     k_values: list[int] = [1]  # The k values for pass@k evaluation. First value is used for stopping.
     n_samples: int = 1  # Number of samples to generate per prompt
     num_prompts: int = 541  # Number of prompts to evaluate (subset for speed)
+    strict: bool = True  # Use strict (True) or loose (False) IFEval evaluation
+
+
+class PassAtKConfig(BaseModel):
+    """Configuration for generation-based evaluation callback."""
+    target_pass_at_k: list[float] = [0.8]  # Target pass@k score to stop training (0.0 to 1.0)
+    early_tuples: list[tuple[int, float]] | None = None  # Each tuple: (patience, min_increase)
     temperature: float = 0.5  # Sampling temperature for generation
     max_tokens: int = 1024  # Maximum tokens to generate per response
-    strict: bool = True  # Use strict (True) or loose (False) IFEval evaluation
     enabled: bool = True  # Whether to enable the callback
     use_persistent_vllm: bool = True  # Keep vLLM engine alive between evals (saves cold-start time)
     vllm_gpu_memory_utilization: float = 0.4  # GPU memory fraction for vLLM (conservative for coexistence with training)
