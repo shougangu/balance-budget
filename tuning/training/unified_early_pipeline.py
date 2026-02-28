@@ -2,14 +2,6 @@
 # ABOUTME: Supports SFT-only, DPO-only, and full SFT→DPO runs from a single command.
 
 import os
-# Save full GPU list for multi-GPU inference workers, then restrict training to GPU 0.
-# Must happen before any CUDA/torch imports.
-_ALL_VISIBLE_GPUS = os.environ.get("CUDA_VISIBLE_DEVICES", "")
-if _ALL_VISIBLE_GPUS:
-    os.environ["CUDA_VISIBLE_DEVICES_ALL"] = _ALL_VISIBLE_GPUS
-    os.environ["CUDA_VISIBLE_DEVICES"] = _ALL_VISIBLE_GPUS.split(",")[0]
-
-import unsloth  # noqa: F401 - must be imported before trl/transformers/peft
 import argparse
 import json
 import sys
@@ -17,20 +9,54 @@ import subprocess
 from pathlib import Path
 
 
+def _init_cuda_env():
+    """Restrict training to GPU 0 and save full GPU list for inference workers."""
+    all_gpus = os.environ.get("CUDA_VISIBLE_DEVICES", "")
+    if all_gpus:
+        os.environ["CUDA_VISIBLE_DEVICES_ALL"] = all_gpus
+        os.environ["CUDA_VISIBLE_DEVICES"] = all_gpus.split(",")[0]
+
+
+def _is_worker_mode():
+    """True when running as a training worker (needs CUDA), not as orchestrator or in tests."""
+    return ("--run-sft" in sys.argv or "--run-dpo" in sys.argv) and "--run-all" not in sys.argv
+
+
+if _is_worker_mode():
+    _init_cuda_env()
+    import unsloth  # noqa: F401 - must be imported before trl/transformers/peft
+
+
 MODEL_TO_GPU_1 = {
-    "llama3-1B": 0.75,
-    "llama3-3B": 0.65,    # (0.65 gives 76% peak with non-persistent vLLM with one 97% spike?)
-    "llama3-8B": 0.68,
-    "qwen2-3B": 0.65,     # (0.65 gives 76% peak with non-persistence but one 91% spike?)
-    "qwen2-7B": 0.55,
+    "llama3-1B": 0.5,
+    "llama3-3B": 0.5,    # (0.65 gives 76% peak with non-persistent vLLM with one 97% spike?)
+    "llama3-8B": 0.45,
+    "qwen2-3B": 0.5,     # (0.65 gives 76% peak with non-persistence but one 91% spike?)
+    "qwen2-7B": 0.5,
 }
 MODEL_TO_GPU_2 = {
-    "llama3-1B": 0.7,
-    "llama3-3B": 0.62,  # can reach 
-    "llama3-8B": 0.45,
-    "qwen2-3B": 0.62,
+    "llama3-1B": 0.45,
+    "llama3-3B": 0.45,  # can reach 
+    "llama3-8B": 0.4,
+    "qwen2-3B": 0.45,
     "qwen2-7B": 0.45,
 }
+
+
+MODEL_TO_GPU_1 = {
+"llama3-1B": 0.75,
+"llama3-3B": 0.65, # (0.65 gives 76% peak with non-persistent vLLM with one 97% spike?)
+"llama3-8B": 0.68,
+"qwen2-3B": 0.65, # (0.65 gives 76% peak with non-persistence but one 91% spike?)
+"qwen2-7B": 0.55,
+}
+# MODEL_TO_GPU_2 = {
+# "llama3-1B": 0.7,
+# "llama3-3B": 0.62, # can reach
+# "llama3-8B": 0.45,
+# "qwen2-3B": 0.62,
+# "qwen2-7B": 0.45,
+# }
 
 
 def parse_early_tuple(s):
@@ -292,6 +318,9 @@ def load_checkpoints(metadata_files, merge):
     checkpoints = []
     seen_paths = set()
     for path in metadata_files:
+        if not Path(path).is_file():
+            print(f"Warning: metadata file {path} does not exist, skipping")
+            continue
         with open(path) as f:
             for line in f:
                 row = json.loads(line)
@@ -311,8 +340,32 @@ def load_checkpoints(metadata_files, merge):
     return checkpoints
 
 
+def next_checkpoint(metadata_file):
+    """Return the first non-completed checkpoint row, or None."""
+    with open(metadata_file) as f:
+        for line in f:
+            row = json.loads(line)
+            if not row.get("completed"):
+                return row
+    return None
+
+
+def mark_completed(metadata_file, checkpoint_path):
+    """Mark a checkpoint as completed in the metadata file."""
+    with open(metadata_file) as f:
+        lines = f.readlines()
+    with open(metadata_file, "w") as f:
+        for line in lines:
+            row = json.loads(line)
+            if row["checkpoint_path"] == checkpoint_path:
+                row["completed"] = True
+            f.write(json.dumps(row) + "\n")
+
+
 def run_dpo(args, checkpoints):
     """Run DPO stage for each checkpoint in the list."""
+    import torch
+    torch.cuda.memory._record_memory_history(max_entries=100000)
     import wandb
     from tuning.config import HF_MODEL_MAP, set_chat_template
     from tuning.training.config_training import (
@@ -393,8 +446,10 @@ def run_dpo(args, checkpoints):
                 perplexity_config=ppl_config,
             )
 
-        trainer.accelerator.free_memory()
         wandb.finish(quiet=True)
+        del trainer.ref_model
+        del trainer.model
+        trainer.accelerator.free_memory()
         del model, tokenizer, trainer, _
         cleanup_gpu()
         print(subprocess.check_output("nvidia-smi").decode())
@@ -402,6 +457,10 @@ def run_dpo(args, checkpoints):
         alloc = torch.cuda.memory_allocated() / (1024**3)
         reserved = torch.cuda.memory_reserved() / (1024**3)
         print(f"[Memory] allocated={alloc:.1f}GiB reserved={reserved:.1f}GiB")
+    torch.cuda.memory._dump_snapshot("profile.pkl")
+    torch.cuda.memory._record_memory_history(enabled=None)
+
+
 
 
 def main():
