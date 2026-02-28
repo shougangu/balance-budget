@@ -13,6 +13,8 @@ from tuning.training.unified_early_pipeline import (
     _parse_args,
     next_checkpoint,
     mark_completed,
+    print_metadata_paths,
+    parse_metadata_from_output,
 )
 
 
@@ -248,3 +250,31 @@ class TestMetadataWorkQueue:
         assert row["data_points_seen"] == 512
         assert row["threshold_type"] == "pass_at_1"
         assert row["completed"] is True
+
+
+# ---------------------------------------------------------------------------
+# print_metadata_paths / parse_metadata_from_output
+# ---------------------------------------------------------------------------
+
+class TestMetadataIPC:
+    def test_print_metadata_paths(self, capsys, tmp_path):
+        paths = [str(tmp_path / "a.jsonl"), str(tmp_path / "b.jsonl")]
+        print_metadata_paths(paths)
+        captured = capsys.readouterr()
+        lines = [l for l in captured.out.splitlines() if l.startswith("METADATA_FILE:")]
+        assert len(lines) == 2
+        assert lines[0] == f"METADATA_FILE:{paths[0]}"
+        assert lines[1] == f"METADATA_FILE:{paths[1]}"
+
+    def test_parse_metadata_from_output(self, tmp_path):
+        output = f"Some log\nMETADATA_FILE:{tmp_path}/a.jsonl\nMore logs\nMETADATA_FILE:{tmp_path}/b.jsonl\n"
+        result = parse_metadata_from_output(output)
+        assert result == [f"{tmp_path}/a.jsonl", f"{tmp_path}/b.jsonl"]
+
+    def test_parse_metadata_empty_output(self):
+        assert parse_metadata_from_output("just logs\nno metadata\n") == []
+
+    def test_print_empty_list(self, capsys):
+        print_metadata_paths([])
+        captured = capsys.readouterr()
+        assert "METADATA_FILE:" not in captured.out
