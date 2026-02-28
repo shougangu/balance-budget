@@ -2,7 +2,7 @@
 from trl import SFTTrainer
 from transformers import TrainingArguments
 from tuning.data.train_dataset import get_train_dataset
-from tuning.training.config_training import ModelLoadConfig, LoraConfig, SFTRunConfig, TrainingArgumentsConfig, PassAtKConfig, PerplexityConfig, DatasetConfig, sft_batch_size, effective_batch_size
+from tuning.training.config_training import ModelLoadConfig, LoraConfig, SFTRunConfig, TrainingArgumentsConfig, PassAtKConfig, PerplexityConfig, DatasetConfig, IFEvalConfig, sft_batch_size, effective_batch_size
 from tuning.training.perplexity_callback import PerplexityStoppingCallback
 from tuning.training.passk_callback import PassAtKStoppingCallback
 from tuning.training.eval_strategy import IFEvalStrategy
@@ -22,6 +22,7 @@ def train_model_sft(
     training_args: TrainingArgumentsConfig = None,
     perplexity_config = None,  # PerplexityConfig object
     passk_config = None,  # PassAtKConfig object
+    ifeval_config = None,  # IFEvalConfig object
 ):
     dataset = get_train_dataset(run_config)
     raw_eval_dataset = dataset["test"]
@@ -39,11 +40,12 @@ def train_model_sft(
 
     callbacks = []
     if passk_config is not None and passk_config.enabled:
+        eval_cfg = ifeval_config or IFEvalConfig()
         ifeval_strategy = IFEvalStrategy(
-            k_values=passk_config.k_values,
-            n_samples=passk_config.n_samples,
-            strict=passk_config.strict,
-            num_prompts=passk_config.num_prompts,
+            k_values=eval_cfg.k_values,
+            n_samples=eval_cfg.n_samples,
+            strict=eval_cfg.strict,
+            num_prompts=eval_cfg.num_prompts,
             tokenizer=tokenizer,
         )
         passk_callback = PassAtKStoppingCallback(

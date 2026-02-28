@@ -163,15 +163,24 @@ def _sft_passk_config(args, gpu_util):
     return PassAtKConfig(
         target_pass_at_k=args.sft_passk_targets,
         early_tuples=args.sft_passk_early or None,
-        k_values=args.sft_passk_k_values,
-        n_samples=args.sft_passk_n_samples,
-        num_prompts=args.sft_passk_num_prompts,
         temperature=args.sft_passk_temperature,
-        strict=args.sft_passk_strict,
         enabled=True,
         num_inference_gpus=args.sft_passk_num_inference_gpus,
         use_persistent_vllm=args.sft_passk_persistent_vllm,
         vllm_gpu_memory_utilization=gpu_util,
+    )
+
+
+def _sft_ifeval_config(args):
+    """Return IFEvalConfig for SFT, or None if pass@k disabled."""
+    if not args.sft_enable_passk:
+        return None
+    from tuning.training.config_training import IFEvalConfig
+    return IFEvalConfig(
+        k_values=args.sft_passk_k_values,
+        n_samples=args.sft_passk_n_samples,
+        num_prompts=args.sft_passk_num_prompts,
+        strict=args.sft_passk_strict,
     )
 
 
@@ -196,15 +205,24 @@ def _dpo_passk_config(args, gpu_util):
     return PassAtKConfig(
         target_pass_at_k=args.dpo_passk_targets,
         early_tuples=args.dpo_passk_early or None,
-        k_values=args.dpo_passk_k_values,
-        n_samples=args.dpo_passk_n_samples,
-        num_prompts=args.dpo_passk_num_prompts,
         temperature=args.dpo_passk_temperature,
-        strict=args.dpo_passk_strict,
         enabled=True,
         num_inference_gpus=args.dpo_passk_num_inference_gpus,
         use_persistent_vllm=args.dpo_passk_persistent_vllm,
         vllm_gpu_memory_utilization=gpu_util,
+    )
+
+
+def _dpo_ifeval_config(args):
+    """Return IFEvalConfig for DPO, or None if pass@k disabled."""
+    if not args.dpo_enable_passk:
+        return None
+    from tuning.training.config_training import IFEvalConfig
+    return IFEvalConfig(
+        k_values=args.dpo_passk_k_values,
+        n_samples=args.dpo_passk_n_samples,
+        num_prompts=args.dpo_passk_num_prompts,
+        strict=args.dpo_passk_strict,
     )
 
 
@@ -221,16 +239,19 @@ def _dpo_ppl_config(args):
     )
 
 
-def _sft_tags(passk_config, ppl_config):
+def _sft_tags(passk_config, ppl_config, ifeval_config=None):
     """Build W&B tags for an SFT run."""
-    from tuning.training.wandb_utils import get_early_pairs, early_pair_tag
+    from tuning.training.wandb_utils import get_early_pairs, early_pair_tag, get_early_abs, early_abs_tag
     tags = ["sft"]
     if passk_config is not None:
-        tags.append(f"p{passk_config.k_values[0]}")
+        k_val = ifeval_config.k_values[0] if ifeval_config else 1
+        tags.append(f"p{k_val}")
         tags.append(early_pair_tag(get_early_pairs(passk_config)))
+        tags.append(early_abs_tag(get_early_abs(passk_config)))
     if ppl_config is not None:
         tags.append("ppl")
         tags.append(early_pair_tag(get_early_pairs(ppl_config)))
+        tags.append(early_abs_tag(get_early_abs(ppl_config)))
     if passk_config is None and ppl_config is None:
         tags.append("no_callbacks")
     return tags
@@ -274,7 +295,8 @@ def run_sft(args):
 
     passk_config = _sft_passk_config(args, gpu_util)
     ppl_config = _sft_ppl_config(args)
-    tags = _sft_tags(passk_config, ppl_config)
+    ifeval_config = _sft_ifeval_config(args)
+    tags = _sft_tags(passk_config, ppl_config, ifeval_config)
 
     with wandb.init(
         name=run_config.model_name,
@@ -290,6 +312,7 @@ def run_sft(args):
             training_args=training_args,
             passk_config=passk_config,
             perplexity_config=ppl_config,
+            ifeval_config=ifeval_config,
         )
 
     metadata_paths = [
@@ -444,10 +467,12 @@ def run_dpo(args):
 
     passk_config = _dpo_passk_config(args, gpu_util)
     ppl_config = _dpo_ppl_config(args)
+    ifeval_config = _dpo_ifeval_config(args)
 
     tags = ["dpo", str(checkpoint["threshold_value"])]
     if passk_config is not None:
-        tags.append(f"p{passk_config.k_values[0]}")
+        k_val = ifeval_config.k_values[0] if ifeval_config else 1
+        tags.append(f"p{k_val}")
     if ppl_config is not None:
         tags.append("ppl")
 
@@ -465,11 +490,10 @@ def run_dpo(args):
             training_args=training_args,
             passk_config=passk_config,
             perplexity_config=ppl_config,
+            ifeval_config=ifeval_config,
         )
 
     mark_completed(metadata_file, checkpoint["checkpoint_path"])
-
-
 
 
 def _build_base_cmd(argv):
@@ -497,7 +521,7 @@ def main():
     base_cmd = _build_base_cmd(sys.argv)
 
     # SFT subprocess
-    sft_cmd = [sys.executable] + base_cmd[1:] + ["--run-sft"]
+    sft_cmd = [sys.executable] + base_cmd + ["--run-sft"]
     print(f"[orchestrator] Running SFT: {' '.join(sft_cmd)}")
     result = subprocess.run(sft_cmd, capture_output=True, text=True)
     print(result.stdout)
@@ -514,7 +538,7 @@ def main():
     # DPO subprocess loop: one subprocess per checkpoint
     for metadata_file in all_files:
         while next_checkpoint(metadata_file) is not None:
-            dpo_cmd = [sys.executable] + base_cmd[1:] + [
+            dpo_cmd = [sys.executable] + base_cmd + [
                 "--run-dpo", "--metadata-file", metadata_file,
             ]
             print(f"[orchestrator] Running DPO: {' '.join(dpo_cmd)}")

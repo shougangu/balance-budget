@@ -4,7 +4,7 @@ import wandb
 from unsloth import PatchDPOTrainer
 from tuning.config import MODELS_DIR
 from tuning.data.train_dataset import get_train_dataset
-from tuning.training.config_training import PTRunConfig, LoraConfig, ModelLoadConfig, DatasetConfig, DPOTrainingConfig, SFTRunConfig, PassAtKConfig, PerplexityConfig, dpo_batch_size, effective_batch_size
+from tuning.training.config_training import PTRunConfig, LoraConfig, ModelLoadConfig, DatasetConfig, DPOTrainingConfig, SFTRunConfig, PassAtKConfig, PerplexityConfig, IFEvalConfig, dpo_batch_size, effective_batch_size
 from tuning.training.perplexity_callback import PerplexityStoppingCallback
 from tuning.training.passk_callback import PassAtKStoppingCallback
 from tuning.training.eval_strategy import IFEvalStrategy
@@ -24,6 +24,7 @@ def train_model_dpo(
     perplexity_config = None,  # PerplexityConfig object
     perplexity_test_dataset = None,  # SFT-formatted test dataset for perplexity eval
     passk_config = None,  # PassAtKConfig object
+    ifeval_config = None,  # IFEvalConfig object
 ):
     # Resolve model path: SFT checkpoint or base HF model
     if run_config.sft_run_config:
@@ -47,11 +48,12 @@ def train_model_dpo(
 
     callbacks = []
     if passk_config is not None and passk_config.enabled:
+        eval_cfg = ifeval_config or IFEvalConfig()
         ifeval_strategy = IFEvalStrategy(
-            k_values=passk_config.k_values,
-            n_samples=passk_config.n_samples,
-            strict=passk_config.strict,
-            num_prompts=passk_config.num_prompts,
+            k_values=eval_cfg.k_values,
+            n_samples=eval_cfg.n_samples,
+            strict=eval_cfg.strict,
+            num_prompts=eval_cfg.num_prompts,
             tokenizer=tokenizer,
         )
         passk_callback = PassAtKStoppingCallback(
@@ -138,12 +140,14 @@ if __name__ == "__main__":
         # Configure pass@k evaluation
         passk_config = PassAtKConfig(
             target_pass_at_k=[1.2],
+            temperature=0.7,
+            enabled=True,
+        )
+        ifeval_config = IFEvalConfig(
             k_values=[1],
             n_samples=1,
             num_prompts=32,
-            temperature=0.7,
             strict=True,
-            enabled=True,
         )
 
         train_model_dpo(

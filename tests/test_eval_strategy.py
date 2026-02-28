@@ -102,3 +102,37 @@ def test_callback_accepts_eval_strategy():
     params = list(sig.parameters.keys())
     assert "primary_eval" in params
     assert "monitor_evals" in params
+
+
+def test_passk_config_no_eval_fields():
+    """PassAtKConfig should not have eval-specific fields."""
+    from tuning.training.config_training import PassAtKConfig
+    config = PassAtKConfig()
+    assert not hasattr(config, "strict"), "strict should be on IFEvalConfig"
+    assert not hasattr(config, "k_values"), "k_values should be on IFEvalConfig"
+    assert not hasattr(config, "n_samples"), "n_samples should be on IFEvalConfig"
+    assert not hasattr(config, "num_prompts"), "num_prompts should be on IFEvalConfig"
+
+
+def test_ifeval_config_exists():
+    """IFEvalConfig should exist with the eval-specific fields."""
+    from tuning.training.config_training import IFEvalConfig
+    config = IFEvalConfig()
+    assert hasattr(config, "k_values")
+    assert hasattr(config, "n_samples")
+    assert hasattr(config, "strict")
+    assert hasattr(config, "num_prompts")
+
+
+def test_sft_training_imports_eval_strategy():
+    """sft_training should import from eval_strategy."""
+    import ast
+    with open("tuning/training/sft_training.py") as f:
+        source = f.read()
+    tree = ast.parse(source)
+    imports = [
+        node for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom) and node.module
+        and "eval_strategy" in node.module
+    ]
+    assert len(imports) > 0, "sft_training.py should import from eval_strategy"
