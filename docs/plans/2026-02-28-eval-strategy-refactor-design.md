@@ -34,6 +34,15 @@ class EvalStrategy(ABC):
 3. Each monitor eval: get prompts → vLLM inference → score → log to wandb
 4. Cleanup
 
+## Checkpoint Labels
+
+Labels include the eval metric prefix for consistency:
+- Absolute threshold: `p@1-0.5` (unchanged)
+- Patience early tuple: `p@1-3@0.5` (adds metric prefix, was `3@0.5`)
+
+The eval strategy provides a `label_prefix` property (e.g., `"p@1"`) so the callback
+can construct labels generically: `f"{prefix}-{threshold}"` or `f"{prefix}-{patience}@{min_increase}"`.
+
 ## Files
 
 - `tuning/training/eval_strategy.py` — ABC + `IFEvalStrategy`
