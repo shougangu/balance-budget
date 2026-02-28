@@ -1,10 +1,11 @@
+# ABOUTME: HuggingFace TrainerCallback that runs vLLM inference during training.
+# ABOUTME: Saves checkpoints at metric sweetspots using pluggable EvalStrategy objects.
+
 import torch
-import numpy as np
 import wandb
 import tempfile
 import shutil
 import os
-import json
 import datetime
 import multiprocessing as mp
 from typing import List, Dict
@@ -15,31 +16,11 @@ from collections import defaultdict
 from vllm import LLM, SamplingParams
 from vllm.lora.request import LoRARequest
 
-from instruction_following_eval import evaluation_lib
-from tuning.data.test_dataset import get_ifeval_test_dataset
-from tuning.config import MODELS_DIR, MODELS_METADATA_DIR
+from tuning.config import MODELS_METADATA_DIR
 from tuning.inference.config_inference import VLLMSamplingParamsConfig
 from tuning.utils.gpu import cleanup_gpu
-from tuning.training.callback_utils import save_sweetspot_checkpoint, compute_data_points_seen
-
-BASE_DIR = Path('/home/shougan/projects/aip-fredashi/shougan/balance-budget')
-IFEVAL_INPUT_PATH = BASE_DIR / "instruction_following_eval/data/input_data.jsonl"
-
-def pass_at_k(n: int, c: int, k: int) -> float:
-    """Calculate pass@k: probability that at least one of k samples is correct."""
-    if n - c < k:
-        return 1.0
-    return 1.0 - np.prod(1.0 - k / np.arange(n - c + 1, n + 1))
-
-
-def evaluate_single_response(inp: evaluation_lib.InputExample, response: str, strict: bool = True) -> bool:
-    """Evaluate a single response using the pre-built IFEval functions."""
-    prompt_to_response = {inp.prompt: response}
-    if strict:
-        result = evaluation_lib.test_instruction_following_strict(inp, prompt_to_response)
-    else:
-        result = evaluation_lib.test_instruction_following_loose(inp, prompt_to_response)
-    return result.follow_all_instructions
+from tuning.training.callback_utils import save_sweetspot_checkpoint
+from tuning.training.eval_strategy import EvalStrategy
 
 
 def partition_prompts(messages: List, num_chunks: int) -> List[List]:
@@ -133,7 +114,7 @@ def _data_parallel_worker(worker_id, cuda_device, messages_chunk, base_model_hf,
 
 class PassAtKStoppingCallback(TrainerCallback):
     """
-    Save checkpoints at pass@k sweetspots for downstream runs.
+    Save checkpoints at eval metric sweetspots for downstream runs.
 
     Implements the "Fork Strategy": training continues through all thresholds,
     saving checkpoints at each sweetspot without stopping. The final threshold
@@ -152,22 +133,24 @@ class PassAtKStoppingCallback(TrainerCallback):
         tokenizer,
         model_name: str,
         base_model_hf: str,
+        primary_eval: EvalStrategy,
+        monitor_evals: list[EvalStrategy] = None,
     ):
         # Sort thresholds in descending order (hardest to easiest: 0.7, 0.5, 0.3)
         # Higher pass@k = harder to reach, so we process from largest to smallest
         self.target_pass_at_k_thresholds = sorted(config.target_pass_at_k, reverse=True)
         self.early_tuples = list(config.early_tuples) if config.early_tuples else None
         self.tokenizer = tokenizer
-        self.k_values = config.k_values
-        self.stopping_k = self.k_values[0]  # First k value is used for stopping
-        self.n_samples = config.n_samples
         self.temperature = config.temperature
         self.max_tokens = config.max_tokens
-        self.strict = config.strict
         self.model_name = model_name
         self.metadata_path = None
         self.prevResults = []
         self._last_eval_step = -1
+
+        # Eval strategies
+        self.primary_eval = primary_eval
+        self.monitor_evals = monitor_evals or []
 
         # LoRA adapter / persistent vLLM settings
         self.num_inference_gpus = config.num_inference_gpus
@@ -193,40 +176,32 @@ class PassAtKStoppingCallback(TrainerCallback):
         self._lora_request_id = 0
         self._chat_template = self.tokenizer.chat_template
 
-        self.test_dataset = get_ifeval_test_dataset()
-        if config.num_prompts is not None:
-            self.test_dataset = self.test_dataset.select(range(min(config.num_prompts, len(self.test_dataset))))
-
-        # Load IFEval inputs for evaluation
-        self.inputs_map = {
-            inp.prompt: inp
-            for inp in evaluation_lib.read_prompt_list(str(IFEVAL_INPUT_PATH))
-        }
+        # n_samples from primary eval for vLLM sampling
+        self.n_samples = primary_eval.n_samples
 
         mode_str = "persistent" if self.use_persistent_vllm else "non-persistent"
         if not self.early_tuples:
-            print(f"[PassAtKCallback] Initialized with pass@{self.stopping_k} thresholds={self.target_pass_at_k_thresholds}")
+            print(f"[PassAtKCallback] Initialized with {primary_eval.label_prefix} thresholds={self.target_pass_at_k_thresholds}")
             print(f"[PassAtKCallback] Training will stop when hardest threshold is reached: {self.target_pass_at_k_thresholds[0]}")
-            print(f"[PassAtKCallback] k_values={self.k_values} (stopping on k={self.stopping_k})")
         else:
             print(f"[PassAtKCallback] Initialized with early_tuples={self.early_tuples}")
             print(f"[PassAtKCallback] Training will stop when all early_tuples have triggered")
-            print(f"[PassAtKCallback] k_values={self.k_values} (stopping on k={self.stopping_k})")
 
-        print(f"[PassAtKCallback] n_samples={self.n_samples}, temperature={self.temperature}, strict={self.strict}")
-        print(f"[PassAtKCallback] IFEval prompts loaded: {len(self.inputs_map)}, num_prompts={len(self.test_dataset)}")
+        print(f"[PassAtKCallback] primary_eval={primary_eval.__class__.__name__}, "
+              f"monitor_evals={[e.__class__.__name__ for e in self.monitor_evals]}")
+        print(f"[PassAtKCallback] n_samples={self.n_samples}, temperature={self.temperature}")
         parallelism_str = f", data-parallel over {self.num_inference_gpus} GPUs" if self.num_inference_gpus > 1 else ""
         print(f"[PassAtKCallback] vLLM mode: {mode_str}{parallelism_str}, base_model_hf={base_model_hf}, gpu_mem={self.vllm_gpu_memory_utilization}")
         print(f"[PassAtKCallback] Chat template: {self._chat_template}")
 
-        # Log a sample formatted IFEval prompt to verify template
-        sample_messages = self.test_dataset["messages"][0]
+        # Log a sample formatted prompt to verify template
+        sample_messages = primary_eval.get_test_messages()[0]
         sample_formatted = self.tokenizer.apply_chat_template(
             sample_messages, tokenize=False, add_generation_prompt=True
         )
         print(f"\n{'='*60}")
-        print(f"[DEBUG] IFEval chat_template used for inference: {self._chat_template[:80]}...")
-        print(f"[DEBUG] Sample IFEval prompt (index 0):")
+        print(f"[DEBUG] chat_template used for inference: {self._chat_template[:80]}...")
+        print(f"[DEBUG] Sample prompt (index 0):")
         print(sample_formatted)
         print(f"{'='*60}\n")
 
@@ -242,10 +217,10 @@ class PassAtKStoppingCallback(TrainerCallback):
         if self._last_eval_step != state.global_step:
             model = kwargs.pop("model", None)
             if model is not None:
-                print(f"[PassAtKCallback] Running final pass@k evaluation at end of training (step {state.global_step})...")
+                print(f"[PassAtKCallback] Running final evaluation at end of training (step {state.global_step})...")
                 self.on_evaluate(args, state, control, model=model, **kwargs)
             else:
-                print("[PassAtKCallback] Warning: model is None at on_train_end, skipping final pass@k evaluation")
+                print("[PassAtKCallback] Warning: model is None at on_train_end, skipping final evaluation")
 
         self._cleanup_vllm()
 
@@ -285,14 +260,13 @@ class PassAtKStoppingCallback(TrainerCallback):
             print(f"[PassAtKCallback] Model does not have save_pretrained, using merged method with lora save")
             model.save_pretrained_merged(adapter_dir, self.tokenizer, save_method="lora")
         # Save tokenizer so vLLM doesn't warn about missing tokenizer in adapter dir
-        
         self.tokenizer.save_pretrained(adapter_dir)
         print(f"[PassAtKCallback] LoRA adapter saved")
 
-    def _run_vllm_inference(self, llm, adapter_path: str = None) -> List[Dict]:
+    def _run_vllm_inference(self, llm, eval_strategy: EvalStrategy, adapter_path: str = None) -> List[Dict]:
         """Run inference on a vLLM engine, optionally with a LoRA adapter."""
         inference_config = VLLMSamplingParamsConfig(
-            n=self.n_samples,
+            n=eval_strategy.n_samples,
             temperature=self.temperature,
             max_tokens=self.max_tokens,
         )
@@ -307,20 +281,19 @@ class PassAtKStoppingCallback(TrainerCallback):
                 lora_path=adapter_path,
             )
 
+        test_messages = eval_strategy.get_test_messages()
         mode = "persistent" if self.use_persistent_vllm else "ephemeral"
         lora_info = f", lora_id={self._lora_request_id}" if lora_request else ""
-        print(f"[PassAtKCallback] Generating {len(self.test_dataset)} prompts x {self.n_samples} samples ({mode}{lora_info})...")
-
-        
+        print(f"[PassAtKCallback] Generating {len(test_messages)} prompts x {eval_strategy.n_samples} samples ({mode}{lora_info})...")
 
         outputs = llm.chat(
-            self.test_dataset["messages"],
+            test_messages,
             sampling_params,
             chat_template=self._chat_template,
             lora_request=lora_request,
         )
 
-        return self._format_outputs(outputs)
+        return self._format_outputs(outputs, eval_strategy)
 
     def _create_ephemeral_vllm(self):
         """Create an ephemeral vLLM engine with LoRA support."""
@@ -344,16 +317,29 @@ class PassAtKStoppingCallback(TrainerCallback):
 
     def _cleanup_vllm(self):
         """Destroy the persistent vLLM engine and free GPU memory."""
-        if self._vllm_engine is not None:
-            print(f"[PassAtKCallback] Cleaning up persistent vLLM engine...")
-            from vllm.distributed.parallel_state import destroy_model_parallel
-            destroy_model_parallel()
+        if self._vllm_engine is None:
+            return
+
+        print("[PassAtKCallback] Cleaning up persistent vLLM engine...")
+        try:
+            # Explicitly stop executor workers before dropping references.
+            llm_engine = getattr(self._vllm_engine, "llm_engine", None)
+            if llm_engine is not None:
+                executor = getattr(llm_engine, "model_executor", None)
+                if executor is not None:
+                    executor.shutdown()
+        finally:
             del self._vllm_engine
             self._vllm_engine = None
-            cleanup_gpu()
-            print(f"[PassAtKCallback] vLLM engine cleaned up")
 
-    def _run_data_parallel_inference(self, adapter_path: str) -> List[Dict]:
+            # Full vLLM + distributed cleanup (not just model-parallel groups).
+            from vllm.distributed.parallel_state import cleanup_dist_env_and_memory
+            cleanup_dist_env_and_memory(shutdown_ray=False)
+
+            cleanup_gpu()
+            print("[PassAtKCallback] vLLM engine cleaned up")
+
+    def _run_data_parallel_inference(self, eval_strategy: EvalStrategy, adapter_path: str) -> List[Dict]:
         """Run data-parallel vLLM inference across multiple GPUs.
 
         Partitions prompts into chunks, spawns one vLLM worker process per GPU,
@@ -362,8 +348,8 @@ class PassAtKStoppingCallback(TrainerCallback):
         Uses self._available_gpus (SLURM-assigned device IDs) so workers pin
         to the correct physical GPUs regardless of SLURM allocation.
         """
-        all_messages = self.test_dataset["messages"]
-        all_prompts = self.test_dataset["prompt"]
+        all_messages = eval_strategy.get_test_messages()
+        all_prompts = eval_strategy.get_test_prompts()
         num_gpus = self.num_inference_gpus
 
         # Resolve actual CUDA device IDs from the SLURM/system allocation.
@@ -396,7 +382,7 @@ class PassAtKStoppingCallback(TrainerCallback):
                 target=_data_parallel_worker,
                 args=(
                     i, available_gpus[i], message_chunks[i], self.base_model_hf,
-                    adapter_path, self.n_samples, self.temperature, self.max_tokens,
+                    adapter_path, eval_strategy.n_samples, self.temperature, self.max_tokens,
                     self._chat_template, self.lora_max_rank,
                     self.vllm_gpu_memory_utilization, result_queue,
                     stop_tokens,
@@ -436,15 +422,17 @@ class PassAtKStoppingCallback(TrainerCallback):
         print(f"[PassAtKCallback] Data-parallel inference complete: {len(grouped)} unique prompts")
         return [{"prompt": p, "responses": resps} for p, resps in grouped.items()]
 
-    def _format_outputs(self, outputs) -> List[Dict]:
-        """Format vLLM outputs into grouped results for pass@k evaluation."""
-        if self.n_samples == 1:
+    def _format_outputs(self, outputs, eval_strategy: EvalStrategy) -> List[Dict]:
+        """Format vLLM outputs into grouped results for evaluation."""
+        n_samples = eval_strategy.n_samples
+        if n_samples == 1:
             responses = [output.outputs[0].text for output in outputs]
         else:
             responses = [[response.text for response in output.outputs] for output in outputs]
 
+        test_prompts = eval_strategy.get_test_prompts()
         grouped = defaultdict(list)
-        for prompt, resp in zip(self.test_dataset["prompt"], responses):
+        for prompt, resp in zip(test_prompts, responses):
             if isinstance(resp, list):
                 grouped[prompt].extend(resp)
             else:
@@ -453,26 +441,23 @@ class PassAtKStoppingCallback(TrainerCallback):
         return [{"prompt": p, "responses": resps} for p, resps in grouped.items()]
 
     def _save_sweetspot_checkpoint(self, model, threshold, state: TrainerState, args: TrainingArguments):
-        """Save a checkpoint when a pass@k sweetspot threshold is reached."""
+        """Save a checkpoint when a sweetspot threshold is reached."""
         return save_sweetspot_checkpoint(
             model=model,
             tokenizer=self.tokenizer,
             model_name=self.model_name,
-            threshold_label=f"p@{self.stopping_k}-{threshold}",
+            threshold_label=f"{self.primary_eval.label_prefix}-{threshold}",
             state=state,
             args=args,
             metadata_path=self.metadata_path,
             extra_metadata={
-                "threshold_type": f"pass_at_{self.stopping_k}",
+                "threshold_type": self.primary_eval.stopping_metric(),
                 "threshold_value": threshold,
-                "k_value": self.stopping_k,
-                "n_samples": self.n_samples,
-                "strict": self.strict,
             },
         )
 
-    def evaluate_pass_at_k(self, model) -> Dict[str, float]:
-        """Evaluate pass@k using vLLM with LoRA adapter support."""
+    def _run_eval(self, model, eval_strategy: EvalStrategy) -> Dict[str, float]:
+        """Run vLLM inference and score responses using the given eval strategy."""
 
         temp_dir = tempfile.mkdtemp()
 
@@ -485,14 +470,14 @@ class PassAtKStoppingCallback(TrainerCallback):
                 model.cpu()
                 torch.cuda.empty_cache()
                 print(f"[PassAtKCallback] Training model offloaded to CPU for {self.num_inference_gpus}-GPU data-parallel inference")
-                model_results = self._run_data_parallel_inference(adapter_path=temp_dir)
+                model_results = self._run_data_parallel_inference(eval_strategy, adapter_path=temp_dir)
                 model.to(original_device)
                 model.train()
             elif self.use_persistent_vllm:
                 # Persistent mode: keep vLLM engine alive, swap LoRA adapters
                 try:
                     self._init_persistent_vllm()
-                    model_results = self._run_vllm_inference(self._vllm_engine, adapter_path=temp_dir)
+                    model_results = self._run_vllm_inference(self._vllm_engine, eval_strategy, adapter_path=temp_dir)
                 except Exception as e:
                     print(f"[PassAtKCallback] Persistent vLLM failed: {e}, falling back to ephemeral mode")
                     self._cleanup_vllm()
@@ -502,7 +487,7 @@ class PassAtKStoppingCallback(TrainerCallback):
                     model.cpu()
                     torch.cuda.empty_cache()
                     llm = self._create_ephemeral_vllm()
-                    model_results = self._run_vllm_inference(llm, adapter_path=temp_dir)
+                    model_results = self._run_vllm_inference(llm, eval_strategy, adapter_path=temp_dir)
                     self._cleanup_ephemeral_vllm(llm)
                     model.to(original_device)
                     model.train()
@@ -512,47 +497,21 @@ class PassAtKStoppingCallback(TrainerCallback):
                 model.cpu()
                 torch.cuda.empty_cache()
                 llm = self._create_ephemeral_vllm()
-                model_results = self._run_vllm_inference(llm, adapter_path=temp_dir)
+                model_results = self._run_vllm_inference(llm, eval_strategy, adapter_path=temp_dir)
                 self._cleanup_ephemeral_vllm(llm)
                 model.to(original_device)
                 model.train()
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
-        # Evaluate responses
-        print(f"[PassAtKCallback] Evaluating responses...")
-        all_results = []
-        response_token_lengths = []
-        for item in model_results:
-            prompt = item["prompt"]
-            responses = item["responses"]
-
-            encoded_batch = self.tokenizer(
-                responses,
-                add_special_tokens=False,
-                padding=False,
-                truncation=False,
-            )
-            response_token_lengths.extend(len(ids) for ids in encoded_batch["input_ids"])
-
-            eval_input = self.inputs_map[prompt]
-            results = [evaluate_single_response(eval_input, r, self.strict) for r in responses]
-            all_results.append(results)
-
-        scores = {}
-        for k in self.k_values:
-            pass_at_k_scores = [pass_at_k(len(r), sum(r), k) for r in all_results]
-            scores[f"pass_at_{k}"] = np.mean(pass_at_k_scores)
-        scores["num_prompts_evaluated"] = len(all_results)
-        scores["avg_response_length_tokens"] = (
-            float(np.mean(response_token_lengths)) if response_token_lengths else 0.0
-        )
-
+        # Score responses using the eval strategy
+        print(f"[PassAtKCallback] Scoring responses with {eval_strategy.__class__.__name__}...")
+        scores = eval_strategy.score_responses(model_results, self.tokenizer)
         return scores
 
     def on_evaluate(self, args: TrainingArguments, state: TrainerState,
                     control: TrainerControl, model=None, **kwargs):
-        """Called after evaluation, check pass@k and stop if target reached."""
+        """Called after evaluation, run evals and stop if target reached."""
         train_batch_size = args.per_device_train_batch_size
         grad_accum = args.gradient_accumulation_steps
         world_size = getattr(args, "world_size", 1)
@@ -561,36 +520,43 @@ class PassAtKStoppingCallback(TrainerCallback):
         if model is None:
             model = kwargs.get("model")
         if model is None:
-            print("[PassAtKCallback] Warning: model is None, skipping pass@k check")
+            print("[PassAtKCallback] Warning: model is None, skipping eval")
             return control
 
-        scores = self.evaluate_pass_at_k(model)
+        # Run primary eval
+        scores = self._run_eval(model, self.primary_eval)
 
-        # Log all k values to wandb
+        # Log primary eval metrics to wandb
         log_dict = {"train/global_step": state.global_step}
-        for k in self.k_values:
-            log_dict[f"eval/pass_at_{k}"] = scores[f"pass_at_{k}"]
-        log_dict["eval/avg_response_length_tokens"] = scores["avg_response_length_tokens"]
+        log_dict.update(self.primary_eval.wandb_metrics(scores))
         wandb.log(log_dict)
 
-        self.prevResults.append(scores[f"pass_at_{self.stopping_k}"])
+        stopping_key = self.primary_eval.stopping_metric()
+        stopping_value = scores[stopping_key]
+        self.prevResults.append(stopping_value)
 
-        eval_type = "strict" if self.strict else "loose"
-        scores_str = ", ".join([f"pass@{k}={scores[f'pass_at_{k}']:.4f}" for k in self.k_values])
-        avg_len = scores["avg_response_length_tokens"]
+        scores_str = ", ".join([f"{k}={v:.4f}" for k, v in scores.items() if isinstance(v, float)])
         print(f"\n[PassAtKCallback] Step {state.global_step}, Data Points {data_points_seen}: "
-              f"{scores_str}, avg_len={avg_len:.1f} tokens ({eval_type}, {scores['num_prompts_evaluated']} prompts)")
+              f"{scores_str} ({scores.get('num_prompts_evaluated', '?')} prompts)")
+
+        # Run monitor evals (wandb logging only, no stopping)
+        for monitor_eval in self.monitor_evals:
+            monitor_scores = self._run_eval(model, monitor_eval)
+            monitor_log = {"train/global_step": state.global_step}
+            monitor_log.update(monitor_eval.wandb_metrics(monitor_scores))
+            wandb.log(monitor_log)
+            monitor_str = ", ".join([f"{k}={v:.4f}" for k, v in monitor_scores.items() if isinstance(v, float)])
+            print(f"[PassAtKCallback] Monitor ({monitor_eval.__class__.__name__}): {monitor_str}")
 
         # Check each threshold and save checkpoint if crossed (Fork Strategy)
         # Thresholds are sorted descending (hardest to easiest: 0.7, 0.5, 0.3)
-        # We iterate to find the hardest threshold that current pass@k has reached
+        # We iterate to find the hardest threshold that current metric has reached
         if not self.early_tuples:
-            current_pass_at_k = scores[f"pass_at_{self.stopping_k}"]
             reached_threshold = None
             reached_index = None
 
             for i, threshold in enumerate(self.target_pass_at_k_thresholds):
-                if current_pass_at_k >= threshold:
+                if stopping_value >= threshold:
                     reached_threshold = threshold
                     reached_index = i
                     break

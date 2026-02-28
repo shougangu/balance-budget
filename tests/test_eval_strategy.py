@@ -92,3 +92,13 @@ def test_ifeval_wandb_metrics():
         wandb_dict = strategy.wandb_metrics(scores)
         assert "eval/pass_at_1" in wandb_dict
         assert "eval/avg_response_length_tokens" in wandb_dict
+
+
+def test_callback_accepts_eval_strategy():
+    """PassAtKStoppingCallback should accept primary_eval and monitor_evals."""
+    from tuning.training.passk_callback import PassAtKStoppingCallback
+    import inspect
+    sig = inspect.signature(PassAtKStoppingCallback.__init__)
+    params = list(sig.parameters.keys())
+    assert "primary_eval" in params
+    assert "monitor_evals" in params
