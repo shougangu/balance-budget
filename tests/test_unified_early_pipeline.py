@@ -15,6 +15,7 @@ from tuning.training.unified_early_pipeline import (
     mark_completed,
     print_metadata_paths,
     parse_metadata_from_output,
+    _build_base_cmd,
 )
 
 
@@ -278,3 +279,25 @@ class TestMetadataIPC:
         print_metadata_paths([])
         captured = capsys.readouterr()
         assert "METADATA_FILE:" not in captured.out
+
+
+# ---------------------------------------------------------------------------
+# _build_base_cmd
+# ---------------------------------------------------------------------------
+
+class TestBuildBaseCmd:
+    def test_strips_run_all(self):
+        original = ["/usr/bin/python", "pipeline.py", "--model", "llama3-3B", "--run-all", "--wandb-project", "tuning"]
+        result = _build_base_cmd(original)
+        assert "--run-all" not in result
+        assert "--model" in result
+
+    def test_preserves_other_args(self):
+        original = ["/usr/bin/python", "pipeline.py", "--model", "llama3-3B", "--run-all", "--train-size", "5000"]
+        result = _build_base_cmd(original)
+        assert "--train-size" in result
+        assert "5000" in result
+
+    def test_no_run_all_unchanged(self):
+        original = ["/usr/bin/python", "pipeline.py", "--model", "llama3-3B"]
+        assert _build_base_cmd(original) == original
