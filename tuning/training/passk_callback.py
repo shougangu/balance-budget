@@ -385,7 +385,7 @@ class PassAtKStoppingCallback(TrainerCallback):
                     adapter_path, eval_strategy.n_samples, self.temperature, self.max_tokens,
                     self._chat_template, self.lora_max_rank,
                     self.vllm_gpu_memory_utilization, result_queue,
-                    stop_tokens,
+                    stop_tokens, # picked up in subprocess since global may not be set due to spawn context
                 ),
             )
             p.start()

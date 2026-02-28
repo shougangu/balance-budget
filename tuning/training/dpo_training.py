@@ -48,12 +48,8 @@ def train_model_dpo(
 
     callbacks = []
     if passk_config is not None and passk_config.enabled:
-        eval_cfg = ifeval_config or IFEvalConfig()
         ifeval_strategy = IFEvalStrategy(
-            k_values=eval_cfg.k_values,
-            n_samples=eval_cfg.n_samples,
-            strict=eval_cfg.strict,
-            num_prompts=eval_cfg.num_prompts,
+            config=ifeval_config or IFEvalConfig(),
             tokenizer=tokenizer,
         )
         passk_callback = PassAtKStoppingCallback(
