@@ -362,6 +362,21 @@ def mark_completed(metadata_file, checkpoint_path):
             f.write(json.dumps(row) + "\n")
 
 
+def print_metadata_paths(paths):
+    """Print metadata file paths with a prefix for subprocess IPC."""
+    for p in paths:
+        print(f"METADATA_FILE:{p}")
+
+
+def parse_metadata_from_output(output):
+    """Extract metadata file paths from subprocess stdout."""
+    return [
+        line.split(":", 1)[1]
+        for line in output.splitlines()
+        if line.startswith("METADATA_FILE:")
+    ]
+
+
 def run_dpo(args, checkpoints):
     """Run DPO stage for each checkpoint in the list."""
     import torch
