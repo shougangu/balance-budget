@@ -8,6 +8,7 @@ from typing import List, Dict
 
 from instruction_following_eval import evaluation_lib
 from tuning.data.test_dataset import get_ifeval_test_dataset
+from tuning.training.config_training import IFEvalConfig
 
 BASE_DIR = Path('/home/shougan/projects/aip-fredashi/shougan/balance-budget')
 IFEVAL_INPUT_PATH = BASE_DIR / "instruction_following_eval/data/input_data.jsonl"
@@ -51,6 +52,11 @@ class EvalStrategy(ABC):
 
     @property
     @abstractmethod
+    def n_samples(self) -> int:
+        """Number of completions to generate per prompt."""
+
+    @property
+    @abstractmethod
     def label_prefix(self) -> str:
         """Prefix for checkpoint labels (e.g., 'p@1')."""
 
@@ -62,17 +68,16 @@ class EvalStrategy(ABC):
 class IFEvalStrategy(EvalStrategy):
     """IFEval pass@k evaluation strategy."""
 
-    def __init__(self, k_values: list[int], n_samples: int, strict: bool,
-                 num_prompts: int, tokenizer):
-        self.k_values = k_values
-        self.stopping_k = k_values[0]
-        self.n_samples = n_samples
-        self.strict = strict
+    def __init__(self, config: IFEvalConfig, tokenizer):
+        self.k_values = config.k_values
+        self.stopping_k = config.k_values[0]
+        self._n_samples = config.n_samples
+        self.strict = config.strict
 
         self.test_dataset = get_ifeval_test_dataset()
-        if num_prompts is not None:
+        if config.num_prompts is not None:
             self.test_dataset = self.test_dataset.select(
-                range(min(num_prompts, len(self.test_dataset)))
+                range(min(config.num_prompts, len(self.test_dataset)))
             )
 
         self.inputs_map = {
@@ -80,8 +85,12 @@ class IFEvalStrategy(EvalStrategy):
             for inp in evaluation_lib.read_prompt_list(str(IFEVAL_INPUT_PATH))
         }
 
-        print(f"[IFEvalStrategy] k_values={k_values}, n_samples={n_samples}, "
-              f"strict={strict}, num_prompts={len(self.test_dataset)}")
+        print(f"[IFEvalStrategy] k_values={config.k_values}, n_samples={config.n_samples}, "
+              f"strict={config.strict}, num_prompts={len(self.test_dataset)}")
+
+    @property
+    def n_samples(self) -> int:
+        return self._n_samples
 
     def get_test_messages(self) -> List[List[dict]]:
         return self.test_dataset["messages"]

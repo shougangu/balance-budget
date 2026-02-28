@@ -4,6 +4,7 @@
 import pytest
 from unittest.mock import patch, MagicMock
 from datasets import Dataset
+from tuning.training.config_training import IFEvalConfig
 
 
 def test_ifeval_strategy_implements_interface():
@@ -19,10 +20,7 @@ def test_ifeval_strategy_implements_interface():
         })
         mock_eval_lib.read_prompt_list.return_value = []
         strategy = IFEvalStrategy(
-            k_values=[1],
-            n_samples=1,
-            strict=True,
-            num_prompts=1,
+            config=IFEvalConfig(k_values=[1], n_samples=1, strict=True, num_prompts=1),
             tokenizer=MagicMock(),
         )
         assert hasattr(strategy, "get_test_messages")
@@ -51,8 +49,8 @@ def test_ifeval_stopping_metric():
         })
         mock_eval_lib.read_prompt_list.return_value = []
         strategy = IFEvalStrategy(
-            k_values=[1, 5], n_samples=5, strict=True,
-            num_prompts=1, tokenizer=MagicMock(),
+            config=IFEvalConfig(k_values=[1, 5], n_samples=5, strict=True, num_prompts=1),
+            tokenizer=MagicMock(),
         )
         assert strategy.stopping_metric() == "pass_at_1"
 
@@ -68,8 +66,8 @@ def test_ifeval_label_prefix():
         })
         mock_eval_lib.read_prompt_list.return_value = []
         strategy = IFEvalStrategy(
-            k_values=[1], n_samples=1, strict=True,
-            num_prompts=1, tokenizer=MagicMock(),
+            config=IFEvalConfig(k_values=[1], n_samples=1, strict=True, num_prompts=1),
+            tokenizer=MagicMock(),
         )
         assert strategy.label_prefix == "p@1"
 
@@ -85,8 +83,8 @@ def test_ifeval_wandb_metrics():
         })
         mock_eval_lib.read_prompt_list.return_value = []
         strategy = IFEvalStrategy(
-            k_values=[1], n_samples=1, strict=True,
-            num_prompts=1, tokenizer=MagicMock(),
+            config=IFEvalConfig(k_values=[1], n_samples=1, strict=True, num_prompts=1),
+            tokenizer=MagicMock(),
         )
         scores = {"pass_at_1": 0.72, "avg_response_length_tokens": 150.0, "num_prompts_evaluated": 10}
         wandb_dict = strategy.wandb_metrics(scores)
@@ -124,6 +122,24 @@ def test_ifeval_config_exists():
     assert hasattr(config, "num_prompts")
 
 
+def test_ifeval_strategy_accepts_config():
+    """IFEvalStrategy should accept IFEvalConfig directly instead of unpacked fields."""
+    from tuning.training.eval_strategy import IFEvalStrategy
+    config = IFEvalConfig(k_values=[1, 5], n_samples=5, num_prompts=1, strict=True)
+    with patch("tuning.training.eval_strategy.get_ifeval_test_dataset") as mock_dataset, \
+         patch("tuning.training.eval_strategy.evaluation_lib") as mock_eval_lib:
+        mock_dataset.return_value = Dataset.from_dict({
+            "messages": [[{"role": "user", "content": "test"}]],
+            "prompt": ["test"],
+        })
+        mock_eval_lib.read_prompt_list.return_value = []
+        strategy = IFEvalStrategy(config=config, tokenizer=MagicMock())
+        assert strategy.k_values == [1, 5]
+        assert strategy.n_samples == 5
+        assert strategy.strict is True
+        assert strategy.stopping_metric() == "pass_at_1"
+
+
 def test_sft_training_imports_eval_strategy():
     """sft_training should import from eval_strategy."""
     import ast
@@ -136,3 +152,4 @@ def test_sft_training_imports_eval_strategy():
         and "eval_strategy" in node.module
     ]
     assert len(imports) > 0, "sft_training.py should import from eval_strategy"
+
