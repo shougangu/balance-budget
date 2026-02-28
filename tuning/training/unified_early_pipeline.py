@@ -301,6 +301,7 @@ def run_sft(args):
     del model, tokenizer, trainer, callbacks
     cleanup_gpu()
     print(subprocess.check_output("nvidia-smi").decode())
+    print_metadata_paths(metadata_paths)
     return metadata_paths
 
 
@@ -377,10 +378,24 @@ def parse_metadata_from_output(output):
     ]
 
 
-def run_dpo(args, checkpoints):
-    """Run DPO stage for each checkpoint in the list."""
-    import torch
-    torch.cuda.memory._record_memory_history(max_entries=100000)
+def run_dpo(args):
+    """Run DPO for the next non-completed checkpoint in the metadata file.
+
+    Processes exactly one checkpoint, marks it completed, then returns.
+    Process exit frees all GPU memory.
+    """
+    metadata_file = args.metadata_file[0]
+    checkpoint = next_checkpoint(metadata_file)
+    if checkpoint is None:
+        print("All checkpoints completed, nothing to do.")
+        return
+
+    remaining = args.train_size - checkpoint["data_points_seen"]
+    if remaining <= 0:
+        print(f"Skipping {checkpoint['checkpoint_path']}: no data budget remaining")
+        mark_completed(metadata_file, checkpoint["checkpoint_path"])
+        return
+
     import wandb
     from tuning.config import HF_MODEL_MAP, set_chat_template
     from tuning.training.config_training import (
@@ -388,94 +403,78 @@ def run_dpo(args, checkpoints):
         LoraConfig, DPOTrainingConfig,
     )
     from tuning.training.dpo_training import train_model_dpo
-    from tuning.utils.gpu import cleanup_gpu
 
     set_chat_template(args.model)
     gpu_util = MODEL_TO_GPU_2[args.model]
+    model_name = Path(checkpoint["checkpoint_path"]).name
 
-    for checkpoint in checkpoints:
-        remaining = args.train_size - checkpoint["data_points_seen"]
-        if remaining <= 0:
-            print(f"Skipping {checkpoint['checkpoint_path']}: no data budget remaining")
-            continue
-
-        model_name = Path(checkpoint["checkpoint_path"]).name
-
-        dataset_config = DatasetConfig(
+    dataset_config = DatasetConfig(
+        dataset=args.dataset,
+        dataset_type="pt",
+        train_size=remaining,
+    )
+    sft_run_config = SFTRunConfig(
+        dataset_config=DatasetConfig(
             dataset=args.dataset,
-            dataset_type="pt",
-            train_size=remaining,
+            dataset_type="sft",
+            train_size=checkpoint["data_points_seen"],
+            dynamic_path=model_name,
+        ),
+        model_name=args.model,
+        model_name_hf=HF_MODEL_MAP[args.model],
+        task_name=args.task_name,
+    )
+    run_config = PTRunConfig(
+        dataset_config=dataset_config,
+        model_name_hf=HF_MODEL_MAP[args.model],
+        model_name=args.model,
+        sft_run_config=sft_run_config,
+        task_name=args.task_name,
+        pft_method="dpo",
+        do_training=True,
+    )
+    lora_config = LoraConfig()
+    lora_config.use_gradient_checkpointing = True
+    model_load_config = ModelLoadConfig()
+    model_load_config.max_seq_length = args.max_seq_length
+    training_args = DPOTrainingConfig()
+    training_args.eval_steps = args.dpo_eval_steps
+    training_args.per_device_train_batch_size = args.dpo_batch_size
+    training_args.gradient_accumulation_steps = args.dpo_grad_accum
+
+    passk_config = _dpo_passk_config(args, gpu_util)
+    ppl_config = _dpo_ppl_config(args)
+
+    tags = ["dpo", str(checkpoint["threshold_value"])]
+    if passk_config is not None:
+        tags.append(f"p{passk_config.k_values[0]}")
+    if ppl_config is not None:
+        tags.append("ppl")
+
+    with wandb.init(
+        name=run_config.model_name,
+        project=args.wandb_project,
+        job_type="dpo",
+        tags=tags,
+        config={"stage": "dpo"},
+    ):
+        train_model_dpo(
+            run_config=run_config,
+            lora_config=lora_config,
+            model_load_config=model_load_config,
+            training_args=training_args,
+            passk_config=passk_config,
+            perplexity_config=ppl_config,
         )
-        sft_run_config = SFTRunConfig(
-            dataset_config=DatasetConfig(
-                dataset=args.dataset,
-                dataset_type="sft",
-                train_size=checkpoint["data_points_seen"],
-                dynamic_path=model_name,
-            ),
-            model_name=args.model,
-            model_name_hf=HF_MODEL_MAP[args.model],
-            task_name=args.task_name,
-        )
-        run_config = PTRunConfig(
-            dataset_config=dataset_config,
-            model_name_hf=HF_MODEL_MAP[args.model],
-            model_name=args.model,
-            sft_run_config=sft_run_config,
-            task_name=args.task_name,
-            pft_method="dpo",
-            do_training=True,
-        )
-        lora_config = LoraConfig()
-        lora_config.use_gradient_checkpointing = True
-        model_load_config = ModelLoadConfig()
-        model_load_config.max_seq_length = args.max_seq_length
-        training_args = DPOTrainingConfig()
-        training_args.eval_steps = args.dpo_eval_steps
-        training_args.per_device_train_batch_size = args.dpo_batch_size
-        training_args.gradient_accumulation_steps = args.dpo_grad_accum
 
-        passk_config = _dpo_passk_config(args, gpu_util)
-        ppl_config = _dpo_ppl_config(args)
-
-        tags = ["dpo", str(checkpoint["threshold_value"])]
-        if passk_config is not None:
-            tags.append(f"p{passk_config.k_values[0]}")
-        if ppl_config is not None:
-            tags.append("ppl")
-
-        with wandb.init(
-            name=run_config.model_name,
-            project=args.wandb_project,
-            job_type="dpo",
-            tags=tags,
-            config={"stage": "dpo"},
-            reinit=True,
-        ):
-            model, tokenizer, trainer, _ = train_model_dpo(
-                run_config=run_config,
-                lora_config=lora_config,
-                model_load_config=model_load_config,
-                training_args=training_args,
-                passk_config=passk_config,
-                perplexity_config=ppl_config,
-            )
-
-        wandb.finish(quiet=True)
-        del trainer.ref_model
-        del trainer.model
-        trainer.accelerator.free_memory()
-        del model, tokenizer, trainer, _
-        cleanup_gpu()
-        print(subprocess.check_output("nvidia-smi").decode())
-        import torch
-        alloc = torch.cuda.memory_allocated() / (1024**3)
-        reserved = torch.cuda.memory_reserved() / (1024**3)
-        print(f"[Memory] allocated={alloc:.1f}GiB reserved={reserved:.1f}GiB")
-    torch.cuda.memory._dump_snapshot("profile.pkl")
-    torch.cuda.memory._record_memory_history(enabled=None)
+    mark_completed(metadata_file, checkpoint["checkpoint_path"])
 
 
+
+
+def _build_base_cmd(argv):
+    """Build base subprocess command by stripping orchestrator-only flags."""
+    return [a for a in argv if a != "--run-all"]
 
 
 def main():
@@ -483,20 +482,48 @@ def main():
     print(args)
 
     if not any([args.run_sft, args.run_dpo, args.run_all]):
-        args.run_sft = True
-        args.run_dpo = True
+        args.run_all = True
 
-    metadata_files = []
+    # Worker mode: run in-process
+    if args.run_sft and not args.run_all:
+        run_sft(args)
+        return
 
-    if args.run_sft or args.run_all:
-        metadata_files = run_sft(args)
+    if args.run_dpo and not args.run_all:
+        run_dpo(args)
+        return
 
-    if args.run_dpo or args.run_all:
-        if not metadata_files and not args.metadata_file:
-            sys.exit("DPO stage requires --metadata-file (or run SFT first)")
-        files = metadata_files + (args.metadata_file or [])
-        checkpoints = load_checkpoints(files, args.metadata_merge)
-        run_dpo(args, checkpoints)
+    # Orchestrator mode: spawn subprocesses
+    base_cmd = _build_base_cmd(sys.argv)
+
+    # SFT subprocess
+    sft_cmd = [sys.executable] + base_cmd[1:] + ["--run-sft"]
+    print(f"[orchestrator] Running SFT: {' '.join(sft_cmd)}")
+    result = subprocess.run(sft_cmd, capture_output=True, text=True)
+    print(result.stdout)
+    if result.stderr:
+        print(result.stderr, file=sys.stderr)
+    if result.returncode != 0:
+        sys.exit(f"SFT subprocess failed with return code {result.returncode}")
+
+    metadata_files = parse_metadata_from_output(result.stdout)
+    if not metadata_files and not args.metadata_file:
+        sys.exit("No metadata files from SFT and no --metadata-file provided")
+    all_files = metadata_files + (args.metadata_file or [])
+
+    # DPO subprocess loop: one subprocess per checkpoint
+    for metadata_file in all_files:
+        while next_checkpoint(metadata_file) is not None:
+            dpo_cmd = [sys.executable] + base_cmd[1:] + [
+                "--run-dpo", "--metadata-file", metadata_file,
+            ]
+            print(f"[orchestrator] Running DPO: {' '.join(dpo_cmd)}")
+            result = subprocess.run(dpo_cmd, capture_output=True, text=True)
+            print(result.stdout)
+            if result.stderr:
+                print(result.stderr, file=sys.stderr)
+            if result.returncode != 0:
+                sys.exit(f"DPO subprocess failed with return code {result.returncode}")
 
 
 if __name__ == "__main__":
