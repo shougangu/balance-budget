@@ -7,6 +7,7 @@ from tuning.data.train_dataset import get_train_dataset
 from tuning.training.config_training import PTRunConfig, LoraConfig, ModelLoadConfig, DatasetConfig, DPOTrainingConfig, SFTRunConfig, PassAtKConfig, PerplexityConfig, dpo_batch_size, effective_batch_size
 from tuning.training.perplexity_callback import PerplexityStoppingCallback
 from tuning.training.passk_callback import PassAtKStoppingCallback
+from tuning.training.eval_strategy import IFEvalStrategy
 from tuning.training.model_utils import load_model_with_lora, save_trained_model
 from tuning.utils.utils import chat_template_func
 from trl import DPOTrainer, DPOConfig # DPOConfig is a wrapper around TrainingArguments with some DPO-specific defaults
@@ -14,7 +15,6 @@ from typing import List, Optional
 from tuning.config import HF_MODEL_MAP
 import subprocess
 PatchDPOTrainer()
-
 
 def train_model_dpo(
     run_config: PTRunConfig = None,
@@ -47,11 +47,19 @@ def train_model_dpo(
 
     callbacks = []
     if passk_config is not None and passk_config.enabled:
+        ifeval_strategy = IFEvalStrategy(
+            k_values=passk_config.k_values,
+            n_samples=passk_config.n_samples,
+            strict=passk_config.strict,
+            num_prompts=passk_config.num_prompts,
+            tokenizer=tokenizer,
+        )
         passk_callback = PassAtKStoppingCallback(
             config=passk_config,
             tokenizer=tokenizer,
             model_name=run_config.model_name,
             base_model_hf=model_path,
+            primary_eval=ifeval_strategy,
         )
         callbacks.append(passk_callback)
 

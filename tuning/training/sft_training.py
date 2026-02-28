@@ -5,6 +5,7 @@ from tuning.data.train_dataset import get_train_dataset
 from tuning.training.config_training import ModelLoadConfig, LoraConfig, SFTRunConfig, TrainingArgumentsConfig, PassAtKConfig, PerplexityConfig, DatasetConfig, sft_batch_size, effective_batch_size
 from tuning.training.perplexity_callback import PerplexityStoppingCallback
 from tuning.training.passk_callback import PassAtKStoppingCallback
+from tuning.training.eval_strategy import IFEvalStrategy
 from tuning.training.model_utils import load_model_with_lora, save_trained_model
 from tuning.utils.utils import chat_template_func, apply_chat_template, get_response_delimiters
 from typing import List, Optional
@@ -38,11 +39,19 @@ def train_model_sft(
 
     callbacks = []
     if passk_config is not None and passk_config.enabled:
+        ifeval_strategy = IFEvalStrategy(
+            k_values=passk_config.k_values,
+            n_samples=passk_config.n_samples,
+            strict=passk_config.strict,
+            num_prompts=passk_config.num_prompts,
+            tokenizer=tokenizer,
+        )
         passk_callback = PassAtKStoppingCallback(
             config=passk_config,
             tokenizer=tokenizer,
             model_name=run_config.model_name,
             base_model_hf=run_config.model_name_hf,
+            primary_eval=ifeval_strategy,
         )
         callbacks.append(passk_callback)
 
