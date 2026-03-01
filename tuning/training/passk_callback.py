@@ -210,7 +210,7 @@ class PassAtKStoppingCallback(TrainerCallback):
             self.model_name = kwargs.get("model")
         print(f"[PassAtKCallback] on_train_begin: model_name={self.model_name}")
         now = datetime.datetime.now().strftime("%m%d_%H%M")
-        self.metadata_path = os.path.join(MODELS_METADATA_DIR, f"{self.model_name}_passatk-{now}.json")
+        self.metadata_path = os.path.join(MODELS_METADATA_DIR, f"{self.model_name}_{self.primary_eval.stopping_metric()}-{now}.json")
 
     def on_train_end(self, args, state, control, **kwargs):
         """Cleanup persistent vLLM engine when training ends."""
