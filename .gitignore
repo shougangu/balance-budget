@@ -181,3 +181,4 @@ tuning/analysis/gspread.json
 unsloth_compiled_cache
 .claude/*
 CLAUDE.md
+.worktrees/
