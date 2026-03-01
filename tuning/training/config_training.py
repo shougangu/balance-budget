@@ -73,7 +73,7 @@ class TrainingArgumentsConfig(BaseModel):
 class DPOTrainingConfig(TrainingArgumentsConfig):
     beta: float = 1
     learning_rate: float = 5e-6
-    num_train_epochs: int = 2
+    num_train_epochs: int = 3
     per_device_eval_batch_size: int = 2
     dataset_num_proc: int = 2
 

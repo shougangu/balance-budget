@@ -27,36 +27,23 @@ if _is_worker_mode():
     import unsloth  # noqa: F401 - must be imported before trl/transformers/peft
 
 
-MODEL_TO_GPU_1 = {
-    "llama3-1B": 0.5,
-    "llama3-3B": 0.5,    # (0.65 gives 76% peak with non-persistent vLLM with one 97% spike?)
-    "llama3-8B": 0.45,
-    "qwen2-3B": 0.5,     # (0.65 gives 76% peak with non-persistence but one 91% spike?)
-    "qwen2-7B": 0.5,
-}
-MODEL_TO_GPU_2 = {
-    "llama3-1B": 0.45,
-    "llama3-3B": 0.45,  # can reach 
-    "llama3-8B": 0.4,
-    "qwen2-3B": 0.45,
-    "qwen2-7B": 0.45,
-}
 
 
 MODEL_TO_GPU_1 = {
 "llama3-1B": 0.75,
-"llama3-3B": 0.65, # (0.65 gives 76% peak with non-persistent vLLM with one 97% spike?)
-"llama3-8B": 0.68,
+"llama3-3B": 0.6, # (0.65 gives 79% peak with multi with one 97% spike?)
+"llama3-8B": 0.6,  # (0.68 gives 90% peak)
 "qwen2-3B": 0.65, # (0.65 gives 76% peak with non-persistence but one 91% spike?)
 "qwen2-7B": 0.55,
 }
-# MODEL_TO_GPU_2 = {
-# "llama3-1B": 0.7,
-# "llama3-3B": 0.62, # can reach
-# "llama3-8B": 0.45,
-# "qwen2-3B": 0.62,
-# "qwen2-7B": 0.45,
-# }
+
+MODEL_TO_GPU_2 = {
+    "llama3-1B": 0.7,
+    "llama3-3B": 0.6,  # can reach 
+    "llama3-8B": 0.55,
+    "qwen2-3B": 0.45,
+    "qwen2-7B": 0.45,
+}
 
 
 def parse_early_tuple(s):
@@ -116,14 +103,15 @@ def _parse_args(argv=None):
     parser.add_argument("--dpo-enable-ppl", action=argparse.BooleanOptionalAction, default=False)
 
     # SFT pass@k
-    parser.add_argument("--sft-passk-targets", type=float, nargs="+", default=[1.2])
+    parser.add_argument("--sft-passk-targets", type=float, nargs="+", 
+                        default=[0.25,0.3,0.35,0.4,0.45,0.5,0.55,0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95])
     parser.add_argument("--sft-passk-early", type=parse_early_tuple, nargs="*",
                         default=[(1, 0.02), (2, 0.02), (3, 0.02), (4, 0.02), (5, 0.02)])
     parser.add_argument("--sft-passk-k-values", type=int, nargs="+", default=[1])
     parser.add_argument("--sft-passk-n-samples", type=int, default=1)
     parser.add_argument("--sft-passk-num-prompts", type=int, default=541)
     parser.add_argument("--sft-passk-temperature", type=float, default=0.5)
-    parser.add_argument("--sft-passk-strict", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument("--sft-passk-strict", action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument("--sft-passk-num-inference-gpus", type=int, default=1)
     parser.add_argument("--sft-passk-persistent-vllm",
                         action=argparse.BooleanOptionalAction, default=False)
@@ -141,7 +129,7 @@ def _parse_args(argv=None):
     parser.add_argument("--dpo-passk-n-samples", type=int, default=1)
     parser.add_argument("--dpo-passk-num-prompts", type=int, default=541)
     parser.add_argument("--dpo-passk-temperature", type=float, default=0.5)
-    parser.add_argument("--dpo-passk-strict", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument("--dpo-passk-strict", action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument("--dpo-passk-num-inference-gpus", type=int, default=1)
     parser.add_argument("--dpo-passk-persistent-vllm",
                         action=argparse.BooleanOptionalAction, default=False)
@@ -469,7 +457,7 @@ def run_dpo(args):
     ppl_config = _dpo_ppl_config(args)
     ifeval_config = _dpo_ifeval_config(args)
 
-    tags = ["dpo", str(checkpoint["threshold_value"])]
+    tags = ["dpo", str(checkpoint["threshold_value"]), str(checkpoint["data_points_seen"])]
     if passk_config is not None:
         k_val = ifeval_config.k_values[0] if ifeval_config else 1
         tags.append(f"p{k_val}")
@@ -482,6 +470,7 @@ def run_dpo(args):
         job_type="dpo",
         tags=tags,
         config={"stage": "dpo"},
+        settings=wandb.Settings(init_timeout=300)
     ):
         train_model_dpo(
             run_config=run_config,
