@@ -301,3 +301,17 @@ class TestBuildBaseCmd:
     def test_no_run_all_unchanged(self):
         original = ["/usr/bin/python", "pipeline.py", "--model", "llama3-3B"]
         assert _build_base_cmd(original) == original
+
+
+# ---------------------------------------------------------------------------
+# Task-name dispatch
+# ---------------------------------------------------------------------------
+
+class TestTaskNameDispatch:
+    def test_gsm8k_task_name_accepted(self):
+        args = _parse_args(REQUIRED + ["--task-name", "gsm8k"])
+        assert args.task_name == "gsm8k"
+
+    def test_default_task_name_is_ifeval(self):
+        args = _parse_args(REQUIRED)
+        assert args.task_name == "ifeval"
