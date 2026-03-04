@@ -4,10 +4,9 @@ import wandb
 from unsloth import PatchDPOTrainer
 from tuning.config import MODELS_DIR
 from tuning.data.train_dataset import get_train_dataset
-from tuning.training.config_training import PTRunConfig, LoraConfig, ModelLoadConfig, DatasetConfig, DPOTrainingConfig, SFTRunConfig, PassAtKConfig, PerplexityConfig, IFEvalConfig, dpo_batch_size, effective_batch_size
+from tuning.training.config_training import PTRunConfig, LoraConfig, ModelLoadConfig, DatasetConfig, DPOTrainingConfig, SFTRunConfig, PassAtKConfig, PerplexityConfig, dpo_batch_size, effective_batch_size
 from tuning.training.perplexity_callback import PerplexityStoppingCallback
 from tuning.training.passk_callback import PassAtKStoppingCallback
-from tuning.training.eval_strategy import IFEvalStrategy
 from tuning.training.model_utils import load_model_with_lora, save_trained_model
 from tuning.utils.utils import chat_template_func
 from trl import DPOTrainer, DPOConfig # DPOConfig is a wrapper around TrainingArguments with some DPO-specific defaults
@@ -24,7 +23,8 @@ def train_model_dpo(
     perplexity_config = None,  # PerplexityConfig object
     perplexity_test_dataset = None,  # SFT-formatted test dataset for perplexity eval
     passk_config = None,  # PassAtKConfig object
-    ifeval_config = None,  # IFEvalConfig object
+    primary_eval = None,  # Pre-built EvalStrategy
+    monitor_evals = None,  # Additional EvalStrategy list
 ):
     # Resolve model path: SFT checkpoint or base HF model
     if run_config.sft_run_config:
@@ -48,16 +48,13 @@ def train_model_dpo(
 
     callbacks = []
     if passk_config is not None and passk_config.enabled:
-        ifeval_strategy = IFEvalStrategy(
-            config=ifeval_config or IFEvalConfig(),
-            tokenizer=tokenizer,
-        )
         passk_callback = PassAtKStoppingCallback(
             config=passk_config,
             tokenizer=tokenizer,
             model_name=run_config.model_name,
             base_model_hf=model_path,
-            primary_eval=ifeval_strategy,
+            primary_eval=primary_eval,
+            monitor_evals=monitor_evals or [],
         )
         callbacks.append(passk_callback)
 
@@ -139,13 +136,6 @@ if __name__ == "__main__":
             temperature=0.7,
             enabled=True,
         )
-        ifeval_config = IFEvalConfig(
-            k_values=[1],
-            n_samples=1,
-            num_prompts=32,
-            strict=True,
-        )
-
         train_model_dpo(
             run_config=run_config,
             lora_config=lora_config,

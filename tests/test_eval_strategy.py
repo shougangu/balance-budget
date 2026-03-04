@@ -214,3 +214,31 @@ def test_gsm8k_wandb_metrics():
         wandb_dict = strategy.wandb_metrics(scores)
         assert "eval/gsm8k_pass_at_1" in wandb_dict
         assert "eval/avg_response_length_tokens" in wandb_dict
+
+
+def _get_function_params(filepath, func_name):
+    """Parse a Python file's AST to extract function parameter names."""
+    import ast
+    from pathlib import Path
+    source = Path(filepath).read_text()
+    tree = ast.parse(source)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name == func_name:
+            return [arg.arg for arg in node.args.args]
+    raise ValueError(f"Function {func_name} not found in {filepath}")
+
+
+def test_sft_training_accepts_primary_eval():
+    """train_model_sft should accept primary_eval and monitor_evals, not ifeval_config."""
+    params = _get_function_params("tuning/training/sft_training.py", "train_model_sft")
+    assert "primary_eval" in params
+    assert "monitor_evals" in params
+    assert "ifeval_config" not in params
+
+
+def test_dpo_training_accepts_primary_eval():
+    """train_model_dpo should accept primary_eval and monitor_evals, not ifeval_config."""
+    params = _get_function_params("tuning/training/dpo_training.py", "train_model_dpo")
+    assert "primary_eval" in params
+    assert "monitor_evals" in params
+    assert "ifeval_config" not in params
