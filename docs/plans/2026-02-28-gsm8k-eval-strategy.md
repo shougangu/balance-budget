@@ -4,7 +4,7 @@
 
 **Goal:** Enable the unified_early_pipeline to train and evaluate on GSM8K (and future tasks) instead of being hardcoded to IFEval.
 
-**Architecture:** Implement `GSM8KEvalStrategy` (parallel to `IFEvalStrategy`) and a `GSM8KConfig` (parallel to `IFEvalConfig`). Generalize the pipeline's config-builder functions to dispatch on `--task-name` and route to the correct strategy. The `PassAtKStoppingCallback` is already task-agnostic — it accepts any `EvalStrategy` — so no callback changes needed.
+**Architecture:** Implement `GSM8KEvalStrategy` (parallel to `IFEvalStrategy`) with direct constructor params — no eval config classes (`IFEvalConfig` is deleted, `GSM8KConfig` is not created). A single composer function in the pipeline builds `PassAtKConfig` + eval strategies together, dispatching on `--task-name`. The `PassAtKStoppingCallback` is already task-agnostic — it accepts any `EvalStrategy` — so no callback changes needed.
 
 **Tech Stack:** Python, HuggingFace datasets, pytest. GSM8K scoring follows the lm-evaluation-harness approach (strict regex + flexible fallback + normalization). No new dependencies.
 
@@ -16,7 +16,7 @@
 - `IFEvalStrategy` is the only implementation; we're adding `GSM8KEvalStrategy`
 - `PassAtKStoppingCallback` in `tuning/training/passk_callback.py` is already generic — takes `primary_eval: EvalStrategy`
 - `sft_training.py` and `dpo_training.py` currently hardcode `IFEvalStrategy` — these need to accept any strategy
-- `unified_early_pipeline.py` has `_sft_ifeval_config()` / `_dpo_ifeval_config()` that build `IFEvalConfig` — these need to become task-dispatched
+- `unified_early_pipeline.py` has separate builder functions (`_sft_passk_config`, `_sft_ifeval_config`, etc.) — these become a single composer function dispatching on `--task-name`
 - GSM8K test data: the standard GSM8K test set from HuggingFace (1319 problems with reference answers in `#### <number>` format)
 - GSM8K system message and prompt format already exist in `tuning/data/config.py`
 - `sft-gsm8k` base dataset must be pre-processed before training (script exists in `tuning/data/gsm8k_sft.py`)
@@ -355,47 +355,70 @@ git commit -m "feat: add GSM8K test dataset loader"
 
 ---
 
-### Task 3: GSM8KConfig, GSM8KEvalStrategy, and remove unused tokenizer from strategy constructors
+### Task 3: GSM8KEvalStrategy, refactor strategy constructors, delete IFEvalConfig
 
-Add `GSM8KConfig` to `config_training.py` and implement `GSM8KEvalStrategy` in `eval_strategy.py`. Both strategy constructors take only their config (no tokenizer — it's unused at construction time, only needed in `score_responses` where it's already a parameter). Also remove the unused `tokenizer` param from `IFEvalStrategy.__init__`.
+Delete `IFEvalConfig` from `config_training.py` — eval config classes are unnecessary indirection. Strategy constructors take their params directly (`k_values`, `n_samples`, `num_prompts`, plus task-specific params like `strict` for IFEval). Remove `tokenizer` from constructors (only needed in `score_responses` where it's already a parameter).
 
-`score_responses` follows the same pass@k convention as `IFEvalStrategy`: per-prompt boolean arrays fed into `pass_at_k()`.
+Both strategies follow identical pass@k conventions: per-prompt boolean arrays fed into `pass_at_k()`, same multi-k constructor params.
 
 **Files:**
-- Modify: `tuning/training/config_training.py` (add `GSM8KConfig`)
-- Modify: `tuning/training/eval_strategy.py` (remove `tokenizer` from `IFEvalStrategy.__init__`, add `GSM8KEvalStrategy`)
-- Test: `tests/test_eval_strategy.py` (update existing IFEval tests to drop tokenizer, add GSM8K tests)
+- Modify: `tuning/training/config_training.py` (delete `IFEvalConfig`)
+- Modify: `tuning/training/eval_strategy.py` (refactor `IFEvalStrategy`, add `GSM8KEvalStrategy`)
+- Test: `tests/test_eval_strategy.py` (update IFEval tests, add GSM8K tests, delete obsolete config tests)
 
 **Step 1: Write failing tests**
 
-Update existing IFEval tests in `tests/test_eval_strategy.py` to not pass `tokenizer` to strategy constructors. Then add GSM8K tests:
+Update existing tests and add GSM8K tests in `tests/test_eval_strategy.py`:
+
+- Remove the `from tuning.training.config_training import IFEvalConfig` import
+- **Delete** `test_ifeval_config_exists` entirely (IFEvalConfig no longer exists)
+- Update all `IFEvalStrategy(config=IFEvalConfig(...), tokenizer=MagicMock())` calls to `IFEvalStrategy(k_values=..., n_samples=..., num_prompts=..., strict=...)`
+- **Rewrite** `test_ifeval_strategy_accepts_config` → `test_ifeval_strategy_accepts_direct_params`
+- **Update** `test_passk_config_no_eval_fields` assertion messages (reference strategy constructors, not IFEvalConfig)
 
 ```python
-from tuning.training.config_training import GSM8KConfig
+# Rewritten test (replaces test_ifeval_strategy_accepts_config):
+def test_ifeval_strategy_accepts_direct_params():
+    """IFEvalStrategy should accept params directly (no config object)."""
+    from tuning.training.eval_strategy import IFEvalStrategy
+    with patch("tuning.training.eval_strategy.get_ifeval_test_dataset") as mock_dataset, \
+         patch("tuning.training.eval_strategy.evaluation_lib") as mock_eval_lib:
+        mock_dataset.return_value = Dataset.from_dict({
+            "messages": [[{"role": "user", "content": "test"}]],
+            "prompt": ["test"],
+        })
+        mock_eval_lib.read_prompt_list.return_value = []
+        strategy = IFEvalStrategy(k_values=[1, 5], n_samples=5, num_prompts=1, strict=True)
+        assert strategy.k_values == [1, 5]
+        assert strategy.n_samples == 5
+        assert strategy.strict is True
+        assert strategy.stopping_metric() == "pass_at_1"
 
 
-def test_gsm8k_config_exists():
-    """GSM8KConfig should exist with eval-specific fields (parallel to IFEvalConfig)."""
-    config = GSM8KConfig()
-    assert hasattr(config, "k_values")
-    assert hasattr(config, "n_samples")
-    assert hasattr(config, "num_prompts")
+# Updated assertion messages:
+def test_passk_config_no_eval_fields():
+    """PassAtKConfig should not have eval-specific fields (those belong on strategy constructors)."""
+    from tuning.training.config_training import PassAtKConfig
+    config = PassAtKConfig()
+    assert not hasattr(config, "strict"), "strict belongs on eval strategy constructor"
+    assert not hasattr(config, "k_values"), "k_values belongs on eval strategy constructor"
+    assert not hasattr(config, "n_samples"), "n_samples belongs on eval strategy constructor"
+    assert not hasattr(config, "num_prompts"), "num_prompts belongs on eval strategy constructor"
 
+
+# New GSM8K tests (same structure as IFEval tests):
 
 def test_gsm8k_strategy_implements_interface():
     """GSM8KEvalStrategy must implement all EvalStrategy abstract methods."""
     from tuning.training.eval_strategy import GSM8KEvalStrategy, EvalStrategy
     assert issubclass(GSM8KEvalStrategy, EvalStrategy)
-
     with patch("tuning.training.eval_strategy.get_gsm8k_test_dataset") as mock_dataset:
         mock_dataset.return_value = Dataset.from_dict({
             "messages": [[{"role": "user", "content": "test"}]],
             "prompt": ["test"],
             "reference_answer": ["42"],
         })
-        strategy = GSM8KEvalStrategy(
-            config=GSM8KConfig(k_values=[1], n_samples=1, num_prompts=1),
-        )
+        strategy = GSM8KEvalStrategy(k_values=[1], n_samples=1, num_prompts=1)
         assert hasattr(strategy, "get_test_messages")
         assert hasattr(strategy, "score_responses")
         assert hasattr(strategy, "stopping_metric")
@@ -412,9 +435,7 @@ def test_gsm8k_stopping_metric():
             "prompt": ["test"],
             "reference_answer": ["42"],
         })
-        strategy = GSM8KEvalStrategy(
-            config=GSM8KConfig(k_values=[1, 5], n_samples=5, num_prompts=1),
-        )
+        strategy = GSM8KEvalStrategy(k_values=[1, 5], n_samples=5, num_prompts=1)
         assert strategy.stopping_metric() == "pass_at_1"
 
 
@@ -427,9 +448,7 @@ def test_gsm8k_label_prefix():
             "prompt": ["test"],
             "reference_answer": ["42"],
         })
-        strategy = GSM8KEvalStrategy(
-            config=GSM8KConfig(k_values=[1], n_samples=1, num_prompts=1),
-        )
+        strategy = GSM8KEvalStrategy(k_values=[1], n_samples=1, num_prompts=1)
         assert strategy.label_prefix == "gsm8k-p@1"
 
 
@@ -444,9 +463,7 @@ def test_gsm8k_score_responses_pass_at_k():
         })
         tokenizer = MagicMock()
         tokenizer.side_effect = lambda texts, **kw: {"input_ids": [[0] * 10] * len(texts)}
-        strategy = GSM8KEvalStrategy(
-            config=GSM8KConfig(k_values=[1], n_samples=1, num_prompts=2),
-        )
+        strategy = GSM8KEvalStrategy(k_values=[1], n_samples=1, num_prompts=2)
         results = [
             {"prompt": "Q1", "responses": ["Step 1: ...\n#### 42"]},      # correct
             {"prompt": "Q2", "responses": ["Step 1: ...\n#### 99"]},      # incorrect
@@ -467,9 +484,7 @@ def test_gsm8k_score_responses_flexible_fallback():
         })
         tokenizer = MagicMock()
         tokenizer.side_effect = lambda texts, **kw: {"input_ids": [[0] * 10] * len(texts)}
-        strategy = GSM8KEvalStrategy(
-            config=GSM8KConfig(k_values=[1], n_samples=1, num_prompts=1),
-        )
+        strategy = GSM8KEvalStrategy(k_values=[1], n_samples=1, num_prompts=1)
         results = [
             {"prompt": "Q1", "responses": ["The answer is 42"]},  # no ####, flexible kicks in
         ]
@@ -486,9 +501,7 @@ def test_gsm8k_wandb_metrics():
             "prompt": ["test"],
             "reference_answer": ["42"],
         })
-        strategy = GSM8KEvalStrategy(
-            config=GSM8KConfig(k_values=[1], n_samples=1, num_prompts=1),
-        )
+        strategy = GSM8KEvalStrategy(k_values=[1], n_samples=1, num_prompts=1)
         scores = {"pass_at_1": 0.75, "num_prompts_evaluated": 10, "avg_response_length_tokens": 50.0}
         wandb_dict = strategy.wandb_metrics(scores)
         assert "eval/gsm8k_pass_at_1" in wandb_dict
@@ -497,55 +510,62 @@ def test_gsm8k_wandb_metrics():
 
 **Step 2: Run tests to verify they fail**
 
-Run: `pytest tests/test_eval_strategy.py -v -k "gsm8k"`
-Expected: FAIL — `ImportError: cannot import name 'GSM8KConfig'`
+Run: `pytest tests/test_eval_strategy.py -v`
+Expected: FAIL — existing IFEval tests fail (tokenizer removal, config import removal), GSM8K tests fail (no GSM8KEvalStrategy yet)
 
-Also run existing IFEval tests after removing `tokenizer` from constructors:
-Run: `pytest tests/test_eval_strategy.py -v -k "not gsm8k"`
-Expected: FAIL — `TypeError: __init__() got an unexpected keyword argument 'tokenizer'` (if we update tests first) or existing tests still pass (if we update implementation first). Follow TDD order: update tests first, see them fail, then fix.
+**Step 3a: Delete IFEvalConfig from config_training.py**
 
-**Step 3a: Add GSM8KConfig to config_training.py**
+Remove the entire `IFEvalConfig` class from `tuning/training/config_training.py`.
 
-Add after `IFEvalConfig` class in `tuning/training/config_training.py`:
+**Step 3b: Refactor IFEvalStrategy to take direct params**
 
-```python
-class GSM8KConfig(BaseModel):
-    """Configuration for GSM8K pass@k evaluation."""
-    k_values: list[int] = [1]  # Which k values to compute pass@k for
-    n_samples: int = 1  # Number of samples to generate per prompt
-    num_prompts: int | None = None  # Number of prompts to evaluate (None = all 1319)
-```
-
-**Step 3b: Remove tokenizer from IFEvalStrategy.__init__ and add GSM8KEvalStrategy**
-
-In `tuning/training/eval_strategy.py`:
-
-Change `IFEvalStrategy.__init__` signature from:
+In `tuning/training/eval_strategy.py`, change `IFEvalStrategy.__init__` from:
 ```python
     def __init__(self, config: IFEvalConfig, tokenizer):
+        self.k_values = config.k_values
+        self.stopping_k = config.k_values[0]
+        self._n_samples = config.n_samples
+        self.strict = config.strict
+        ...
 ```
 To:
 ```python
-    def __init__(self, config: IFEvalConfig):
+    def __init__(self, k_values=None, n_samples=1, num_prompts=541, strict=True):
+        k_values = k_values or [1]
+        self.k_values = k_values
+        self.stopping_k = k_values[0]
+        self._n_samples = n_samples
+        self.strict = strict
+
+        self.test_dataset = get_ifeval_test_dataset()
+        if num_prompts is not None:
+            self.test_dataset = self.test_dataset.select(
+                range(min(num_prompts, len(self.test_dataset)))
+            )
+        ...
 ```
 
-Add imports and `GSM8KEvalStrategy` class after `IFEvalStrategy`:
+Remove the `IFEvalConfig` import from eval_strategy.py.
+
+**Step 3c: Add GSM8KEvalStrategy**
+
+Add imports and class after `IFEvalStrategy` in `tuning/training/eval_strategy.py`:
 
 ```python
 from tuning.data.test_dataset import get_gsm8k_test_dataset
 from tuning.evaluation.gsm8k_scoring import is_correct as gsm8k_is_correct
-from tuning.training.config_training import GSM8KConfig
 
 
 class GSM8KEvalStrategy(EvalStrategy):
-    """GSM8K evaluation using pass@k scoring (parallel to IFEvalStrategy)."""
+    """GSM8K evaluation using pass@k scoring."""
 
-    def __init__(self, config: GSM8KConfig):
-        self.k_values = config.k_values
-        self._n_samples = config.n_samples
-        self.stopping_k = config.k_values[0]
+    def __init__(self, k_values=None, n_samples=1, num_prompts=None):
+        k_values = k_values or [1]
+        self.k_values = k_values
+        self._n_samples = n_samples
+        self.stopping_k = k_values[0]
 
-        self.test_dataset = get_gsm8k_test_dataset(num_prompts=config.num_prompts)
+        self.test_dataset = get_gsm8k_test_dataset(num_prompts=num_prompts)
         self.reference_answers = {
             prompt: ref
             for prompt, ref in zip(
@@ -554,7 +574,7 @@ class GSM8KEvalStrategy(EvalStrategy):
             )
         }
 
-        print(f"[GSM8KEvalStrategy] k_values={config.k_values}, n_samples={config.n_samples}, "
+        print(f"[GSM8KEvalStrategy] k_values={k_values}, n_samples={n_samples}, "
               f"num_prompts={len(self.test_dataset)}")
 
     @property
@@ -613,27 +633,23 @@ class GSM8KEvalStrategy(EvalStrategy):
         return metrics
 ```
 
-**Step 3c: Update existing IFEval tests**
-
-Remove `tokenizer=...` from all `IFEvalStrategy(...)` constructor calls in `tests/test_eval_strategy.py`.
-
 **Step 4: Run tests to verify they pass**
 
 Run: `pytest tests/test_eval_strategy.py -v`
-Expected: All PASS (both old IFEval tests and new GSM8K tests)
+Expected: All PASS (both updated IFEval tests and new GSM8K tests)
 
 **Step 5: Commit**
 
 ```bash
 git add tuning/training/config_training.py tuning/training/eval_strategy.py tests/test_eval_strategy.py
-git commit -m "feat: add GSM8KEvalStrategy and GSM8KConfig, remove unused tokenizer from strategy constructors"
+git commit -m "feat: add GSM8KEvalStrategy, delete IFEvalConfig, strategies take direct params"
 ```
 
 ---
 
-### Task 4: Trainers accept pre-built eval strategies directly (drop eval configs)
+### Task 4: Trainers accept pre-built eval strategies directly
 
-Replace `ifeval_config` param with `primary_eval` and `monitor_evals` in both `sft_training.py` and `dpo_training.py`. The trainers become fully task-agnostic — they never construct strategies, never import eval config types, and never know about IFEval or GSM8K. Strategy construction moves entirely to the pipeline (Task 5).
+Replace `ifeval_config` param with `primary_eval` and `monitor_evals` in both `sft_training.py` and `dpo_training.py`. The trainers become fully task-agnostic — they never construct strategies, never import eval types, and never know about IFEval or GSM8K. Strategy construction moves entirely to the pipeline (Task 5).
 
 **Files:**
 - Modify: `tuning/training/sft_training.py` (replace `ifeval_config` with `primary_eval` + `monitor_evals`)
@@ -662,6 +678,9 @@ def test_dpo_training_accepts_primary_eval():
     assert "monitor_evals" in sig.parameters
     assert "ifeval_config" not in sig.parameters
 ```
+
+Also:
+- **Delete** `test_sft_training_imports_eval_strategy` (sft_training no longer imports eval_strategy directly — it receives pre-built strategies)
 
 **Step 2: Run tests to verify they fail**
 
@@ -746,9 +765,9 @@ git commit -m "refactor: trainers accept pre-built eval strategies, drop eval co
 
 ---
 
-### Task 5: Pipeline builds and passes eval strategies to trainers
+### Task 5: Pipeline composer function builds all eval components
 
-The pipeline now owns all strategy construction. Replace `_sft_ifeval_config` / `_dpo_ifeval_config` with `_build_eval_strategy` that returns a ready-to-use `EvalStrategy`. Since strategy constructors no longer need a tokenizer (removed in Task 3), the pipeline can build strategies before calling the trainers.
+Replace the 4 separate builder functions (`_sft_passk_config`, `_dpo_passk_config`, `_sft_ifeval_config`, `_dpo_ifeval_config`) with a single composer function `_build_eval_components` that returns a `(passk_config, primary_eval, monitor_evals)` tuple. Since strategy constructors no longer need a tokenizer (removed in Task 3), the pipeline can build strategies before calling trainers.
 
 **Files:**
 - Modify: `tuning/training/unified_early_pipeline.py`
@@ -775,57 +794,101 @@ Run: `pytest tests/test_unified_early_pipeline.py -v -k "task_name"`
 
 **Step 3: Modify the pipeline**
 
-1. **Replace `_sft_ifeval_config` / `_dpo_ifeval_config` with `_build_eval_strategy`**:
+1. **Add the composer function** (replaces `_sft_passk_config`, `_dpo_passk_config`, `_sft_ifeval_config`, `_dpo_ifeval_config`):
 
 ```python
-def _build_eval_strategy(args, stage):
-    """Build the eval strategy for the given task and stage, or None if pass@k disabled."""
+def _build_eval_components(args, stage, gpu_util):
+    """Build PassAtKConfig + eval strategies for the given task and stage.
+
+    Returns (passk_config, primary_eval, monitor_evals).
+    All three are None/[] if pass@k is disabled for this stage.
+    """
     prefix = stage  # "sft" or "dpo"
-    enabled_attr = f"{prefix}_enable_passk"
-    if not getattr(args, enabled_attr, False):
-        return None
+    if not getattr(args, f"{prefix}_enable_passk", False):
+        return None, None, []
+
+    from tuning.training.config_training import PassAtKConfig
+    passk_config = PassAtKConfig(
+        target_pass_at_k=getattr(args, f"{prefix}_passk_targets"),
+        early_tuples=getattr(args, f"{prefix}_passk_early") or None,
+        temperature=getattr(args, f"{prefix}_passk_temperature"),
+        enabled=True,
+        num_inference_gpus=getattr(args, f"{prefix}_passk_num_inference_gpus"),
+        use_persistent_vllm=getattr(args, f"{prefix}_passk_persistent_vllm"),
+        vllm_gpu_memory_utilization=gpu_util,
+    )
+
+    k_values = getattr(args, f"{prefix}_passk_k_values", [1])
+    n_samples = getattr(args, f"{prefix}_passk_n_samples", 1)
+    num_prompts = getattr(args, f"{prefix}_passk_num_prompts", None)
 
     if args.task_name == "ifeval":
-        from tuning.training.config_training import IFEvalConfig
         from tuning.training.eval_strategy import IFEvalStrategy
-        config = IFEvalConfig(
-            k_values=getattr(args, f"{prefix}_passk_k_values", [1]),
-            n_samples=getattr(args, f"{prefix}_passk_n_samples", 1),
-            num_prompts=getattr(args, f"{prefix}_passk_num_prompts", 541),
-            strict=getattr(args, f"{prefix}_passk_strict", True),
+        strict = getattr(args, f"{prefix}_passk_strict", True)
+        primary_eval = IFEvalStrategy(
+            k_values=k_values, n_samples=n_samples,
+            num_prompts=num_prompts or 541, strict=strict,
         )
-        return IFEvalStrategy(config=config)
     elif args.task_name == "gsm8k":
-        from tuning.training.config_training import GSM8KConfig
         from tuning.training.eval_strategy import GSM8KEvalStrategy
-        config = GSM8KConfig(
-            k_values=getattr(args, f"{prefix}_passk_k_values", [1]),
-            n_samples=getattr(args, f"{prefix}_passk_n_samples", 1),
-            num_prompts=getattr(args, f"{prefix}_passk_num_prompts", None),
+        primary_eval = GSM8KEvalStrategy(
+            k_values=k_values, n_samples=n_samples,
+            num_prompts=num_prompts,
         )
-        return GSM8KEvalStrategy(config=config)
     else:
         raise ValueError(f"Unknown task name: {args.task_name}")
+
+    return passk_config, primary_eval, []
 ```
 
-2. **Update `run_sft`**: Replace `ifeval_config = _sft_ifeval_config(args)` with `primary_eval = _build_eval_strategy(args, "sft")`. Pass `primary_eval=primary_eval` to `train_model_sft` instead of `ifeval_config=ifeval_config`.
+2. **Delete** `_sft_passk_config`, `_dpo_passk_config`, `_sft_ifeval_config`, `_dpo_ifeval_config`.
 
-3. **Update `run_dpo`**: Same pattern — `primary_eval = _build_eval_strategy(args, "dpo")`, pass to `train_model_dpo`.
-
-4. **Update `_sft_tags`**: Change from taking `ifeval_config` to taking `primary_eval`. Get `k_val` from `primary_eval.stopping_k` instead of `ifeval_config.k_values[0]`:
+3. **Update `_sft_tags`**: Change from taking `ifeval_config` to taking `primary_eval`. Get `k_val` from `primary_eval.stopping_k` instead of `ifeval_config.k_values[0]`:
 
 ```python
 def _sft_tags(passk_config, ppl_config, primary_eval=None):
     tags = ["sft"]
     if passk_config is not None:
-        k_val = getattr(primary_eval, "stopping_k", 1) if primary_eval else 1
+        k_val = primary_eval.stopping_k if primary_eval else 1
         tags.append(f"p{k_val}")
         ...
 ```
 
-5. **Update DPO tags block** similarly.
+4. **Update `run_sft`**: Replace separate builder calls with composer:
 
-6. **Delete `_sft_ifeval_config` and `_dpo_ifeval_config`** — no longer needed.
+```python
+    passk_config, primary_eval, monitor_evals = _build_eval_components(args, "sft", gpu_util)
+    ppl_config = _sft_ppl_config(args)
+    tags = _sft_tags(passk_config, ppl_config, primary_eval)
+    ...
+        model, tokenizer, trainer, callbacks = train_model_sft(
+            ...,
+            passk_config=passk_config,
+            perplexity_config=ppl_config,
+            primary_eval=primary_eval,
+            monitor_evals=monitor_evals,
+        )
+```
+
+5. **Update `run_dpo`**: Same pattern — composer + pass to trainer:
+
+```python
+    passk_config, primary_eval, monitor_evals = _build_eval_components(args, "dpo", gpu_util)
+    ppl_config = _dpo_ppl_config(args)
+
+    tags = ["dpo", str(checkpoint["threshold_value"]), str(checkpoint["data_points_seen"])]
+    if passk_config is not None:
+        k_val = primary_eval.stopping_k if primary_eval else 1
+        tags.append(f"p{k_val}")
+    ...
+        train_model_dpo(
+            ...,
+            passk_config=passk_config,
+            perplexity_config=ppl_config,
+            primary_eval=primary_eval,
+            monitor_evals=monitor_evals,
+        )
+```
 
 **Step 4: Run all tests**
 
@@ -836,7 +899,7 @@ Expected: All PASS
 
 ```bash
 git add tuning/training/unified_early_pipeline.py tests/test_unified_early_pipeline.py
-git commit -m "refactor: pipeline builds eval strategies directly, no configs flow to trainers"
+git commit -m "refactor: composer function builds eval components, replaces separate builders"
 ```
 
 ---
@@ -910,12 +973,13 @@ python tuning/training/unified_early_pipeline.py \
 |------|--------|
 | `tuning/evaluation/gsm8k_scoring.py` | **NEW** — answer extraction and correctness checking |
 | `tuning/data/test_dataset.py` | Add `get_gsm8k_test_dataset()` |
-| `tuning/training/config_training.py` | Add `GSM8KConfig` |
-| `tuning/training/eval_strategy.py` | Remove `tokenizer` from `IFEvalStrategy.__init__`, add `GSM8KEvalStrategy` |
+| `tuning/training/config_training.py` | Delete `IFEvalConfig` (no eval config classes) |
+| `tuning/training/eval_strategy.py` | Refactor `IFEvalStrategy` to take direct params, add `GSM8KEvalStrategy` |
 | `tuning/training/sft_training.py` | Replace `ifeval_config` with `primary_eval` + `monitor_evals`, remove IFEval imports |
 | `tuning/training/dpo_training.py` | Same changes as sft_training |
-| `tuning/training/unified_early_pipeline.py` | Replace `_sft_ifeval_config`/`_dpo_ifeval_config` with `_build_eval_strategy`, pass strategies to trainers |
+| `tuning/training/unified_early_pipeline.py` | Single `_build_eval_components` composer replaces 4 builder functions |
 | `tests/test_gsm8k_scoring.py` | **NEW** — scoring tests |
 | `tests/test_gsm8k_test_dataset.py` | **NEW** — dataset loader tests |
-| `tests/test_eval_strategy.py` | Update IFEval tests (drop tokenizer), add GSM8K strategy tests, add trainer signature tests |
+| `tests/test_eval_strategy.py` | Update IFEval tests (direct params), add GSM8K tests, delete obsolete config tests |
 | `tests/test_unified_early_pipeline.py` | Add task-name dispatch tests |
+

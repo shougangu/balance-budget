@@ -39,10 +39,10 @@ MODEL_TO_GPU_1 = {
 
 MODEL_TO_GPU_2 = {
     "llama3-1B": 0.7,
-    "llama3-3B": 0.6,  # can reach 
-    "llama3-8B": 0.55,
-    "qwen2-3B": 0.45,
-    "qwen2-7B": 0.45,
+    "llama3-3B": 0.75,  # can reach 
+    "llama3-8B": 0.62,
+    "qwen2-3B": 0.65,
+    "qwen2-7B": 0.5,
 }
 
 
@@ -92,7 +92,7 @@ def _parse_args(argv=None):
     parser.add_argument("--sft-eval-steps", type=int, default=64)
     parser.add_argument("--sft-batch-size", type=int, default=16)
     parser.add_argument("--sft-grad-accum", type=int, default=1)
-    parser.add_argument("--dpo-eval-steps", type=int, default=64)
+    parser.add_argument("--dpo-eval-steps", type=int, default=256)
     parser.add_argument("--dpo-batch-size", type=int, default=4)
     parser.add_argument("--dpo-grad-accum", type=int, default=4)
 
@@ -235,7 +235,7 @@ def _sft_tags(passk_config, ppl_config, ifeval_config=None):
         k_val = ifeval_config.k_values[0] if ifeval_config else 1
         tags.append(f"p{k_val}")
         tags.append(early_pair_tag(get_early_pairs(passk_config)))
-        tags.append(early_abs_tag(get_early_abs(passk_config)))
+        # tags.append(early_abs_tag(get_early_abs(passk_config)))
     if ppl_config is not None:
         tags.append("ppl")
         tags.append(early_pair_tag(get_early_pairs(ppl_config)))
@@ -358,6 +358,7 @@ def next_checkpoint(metadata_file):
         for line in f:
             row = json.loads(line)
             if not row.get("completed"):
+                print(f"Next checkpoint: {row['checkpoint_path']} (threshold {row.get('threshold_value')}, type {row.get('threshold_type')})")
                 return row
     return None
 
@@ -506,35 +507,36 @@ def main():
         run_dpo(args)
         return
 
+
     # Orchestrator mode: spawn subprocesses
     base_cmd = _build_base_cmd(sys.argv)
+    all_files = (args.metadata_file or [])
+    if not args.run_dpo:
+        # SFT subprocess
+        sft_cmd = [sys.executable] + base_cmd + ["--run-sft"]
+        print(f"[orchestrator] Running SFT: {' '.join(sft_cmd)}")
+        result = subprocess.run(sft_cmd, stdout=subprocess.PIPE, text=True)
+        print(result.stdout)
+        if result.returncode != 0:
+            sys.exit(f"SFT subprocess failed with return code {result.returncode}")
 
-    # SFT subprocess
-    sft_cmd = [sys.executable] + base_cmd + ["--run-sft"]
-    print(f"[orchestrator] Running SFT: {' '.join(sft_cmd)}")
-    result = subprocess.run(sft_cmd, capture_output=True, text=True)
-    print(result.stdout)
-    if result.stderr:
-        print(result.stderr, file=sys.stderr)
-    if result.returncode != 0:
-        sys.exit(f"SFT subprocess failed with return code {result.returncode}")
+        metadata_files = parse_metadata_from_output(result.stdout)
+        if not metadata_files and not args.metadata_file:
+            sys.exit("No metadata files from SFT and no --metadata-file provided")
+        all_files = metadata_files + (args.metadata_file or [])
 
-    metadata_files = parse_metadata_from_output(result.stdout)
-    if not metadata_files and not args.metadata_file:
-        sys.exit("No metadata files from SFT and no --metadata-file provided")
-    all_files = metadata_files + (args.metadata_file or [])
-
-    # DPO subprocess loop: one subprocess per checkpoint
+        print(f"Metadata files for DPO: {all_files}")
+        # DPO subprocess loop: one subprocess per checkpoint
     for metadata_file in all_files:
+        if not Path(metadata_file).is_file():
+            print(f"Warning: metadata file {metadata_file} does not exist, skipping")
+            continue
         while next_checkpoint(metadata_file) is not None:
             dpo_cmd = [sys.executable] + base_cmd + [
                 "--run-dpo", "--metadata-file", metadata_file,
             ]
             print(f"[orchestrator] Running DPO: {' '.join(dpo_cmd)}")
-            result = subprocess.run(dpo_cmd, capture_output=True, text=True)
-            print(result.stdout)
-            if result.stderr:
-                print(result.stderr, file=sys.stderr)
+            result = subprocess.run(dpo_cmd)
             if result.returncode != 0:
                 sys.exit(f"DPO subprocess failed with return code {result.returncode}")
 

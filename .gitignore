@@ -182,3 +182,6 @@ unsloth_compiled_cache
 .claude/*
 CLAUDE.md
 .worktrees/
+
+.gemini/
+gha-creds-*.json

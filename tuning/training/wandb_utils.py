@@ -14,7 +14,7 @@ def early_pair_tag(early_pairs: list[list[float]]) -> str:
     return "(" + ",".join(f"{int(p)}@{float(t):g}" for p, t in early_pairs) + ")"
 
 def get_early_abs(config: Any) -> list[float]:
-    early_abs = getattr(config, "early_abs", None)
+    early_abs = getattr(config, "target_pass_at_k", None)
     if not early_abs:
         return []
     return [float(t) for t in early_abs]
