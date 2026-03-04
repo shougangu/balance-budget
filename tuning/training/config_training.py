@@ -86,14 +86,6 @@ class DPOTrainingConfig(TrainingArgumentsConfig):
         return d
 
 
-class IFEvalConfig(BaseModel):
-    """Configuration for IFEval pass@k evaluation."""
-    k_values: list[int] = [1]  # The k values for pass@k evaluation. First value is used for stopping.
-    n_samples: int = 1  # Number of samples to generate per prompt
-    num_prompts: int = 541  # Number of prompts to evaluate (subset for speed)
-    strict: bool = True  # Use strict (True) or loose (False) IFEval evaluation
-
-
 class PassAtKConfig(BaseModel):
     """Configuration for generation-based evaluation callback."""
     target_pass_at_k: list[float] = [0.8]  # Target pass@k score to stop training (0.0 to 1.0)
