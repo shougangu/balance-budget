@@ -77,9 +77,9 @@ def _parse_args(argv=None):
                        help="Explicitly run both stages (default when none specified)")
 
     # Core
-    parser.add_argument("--dataset", default="tuluif")
+    parser.add_argument("--dataset", default="gsm8k", choices=["tuluif", "gsm8k"],)
     parser.add_argument("--train-size", type=int, default=10000)
-    parser.add_argument("--task-name", default="ifeval")
+    parser.add_argument("--task-name", default="gsm8k", choices=["ifeval", "gsm8k"])
     parser.add_argument("--max-seq-length", type=int, default=1024)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--metadata-merge", choices=["union", "passk", "ppl"], default="union",

@@ -33,6 +33,7 @@ def evaluate_single_response(inp: evaluation_lib.InputExample, response: str, st
 
 class EvalStrategy(ABC):
     """Defines what prompts to generate and how to score responses."""
+    
 
     @abstractmethod
     def get_test_messages(self) -> List[List[dict]]:
@@ -49,6 +50,11 @@ class EvalStrategy(ABC):
     @abstractmethod
     def stopping_metric(self) -> str:
         """Which key from score_responses() to use for thresholds."""
+
+    @property
+    @abstractmethod
+    def id(self) -> str:
+        """Unique identifier for this eval strategy (e.g., 'ifeval_pass_at_1')."""
 
     @property
     @abstractmethod
@@ -126,6 +132,10 @@ class IFEvalStrategy(EvalStrategy):
         )
         return scores
 
+    @property
+    def id(self) -> str:
+        return "ifeval"
+    
     def stopping_metric(self) -> str:
         return f"pass_at_{self.stopping_k}"
 
@@ -165,7 +175,11 @@ class GSM8KEvalStrategy(EvalStrategy):
     @property
     def n_samples(self) -> int:
         return self._n_samples
-
+    
+    @property
+    def id(self) -> str:
+        return "gsm8k"
+    
     def get_test_messages(self) -> List[List[dict]]:
         return self.test_dataset["messages"]
 
