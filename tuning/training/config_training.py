@@ -54,6 +54,7 @@ class TrainingArgumentsConfig(BaseModel):
     save_total_limit: int = 1
     load_best_model_at_end: bool = False
     dataloader_drop_last: bool = False
+    dataloader_num_workers: int = 2
     eval_accumulation_steps: int = 1
     # prediction_loss_only: bool = True
     # eval_do_concat_batches: bool = False
@@ -71,11 +72,11 @@ class TrainingArgumentsConfig(BaseModel):
 
 
 class DPOTrainingConfig(TrainingArgumentsConfig):
-    beta: float = 1
+    beta: float = 0.1 # set to 1, previously
     learning_rate: float = 5e-6
     num_train_epochs: int = 3
     per_device_eval_batch_size: int = 2
-    dataset_num_proc: int = 2
+    dataset_num_proc: int = 4
 
     def to_hf_args(self, output_dir: str) -> dict:
         """Return kwargs for DPOConfig constructor, including beta."""

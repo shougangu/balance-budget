@@ -66,7 +66,7 @@ def train_model_sft(
         eval_dataset = dataset["test"],
         dataset_text_field = "text",
         max_seq_length = model_load_config.max_seq_length,
-        dataset_num_proc = 2,
+        dataset_num_proc = 4,
         packing = False,
         callbacks = callbacks if callbacks else None,
         args = TrainingArguments(
