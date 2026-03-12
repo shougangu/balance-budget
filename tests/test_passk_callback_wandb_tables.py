@@ -25,6 +25,10 @@ class _BaseEval:
         self.stopping_k = 1
 
     @property
+    def id(self):
+        return "ifeval"
+
+    @property
     def n_samples(self):
         return self._n_samples
 
@@ -53,6 +57,10 @@ class IFEvalStrategy(_BaseEval):
 
 
 class GSM8KEvalStrategy(_BaseEval):
+    @property
+    def id(self):
+        return "gsm8k"
+
     @property
     def label_prefix(self):
         return "gsm8k-p@1"

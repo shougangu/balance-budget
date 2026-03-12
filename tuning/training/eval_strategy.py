@@ -21,7 +21,7 @@ def pass_at_k(n: int, c: int, k: int) -> float:
     return 1.0 - np.prod(1.0 - k / np.arange(n - c + 1, n + 1))
 
 
-def evaluate_single_response(inp: evaluation_lib.InputExample, response: str, strict: bool = True) -> bool:
+def evaluate_single_response(inp: evaluation_lib.InputExample, response: str, strict: bool = True, easy = False) -> bool:
     """Evaluate a single response using the pre-built IFEval functions."""
     prompt_to_response = {inp.prompt: response}
     if strict:
@@ -30,7 +30,9 @@ def evaluate_single_response(inp: evaluation_lib.InputExample, response: str, st
         result = evaluation_lib.test_instruction_following_loose(inp, prompt_to_response)
     return result.follow_all_instructions
 
-
+def evaluate_single_response_instruction(inp: evaluation_lib.InputExample, response: str) -> float:
+    result = evaluation_lib.test_instruction_following_loose(inp, {inp.prompt: response})
+    return sum(result.follow_instruction_list) / len(result.follow_instruction_list)
 class EvalStrategy(ABC):
     """Defines what prompts to generate and how to score responses."""
     
@@ -107,6 +109,7 @@ class IFEvalStrategy(EvalStrategy):
 
     def score_responses(self, results: List[Dict], tokenizer) -> Dict[str, float]:
         all_results = []
+        all_results_instruction = []
         response_token_lengths = []
 
         for item in results:
@@ -122,10 +125,16 @@ class IFEvalStrategy(EvalStrategy):
             eval_results = [evaluate_single_response(eval_input, r, self.strict) for r in responses]
             all_results.append(eval_results)
 
+            eval_results_instruction = [evaluate_single_response_instruction(eval_input, r) for r in responses]
+            all_results_instruction.append(eval_results_instruction)
+
         scores = {}
         for k in self.k_values:
             pass_at_k_scores = [pass_at_k(len(r), sum(r), k) for r in all_results]
             scores[f"pass_at_{k}"] = np.mean(pass_at_k_scores)
+
+        # scores[f"pass_at_1"] = np.mean(all_results_instruction)
+
         scores["num_prompts_evaluated"] = len(all_results)
         scores["avg_response_length_tokens"] = (
             float(np.mean(response_token_lengths)) if response_token_lengths else 0.0
