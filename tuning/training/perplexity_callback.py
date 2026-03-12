@@ -45,7 +45,10 @@ class PerplexityStoppingCallback(TrainerCallback):
             self.model_name = kwargs.get("model")
         print(f"[PerplexityCallback] on_train_begin: model_name={self.model_name}")
         now = datetime.datetime.now().strftime("%m%d_%H%M")
-        self.metadata_path = os.path.join(MODELS_METADATA_DIR, f"{self.model_name}_ppl-{now}.json") 
+        self.metadata_path = os.path.join(MODELS_METADATA_DIR, f"{self.model_name}_ppl-{now}.json")
+
+        # Baseline evaluation before training starts
+        self.on_evaluate(args, state, control, **kwargs)
 
     def _save_sweetspot_checkpoint(self, model, threshold, state: TrainerState, args: TrainingArguments):
         return save_sweetspot_checkpoint(
