@@ -62,7 +62,7 @@ def run_inference_ifeval(model_name: str, n_samples: int = 1, temperature: float
 
 if __name__ == "__main__":
 
-    model_name =  "qwen2-7B"
+    model_name =  "llama3-8B_p@1-0.35_sft-0"
     print(f"Running ifeval for {model_name}")
     run_inference_ifeval(model_name)
     
