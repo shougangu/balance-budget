@@ -33,6 +33,7 @@ MODEL_TO_GPU_1 = {
 "llama3-1B": 0.75,
 "llama3-3B": 0.6, # (0.65 gives 79% peak with multi with one 97% spike?)
 "llama3-8B": 0.6,  # (0.68 gives 90% peak)
+"qwen2-2B": 0.65,
 "qwen2-3B": 0.65, # (0.65 gives 76% peak with non-persistence but one 91% spike?)
 "qwen2-7B": 0.55,
 }
@@ -41,6 +42,7 @@ MODEL_TO_GPU_2 = {
     "llama3-1B": 0.7,
     "llama3-3B": 0.75,  # can reach 
     "llama3-8B": 0.62,
+    "qwen2-2B": 0.65,
     "qwen2-3B": 0.65,
     "qwen2-7B": 0.5,
 }
@@ -104,7 +106,7 @@ def _parse_args(argv=None):
 
     # SFT pass@k
     parser.add_argument("--sft-passk-targets", type=float, nargs="+", 
-                        default=[0.25,0.3,0.35,0.4,0.45,0.5,0.55,0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95])
+                        default=[0.05,0.1,0.15,0.2,0.25,0.3,0.35,0.4,0.45,0.5,0.55,0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95])
     parser.add_argument("--sft-passk-early", type=parse_early_tuple, nargs="*",
                         default=[(1, 0.02), (2, 0.02), (3, 0.02), (4, 0.02), (5, 0.02)])
     parser.add_argument("--sft-passk-k-values", type=int, nargs="+", default=[1])
@@ -120,7 +122,7 @@ def _parse_args(argv=None):
     parser.add_argument("--sft-ppl-thresholds", type=float, nargs="+", default=[1.0])
     parser.add_argument("--sft-ppl-num-samples", type=int, default=541)
     parser.add_argument("--sft-ppl-early", type=parse_early_tuple, nargs="*",
-                        default=[(1, 0.02), (2, 0.02), (3, 0.02), (4, 0.02), (5, 0.02)])
+                        default=[])
 
     # DPO pass@k
     parser.add_argument("--dpo-passk-targets", type=float, nargs="+", default=[1.2])
@@ -140,7 +142,10 @@ def _parse_args(argv=None):
     parser.add_argument("--dpo-ppl-early", type=parse_early_tuple, nargs="*", default=[])
 
 
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    if (args.sft_enable_ppl or args.dpo_enable_ppl) and args.max_seq_length == 1024:
+        args.max_seq_length = 4096
+    return args
 
 
 
@@ -219,6 +224,8 @@ def _sft_tags(passk_config, ppl_config, primary_eval=None):
     """Build W&B tags for an SFT run."""
     from tuning.training.wandb_utils import get_early_pairs, early_pair_tag, get_early_abs, early_abs_tag
     tags = ["sft"]
+    if primary_eval is not None:
+        tags.append(primary_eval.id)
     if passk_config is not None:
         k_val = primary_eval.stopping_k if primary_eval else 1
         tags.append(f"p{k_val}")
@@ -357,6 +364,8 @@ def mark_completed(metadata_file, checkpoint_path):
         lines = f.readlines()
     with open(metadata_file, "w") as f:
         for line in lines:
+            if not line.strip():
+                continue
             row = json.loads(line)
             if row["checkpoint_path"] == checkpoint_path:
                 row["completed"] = True
@@ -445,7 +454,15 @@ def run_dpo(args):
     passk_config, primary_eval, monitor_evals = _build_eval_components(args, "dpo", gpu_util)
     ppl_config = _dpo_ppl_config(args)
 
+    perplexity_test_dataset = None
+    if ppl_config is not None:
+        from tuning.data.train_dataset import get_train_dataset
+        sft_dataset = get_train_dataset(sft_run_config)
+        perplexity_test_dataset = sft_dataset["test"]
+
     tags = ["dpo", str(checkpoint["threshold_value"]), str(checkpoint["data_points_seen"])]
+    if primary_eval is not None:
+        tags.append(primary_eval.id)
     if passk_config is not None:
         k_val = primary_eval.stopping_k if primary_eval else 1
         tags.append(f"p{k_val}")
@@ -467,8 +484,10 @@ def run_dpo(args):
             training_args=training_args,
             passk_config=passk_config,
             perplexity_config=ppl_config,
+            perplexity_test_dataset=perplexity_test_dataset,
             primary_eval=primary_eval,
             monitor_evals=monitor_evals,
+            initial_global_step=checkpoint.get("global_step")
         )
 
     mark_completed(metadata_file, checkpoint["checkpoint_path"])
