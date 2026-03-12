@@ -25,6 +25,7 @@ def train_model_dpo(
     passk_config = None,  # PassAtKConfig object
     primary_eval = None,  # Pre-built EvalStrategy
     monitor_evals = None,  # Additional EvalStrategy list
+    initial_global_step = None,  # Continue step counter from a prior SFT run
 ):
     # Resolve model path: SFT checkpoint or base HF model
     if run_config.sft_run_config:
@@ -47,6 +48,7 @@ def train_model_dpo(
     tokenizer = chat_template_func(tokenizer)
 
     callbacks = []
+
     if passk_config is not None and passk_config.enabled:
         passk_callback = PassAtKStoppingCallback(
             config=passk_config,
@@ -77,6 +79,11 @@ def train_model_dpo(
         callbacks = callbacks if callbacks else None,
         args = DPOConfig(**training_args.to_hf_args(output_dir=run_config.output_dir)),
     )
+
+    # Insert at front so it injects train/total_global_step before WandbCallback reads logs.
+    if initial_global_step:
+        from tuning.training.callback_utils import GlobalStepOffsetCallback
+        trainer.callback_handler.callbacks.insert(0, GlobalStepOffsetCallback(initial_global_step))
 
     try:
         trainer_stats = trainer.train()

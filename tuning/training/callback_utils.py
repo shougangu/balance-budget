@@ -1,8 +1,26 @@
 import os
 import json
-from transformers import TrainerState
+from transformers import TrainerState, TrainerCallback
 from transformers.training_args import TrainingArguments
 from tuning.config import MODELS_DIR
+
+
+class GlobalStepOffsetCallback(TrainerCallback):
+    """Injects train/total_global_step into W&B logs for cross-run step continuity."""
+
+    def __init__(self, initial_global_step):
+        self.offset = initial_global_step or 0
+
+    def on_train_begin(self, args, state, control, **kwargs):
+        if self.offset:
+            import wandb
+            if wandb.run:
+                wandb.define_metric("train/total_global_step")
+                wandb.define_metric("*", step_metric="train/total_global_step")
+
+    def on_log(self, args, state, control, logs=None, **kwargs):
+        if self.offset and logs is not None:
+            logs["train/total_global_step"] = state.global_step + self.offset
 
 
 def compute_data_points_seen(state: TrainerState, args: TrainingArguments) -> int:

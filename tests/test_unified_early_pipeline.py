@@ -146,13 +146,13 @@ class TestParseArgs:
         assert args.wandb_project == "tuning"
 
     def test_default_dataset(self):
-        assert _parse_args(REQUIRED).dataset == "tuluif"
+        assert _parse_args(REQUIRED).dataset == "gsm8k"
 
     def test_default_train_size(self):
         assert _parse_args(REQUIRED).train_size == 10000
 
     def test_default_task_name(self):
-        assert _parse_args(REQUIRED).task_name == "ifeval"
+        assert _parse_args(REQUIRED).task_name == "gsm8k"
 
     def test_default_max_seq_length(self):
         assert _parse_args(REQUIRED).max_seq_length == 1024
@@ -285,6 +285,90 @@ class TestMetadataIPC:
 # _build_base_cmd
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# GlobalStepOffsetCallback
+# ---------------------------------------------------------------------------
+
+class TestGlobalStepOffsetCallback:
+    def test_does_not_mutate_global_step(self):
+        from tuning.training.callback_utils import GlobalStepOffsetCallback
+        from transformers import TrainerState
+
+        callback = GlobalStepOffsetCallback(initial_global_step=100)
+        state = TrainerState()
+        state.global_step = 5
+
+        callback.on_log(args=None, state=state, control=None, logs={})
+        assert state.global_step == 5, "global_step must not be mutated"
+
+    def test_adds_total_global_step_to_logs(self):
+        from tuning.training.callback_utils import GlobalStepOffsetCallback
+        from transformers import TrainerState
+
+        callback = GlobalStepOffsetCallback(initial_global_step=100)
+        state = TrainerState()
+        state.global_step = 5
+        logs = {}
+
+        callback.on_log(args=None, state=state, control=None, logs=logs)
+        assert logs["train/total_global_step"] == 105
+
+    def test_zero_offset_skips_injection(self):
+        from tuning.training.callback_utils import GlobalStepOffsetCallback
+        from transformers import TrainerState
+
+        callback = GlobalStepOffsetCallback(initial_global_step=0)
+        state = TrainerState()
+        state.global_step = 5
+        logs = {}
+
+        callback.on_log(args=None, state=state, control=None, logs=logs)
+        assert "train/total_global_step" not in logs
+
+    def test_none_offset_skips_injection(self):
+        from tuning.training.callback_utils import GlobalStepOffsetCallback
+        from transformers import TrainerState
+
+        callback = GlobalStepOffsetCallback(initial_global_step=None)
+        state = TrainerState()
+        state.global_step = 5
+        logs = {}
+
+        callback.on_log(args=None, state=state, control=None, logs=logs)
+        assert "train/total_global_step" not in logs
+
+    def test_on_train_begin_calls_define_metric(self):
+        from tuning.training.callback_utils import GlobalStepOffsetCallback
+        from unittest.mock import patch, MagicMock
+
+        callback = GlobalStepOffsetCallback(initial_global_step=100)
+        mock_wandb = MagicMock()
+        mock_wandb.run = True
+
+        with patch.dict("sys.modules", {"wandb": mock_wandb}):
+            callback.on_train_begin(args=None, state=None, control=None)
+
+        mock_wandb.define_metric.assert_any_call("train/total_global_step")
+        mock_wandb.define_metric.assert_any_call("*", step_metric="train/total_global_step")
+
+    def test_on_train_begin_skips_when_no_offset(self):
+        from tuning.training.callback_utils import GlobalStepOffsetCallback
+        from unittest.mock import patch, MagicMock
+
+        callback = GlobalStepOffsetCallback(initial_global_step=0)
+        mock_wandb = MagicMock()
+        mock_wandb.run = True
+
+        with patch.dict("sys.modules", {"wandb": mock_wandb}):
+            callback.on_train_begin(args=None, state=None, control=None)
+
+        mock_wandb.define_metric.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# _build_base_cmd
+# ---------------------------------------------------------------------------
+
 class TestBuildBaseCmd:
     def test_strips_run_all(self):
         original = ["/usr/bin/python", "pipeline.py", "--model", "llama3-3B", "--run-all", "--wandb-project", "tuning"]
@@ -312,6 +396,6 @@ class TestTaskNameDispatch:
         args = _parse_args(REQUIRED + ["--task-name", "gsm8k"])
         assert args.task_name == "gsm8k"
 
-    def test_default_task_name_is_ifeval(self):
+    def test_default_task_name_is_gsm8k(self):
         args = _parse_args(REQUIRED)
-        assert args.task_name == "ifeval"
+        assert args.task_name == "gsm8k"
