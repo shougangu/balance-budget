@@ -1,6 +1,8 @@
 # ABOUTME: Generates a markdown sweetspot analysis table from a W&B project URL.
 # ABOUTME: Shows SFT→DPO accuracy trade-offs for the most recent experiment run.
 
+import argparse
+import sys
 from dataclasses import dataclass, field
 from urllib.parse import urlparse
 
@@ -215,3 +217,63 @@ def format_table(baseline: SftBaseline, rows: list[DpoRow]) -> str:
         lines.append("| " + " | ".join(cells) + " |")
 
     return "\n".join(lines) + "\n"
+
+
+def _fetch_eval_history(run, metric: str = "eval/gsm8k_pass_at_1") -> list[float]:
+    """Fetch the eval metric history from a W&B run object."""
+    history = list(run.scan_history(keys=[metric]))
+    return [row[metric] for row in history if metric in row]
+
+
+def _wandb_run_to_info(run) -> RunInfo:
+    """Convert a W&B API run object to a RunInfo dataclass."""
+    return RunInfo(
+        name=run.name,
+        tags=list(run.tags),
+        created_at=run.created_at,
+        state=run.state,
+        config=dict(run.config),
+        summary=dict(run.summary),
+    )
+
+
+def main(argv: list[str] | None = None) -> None:
+    """CLI entry point: generate sweetspot table from a W&B project URL."""
+    import wandb
+
+    parser = argparse.ArgumentParser(
+        description="Generate SFT→DPO sweetspot analysis table from W&B"
+    )
+    parser.add_argument("url", help="W&B project URL")
+    args = parser.parse_args(argv)
+
+    entity, project = parse_wandb_url(args.url)
+    api = wandb.Api()
+    raw_runs = li st(api.runs(f"{entity}/{project}"))
+
+    runs = [_wandb_run_to_info(r) for r in raw_runs]
+    sft_run = find_latest_sft_run(runs)
+    dpo_forks = find_dpo_forks(sft_run, runs)
+
+    if not dpo_forks:
+        print(f"No DPO forks found for SFT run '{sft_run.name}'", file=sys.stderr)
+        sys.exit(1)
+
+    # Find the original W&B run object for history fetching
+    raw_by_name = {r.name: r for r in raw_runs}
+    sft_history = _fetch_eval_history(raw_by_name[sft_run.name])
+    baseline = extract_sft_baseline(sft_run, sft_history)
+
+    dpo_rows = []
+    for fork in dpo_forks:
+        history = _fetch_eval_history(raw_by_name[fork.name])
+        if not history:
+            print(f"Warning: no eval history for '{fork.name}', skipping", file=sys.stderr)
+            continue
+        dpo_rows.append(extract_dpo_row(fork, baseline.total_budget, history))
+
+    print(format_table(baseline, dpo_rows))
+
+
+if __name__ == "__main__":
+    main()
