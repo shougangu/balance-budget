@@ -31,7 +31,8 @@ def get_train_dataset(run_config: Union[PTRunConfig, SFTRunConfig]) -> DatasetDi
 
         full_dataset = load_from_disk(check_path)
         print(f"Sampled dataset: {full_dataset}")
-        print(f"Example training row: {full_dataset['train'][0]}")
+        if len(full_dataset['train']) > 0:
+            print(f"Example training row: {full_dataset['train'][0]}")
         print(f"Example evaluation row: {full_dataset['test'][0]}")
 
         return full_dataset
@@ -45,7 +46,8 @@ def get_train_dataset(run_config: Union[PTRunConfig, SFTRunConfig]) -> DatasetDi
 
     sampled_dataset = get_random_train_subset(full_dataset, train_size)
     print(f"Sampled dataset: {sampled_dataset}")
-    print(f"Example training row: {sampled_dataset['train'][0]}")
+    if len(sampled_dataset['train']) > 0:
+        print(f"Example training row: {sampled_dataset['train'][0]}")
     print(f"Example evaluation row: {sampled_dataset['test'][0]}")
 
     sampled_dataset.save_to_disk(f"{DATASETS_DIR}/{dataset_stub}-{train_size}")
