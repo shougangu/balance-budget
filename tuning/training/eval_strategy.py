@@ -3,6 +3,7 @@
 
 import numpy as np
 from abc import ABC, abstractmethod
+from collections import defaultdict
 from pathlib import Path
 from typing import List, Dict
 
@@ -19,6 +20,20 @@ def pass_at_k(n: int, c: int, k: int) -> float:
     if n - c < k:
         return 1.0
     return 1.0 - np.prod(1.0 - k / np.arange(n - c + 1, n + 1))
+
+
+def format_vllm_outputs(outputs, prompts: List[str], n_samples: int = 1) -> List[Dict]:
+    """Convert vLLM chat outputs to the [{prompt, responses}] format used by score_responses().
+
+    Groups responses by prompt, merging duplicates. Preserves first-seen order.
+    """
+    grouped = defaultdict(list)
+    for prompt, output in zip(prompts, outputs):
+        if n_samples == 1:
+            grouped[prompt].append(output.outputs[0].text)
+        else:
+            grouped[prompt].extend(r.text for r in output.outputs)
+    return [{"prompt": p, "responses": grouped[p]} for p in dict.fromkeys(prompts)]
 
 
 def evaluate_single_response(inp: evaluation_lib.InputExample, response: str, strict: bool = True, easy = False) -> bool:
@@ -128,12 +143,14 @@ class IFEvalStrategy(EvalStrategy):
             eval_results_instruction = [evaluate_single_response_instruction(eval_input, r) for r in responses]
             all_results_instruction.append(eval_results_instruction)
 
+            item["per_response_correct"] = eval_results
+
         scores = {}
         for k in self.k_values:
             pass_at_k_scores = [pass_at_k(len(r), sum(r), k) for r in all_results]
             scores[f"pass_at_{k}"] = np.mean(pass_at_k_scores)
 
-        # scores[f"pass_at_1"] = np.mean(all_results_instruction)
+        scores[f"pass_at_1"] = np.mean(all_results_instruction)
 
         scores["num_prompts_evaluated"] = len(all_results)
         scores["avg_response_length_tokens"] = (
@@ -211,6 +228,8 @@ class GSM8KEvalStrategy(EvalStrategy):
 
             eval_results = [gsm8k_is_correct(r, ref) for r in responses]
             all_results.append(eval_results)
+
+            item["per_response_correct"] = eval_results
 
         scores = {}
         for k in self.k_values:

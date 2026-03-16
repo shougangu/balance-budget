@@ -71,14 +71,15 @@ def _data_parallel_worker(worker_id, cuda_device, messages_chunk, base_model_hf,
             enforce_eager=True,
         )
 
-        sp_kwargs = dict(
+        from tuning.inference.config_inference import VLLMSamplingParamsConfig
+        inference_config = VLLMSamplingParamsConfig(
             n=n_samples,
             temperature=temperature,
             max_tokens=max_tokens,
         )
         if stop_tokens:
-            sp_kwargs["stop"] = stop_tokens
-        sampling_params = SamplingParams(**sp_kwargs)
+            inference_config.stop = stop_tokens
+        sampling_params = SamplingParams(**inference_config.model_dump())
 
         lora_request = LoRARequest(
             lora_name=f"adapter_worker{worker_id}",
@@ -480,6 +481,8 @@ class PassAtKStoppingCallback(TrainerCallback):
                 "prompt",
                 "responses",
                 "num_responses",
+                "per_response_correct",
+                "prompt_accuracy",
                 "stopping_metric_name",
                 "stopping_metric_value",
                 "thresholds_remaining",
@@ -500,6 +503,9 @@ class PassAtKStoppingCallback(TrainerCallback):
                 except TypeError:
                     responses_json = json.dumps([str(response) for response in responses])
 
+                correctness = item.get("per_response_correct", [])
+                prompt_accuracy = sum(correctness) / len(correctness) if correctness else None
+
                 table.add_data(
                     global_step,
                     eval_slug,
@@ -507,6 +513,8 @@ class PassAtKStoppingCallback(TrainerCallback):
                     prompt,
                     responses_json,
                     len(responses),
+                    json.dumps(correctness) if correctness else None,
+                    prompt_accuracy,
                     stopping_metric_name,
                     stopping_metric_value,
                     thresholds_remaining,
