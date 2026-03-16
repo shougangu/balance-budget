@@ -92,7 +92,7 @@ class PassAtKConfig(BaseModel):
     target_pass_at_k: list[float] = [0.8]  # Target pass@k score to stop training (0.0 to 1.0)
     early_tuples: list[tuple[int, float]] | None = None  # Each tuple: (patience, min_increase)
     temperature: float = 0.5  # Sampling temperature for generation
-    max_tokens: int = 1024  # Maximum tokens to generate per response
+    max_tokens: int = 4096  # Maximum tokens to generate per response
     enabled: bool = True  # Whether to enable the callback
     use_persistent_vllm: bool = True  # Keep vLLM engine alive between evals (saves cold-start time)
     vllm_gpu_memory_utilization: float = 0.4  # GPU memory fraction for vLLM (conservative for coexistence with training)

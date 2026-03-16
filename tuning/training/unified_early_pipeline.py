@@ -40,7 +40,7 @@ MODEL_TO_GPU_1 = {
 
 MODEL_TO_GPU_2 = {
     "llama3-1B": 0.7,
-    "llama3-3B": 0.75,  # can reach 
+    "llama3-3B": 0.62,  # can reach 
     "llama3-8B": 0.62,
     "qwen2-2B": 0.65,
     "qwen2-3B": 0.65,
@@ -90,6 +90,9 @@ def _parse_args(argv=None):
                         metavar="FILE",
                         help="Metadata JSONL file from a previous SFT run (repeatable)")
 
+    # SFT-specific
+    parser.add_argument("--sft-warmup-ratio", type=float, default=0.1)
+
     # Training args
     parser.add_argument("--sft-eval-steps", type=int, default=64)
     parser.add_argument("--sft-batch-size", type=int, default=16)
@@ -111,7 +114,7 @@ def _parse_args(argv=None):
                         default=[(1, 0.02), (2, 0.02), (3, 0.02), (4, 0.02), (5, 0.02)])
     parser.add_argument("--sft-passk-k-values", type=int, nargs="+", default=[1])
     parser.add_argument("--sft-passk-n-samples", type=int, default=1)
-    parser.add_argument("--sft-passk-num-prompts", type=int, default=541)
+    parser.add_argument("--sft-passk-num-prompts", type=int, default=1500)
     parser.add_argument("--sft-passk-temperature", type=float, default=0.5)
     parser.add_argument("--sft-passk-strict", action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument("--sft-passk-num-inference-gpus", type=int, default=1)
@@ -275,6 +278,7 @@ def run_sft(args):
     training_args.eval_steps = args.sft_eval_steps
     training_args.per_device_train_batch_size = args.sft_batch_size
     training_args.gradient_accumulation_steps = args.sft_grad_accum
+    training_args.warmup_ratio = args.sft_warmup_ratio
 
     passk_config, primary_eval, monitor_evals = _build_eval_components(args, "sft", gpu_util)
     ppl_config = _sft_ppl_config(args)
