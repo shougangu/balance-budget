@@ -28,7 +28,7 @@ def compute_data_points_seen(state: TrainerState, args: TrainingArguments) -> in
     bs = args.per_device_train_batch_size
     ga = args.gradient_accumulation_steps
     ws = getattr(args, "world_size", 1)
-    return int(state.global_step * bs * ga * ws / 2)
+    return int(state.global_step * bs * ga * ws)
 
 
 def save_sweetspot_checkpoint(

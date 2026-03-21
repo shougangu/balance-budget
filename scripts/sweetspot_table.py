@@ -25,6 +25,7 @@ class RunInfo:
     name: str
     tags: list[str]
     created_at: str
+    id: str = ""
     state: str = "finished"
     config: dict = field(default_factory=dict)
     summary: dict = field(default_factory=dict)
@@ -37,6 +38,8 @@ def _group_tags(tags: list[str]) -> set[str]:
         if t in ("sft", "dpo"):
             continue
         if t.startswith("early_pair:"):
+            continue
+        if t.startswith("early_abs:"):
             continue
         try:
             float(t)
@@ -74,8 +77,8 @@ def find_dpo_forks(sft_run: RunInfo, runs: list[RunInfo]) -> list[RunInfo]:
             continue
         if r.created_at <= sft_run.created_at:
             continue
-        if _group_tags(r.tags) != sft_group:
-            continue
+        # if _group_tags(r.tags) != sft_group:
+        #     continue
         forks.append(r)
     return forks
 
@@ -102,7 +105,8 @@ class DpoRow:
 
 
 def extract_sft_baseline(
-    sft_run: RunInfo, history: list[float]
+    sft_run: RunInfo, history: list[float],
+    metric: str = "eval/gsm8k_pass_at_1",
 ) -> SftBaseline:
     """Extract baseline metrics from the SFT run."""
     cfg = sft_run.config
@@ -112,7 +116,7 @@ def extract_sft_baseline(
     epochs = cfg["num_train_epochs"]
     total_budget = int(steps * batch * grad_accum / epochs)
 
-    sft_full_acc = sft_run.summary["eval/gsm8k_pass_at_1"]
+    sft_full_acc = sft_run.summary[metric]
     base_acc = history[0] if history else None
 
     return SftBaseline(
@@ -166,11 +170,11 @@ def _fmt_delta(val: float, ref: float) -> str:
     """Format the difference between two ratios as percentage points."""
     delta = (val - ref) * 100
     sign = "+" if delta >= 0 else ""
-    return f"{sign}{delta:.2f}pp"
+    return f"{sign}{delta:.2f}%"
 
 
-def format_table(baseline: SftBaseline, rows: list[DpoRow]) -> str:
-    """Render the sweetspot analysis as a markdown table."""
+def format_table(baseline: SftBaseline, rows: list[DpoRow], delimiter: str = ";") -> str:
+    """Render the sweetspot analysis as a delimited table."""
     include_base = baseline.base_acc is not None
     sorted_rows = sorted(rows, key=lambda r: r.sft_data, reverse=True)
 
@@ -182,8 +186,7 @@ def format_table(baseline: SftBaseline, rows: list[DpoRow]) -> str:
         headers.append("vs SFT-0")
 
     lines = []
-    lines.append("| " + " | ".join(headers) + " |")
-    lines.append("| " + " | ".join("---" for _ in headers) + " |")
+    lines.append(delimiter.join(headers))
 
     # SFT-only baseline row
     sft_cells = [
@@ -198,7 +201,7 @@ def format_table(baseline: SftBaseline, rows: list[DpoRow]) -> str:
     if include_base:
         assert baseline.base_acc is not None
         sft_cells.append(_fmt_delta(baseline.sft_full_acc, baseline.base_acc))
-    lines.append("| " + " | ".join(sft_cells) + " |")
+    lines.append(delimiter.join(sft_cells))
 
     # DPO fork rows
     for row in sorted_rows:
@@ -214,7 +217,7 @@ def format_table(baseline: SftBaseline, rows: list[DpoRow]) -> str:
         if include_base:
             assert baseline.base_acc is not None
             cells.append(_fmt_delta(row.best_dpo_acc, baseline.base_acc))
-        lines.append("| " + " | ".join(cells) + " |")
+        lines.append(delimiter.join(cells))
 
     return "\n".join(lines) + "\n"
 
@@ -231,6 +234,7 @@ def _wandb_run_to_info(run) -> RunInfo:
         name=run.name,
         tags=list(run.tags),
         created_at=run.created_at,
+        id=run.id,
         state=run.state,
         config=dict(run.config),
         summary=dict(run.summary),
@@ -245,11 +249,15 @@ def main(argv: list[str] | None = None) -> None:
         description="Generate SFT→DPO sweetspot analysis table from W&B"
     )
     parser.add_argument("url", help="W&B project URL")
+    parser.add_argument("--ifeval", action="store_true",
+                        help="Use eval/pass_at_1 metric instead of eval/gsm8k_pass_at_1")
     args = parser.parse_args(argv)
+
+    metric = "eval/pass_at_1" if args.ifeval else "eval/gsm8k_pass_at_1"
 
     entity, project = parse_wandb_url(args.url)
     api = wandb.Api()
-    raw_runs = li st(api.runs(f"{entity}/{project}"))
+    raw_runs = list(api.runs(f"{entity}/{project}"))
 
     runs = [_wandb_run_to_info(r) for r in raw_runs]
     sft_run = find_latest_sft_run(runs)
@@ -260,13 +268,13 @@ def main(argv: list[str] | None = None) -> None:
         sys.exit(1)
 
     # Find the original W&B run object for history fetching
-    raw_by_name = {r.name: r for r in raw_runs}
-    sft_history = _fetch_eval_history(raw_by_name[sft_run.name])
-    baseline = extract_sft_baseline(sft_run, sft_history)
+    raw_by_id = {r.id: r for r in raw_runs}
+    sft_history = _fetch_eval_history(raw_by_id[sft_run.id], metric=metric)
+    baseline = extract_sft_baseline(sft_run, sft_history, metric=metric)
 
     dpo_rows = []
     for fork in dpo_forks:
-        history = _fetch_eval_history(raw_by_name[fork.name])
+        history = _fetch_eval_history(raw_by_id[fork.id], metric=metric)
         if not history:
             print(f"Warning: no eval history for '{fork.name}', skipping", file=sys.stderr)
             continue

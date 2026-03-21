@@ -132,7 +132,7 @@ def _parse_args(argv=None):
     parser.add_argument("--dpo-passk-early", type=parse_early_tuple, nargs="*", default=[])
     parser.add_argument("--dpo-passk-k-values", type=int, nargs="+", default=[1])
     parser.add_argument("--dpo-passk-n-samples", type=int, default=1)
-    parser.add_argument("--dpo-passk-num-prompts", type=int, default=541)
+    parser.add_argument("--dpo-passk-num-prompts", type=int, default=1500)
     parser.add_argument("--dpo-passk-temperature", type=float, default=0.5)
     parser.add_argument("--dpo-passk-strict", action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument("--dpo-passk-num-inference-gpus", type=int, default=1)

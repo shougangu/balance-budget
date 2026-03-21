@@ -199,21 +199,21 @@ class TestFormatTable:
         ]
         table = format_table(baseline, rows)
         lines = table.strip().split("\n")
-        # Header + separator + SFT-only row + 2 DPO rows = 5 lines
-        assert len(lines) == 5
+        # Header + SFT-only row + 2 DPO rows = 4 lines
+        assert len(lines) == 4
         # SFT-only row
-        assert "SFT-only" in lines[2]
-        assert "51.10%" in lines[2]
-        assert "baseline" in lines[2]
+        assert "SFT-only" in lines[1]
+        assert "51.10%" in lines[1]
+        assert "baseline" in lines[1]
         # 0.50 row should come before 0.25 (sorted by sft_data desc)
-        assert "0.50" in lines[3]
-        assert "0.25" in lines[4]
+        assert "0.50" in lines[2]
+        assert "0.25" in lines[3]
         # vs SFT-full: 53.42% - 51.10% = +2.32pp
-        assert "+2.32pp" in lines[3]
+        assert "+2.32pp" in lines[2]
         # vs SFT-0: 53.42% - 8.32% = +45.10pp
-        assert "+45.10pp" in lines[3]
+        assert "+45.10pp" in lines[2]
         # vs SFT-0 for SFT-only: 51.10% - 8.32% = +42.78pp
-        assert "+42.78pp" in lines[2]
+        assert "+42.78pp" in lines[1]
 
     def test_handles_no_base_acc(self):
         baseline = SftBaseline(

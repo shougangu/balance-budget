@@ -1,10 +1,10 @@
 #!/bin/bash
 #SBATCH --job-name=unified_early_pipeline
-#SBATCH --partition=gpubase_h100_b1,gpubase_h100_b2,gpubase_h100_b3,gpubase_h100_b4,gpubase_h100_b5
+#SBATCH --partition=gpubase_h100_b2,gpubase_h100_b3,gpubase_h100_b4,gpubase_h100_b5
 #SBATCH --gres=gpu:1
 #SBATCH -c 4
 #SBATCH --mem=80GB
-#SBATCH --time=3:00:00
+#SBATCH --time=12:00:00
 #SBATCH --output=unified_early_pipeline_%j.out
 
 set -euo pipefail
