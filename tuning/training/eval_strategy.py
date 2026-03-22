@@ -37,7 +37,7 @@ def format_vllm_outputs(outputs, prompts: List[str], n_samples: int = 1) -> List
 
 
 def evaluate_single_response(inp: evaluation_lib.InputExample, response: str, strict: bool = True, easy = False) -> bool:
-    """Evaluate a single response using the pre-built IFEval functions."""
+    """Evaluate a single response using the pre-built IFEval functions -> returns 1 iff all instructions followed"""
     prompt_to_response = {inp.prompt: response}
     if strict:
         result = evaluation_lib.test_instruction_following_strict(inp, prompt_to_response)
@@ -46,12 +46,28 @@ def evaluate_single_response(inp: evaluation_lib.InputExample, response: str, st
     return result.follow_all_instructions
 
 def evaluate_single_response_instruction(inp: evaluation_lib.InputExample, response: str) -> float:
+    "Evaluate a single response using the pre-built IFEval functions -> return the % of instructions followed"
     result = evaluation_lib.test_instruction_following_loose(inp, {inp.prompt: response})
     return sum(result.follow_instruction_list) / len(result.follow_instruction_list)
+
+def evaluate_multiple_responses_instruction(inp: evaluation_lib.InputExample, responses: List[str], k: int, strict: bool = False) -> float:
+    """
+    Given multiple responses, calculate instruction-level pass@k.
+    If there are many instruction-following criterion (ie: follow_instruction_1, ..., following_instruction_n),
+    for every response, the pass@k is calculated as the average pass@k across individual criterion in the responses
+    """
+    eval_fn = evaluation_lib.test_instruction_following_strict if strict else evaluation_lib.test_instruction_following_loose
+    result_matrix = [eval_fn(inp, {inp.prompt: r}) for r in responses]
+    n = len(result_matrix)
+    num_instructions = len(result_matrix[0].follow_instruction_list)
+    pass_at_k_list = []
+    for c in range(num_instructions):
+        correct_count = sum(result_matrix[r].follow_instruction_list[c] for r in range(n))
+        pass_at_k_list.append(pass_at_k(n, correct_count, k))
+    return sum(pass_at_k_list) / len(pass_at_k_list)
+
 class EvalStrategy(ABC):
     """Defines what prompts to generate and how to score responses."""
-    
-
     @abstractmethod
     def get_test_messages(self) -> List[List[dict]]:
         """Chat messages to send to vLLM."""
@@ -123,8 +139,8 @@ class IFEvalStrategy(EvalStrategy):
         return self.test_dataset["prompt"]
 
     def score_responses(self, results: List[Dict], tokenizer) -> Dict[str, float]:
-        all_results = []
-        all_results_instruction = []
+        all_prompt_results = []
+        all_instruction_scores = {k: [] for k in self.k_values}
         response_token_lengths = []
 
         for item in results:
@@ -137,22 +153,29 @@ class IFEvalStrategy(EvalStrategy):
             response_token_lengths.extend(len(ids) for ids in encoded_batch["input_ids"])
 
             eval_input = self.inputs_map[prompt]
-            eval_results = [evaluate_single_response(eval_input, r, self.strict) for r in responses]
-            all_results.append(eval_results)
 
-            eval_results_instruction = [evaluate_single_response_instruction(eval_input, r) for r in responses]
-            all_results_instruction.append(eval_results_instruction)
+            prompt_results = [evaluate_single_response(eval_input, r, self.strict) for r in responses]
+            all_prompt_results.append(prompt_results)
 
-            item["per_response_correct"] = eval_results
+            for k in self.k_values:
+                all_instruction_scores[k].append(
+                    evaluate_multiple_responses_instruction(eval_input, responses, k, strict=self.strict)
+                )
+
+            item["per_response_correct"] = prompt_results
 
         scores = {}
+
+        # Main: instruction-level pass@k
         for k in self.k_values:
-            pass_at_k_scores = [pass_at_k(len(r), sum(r), k) for r in all_results]
-            scores[f"pass_at_{k}"] = np.mean(pass_at_k_scores)
+            scores[f"pass_at_{k}"] = np.mean(all_instruction_scores[k])
 
-        scores[f"pass_at_1"] = np.mean(all_results_instruction)
+        # Prompt-level pass@k (all-or-nothing)
+        for k in self.k_values:
+            prompt_scores = [pass_at_k(len(r), sum(r), k) for r in all_prompt_results]
+            scores[f"pass_at_{k}_prompt"] = np.mean(prompt_scores)
 
-        scores["num_prompts_evaluated"] = len(all_results)
+        scores["num_prompts_evaluated"] = len(results)
         scores["avg_response_length_tokens"] = (
             float(np.mean(response_token_lengths)) if response_token_lengths else 0.0
         )
@@ -173,6 +196,7 @@ class IFEvalStrategy(EvalStrategy):
         metrics = {}
         for k in self.k_values:
             metrics[f"eval/pass_at_{k}"] = scores[f"pass_at_{k}"]
+            metrics[f"eval/pass_at_{k}_prompt"] = scores[f"pass_at_{k}_prompt"]
         metrics["eval/avg_response_length_tokens"] = scores.get("avg_response_length_tokens", 0.0)
         return metrics
 

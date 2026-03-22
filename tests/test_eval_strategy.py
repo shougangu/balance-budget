@@ -73,9 +73,10 @@ def test_ifeval_wandb_metrics():
         })
         mock_eval_lib.read_prompt_list.return_value = []
         strategy = IFEvalStrategy(k_values=[1], n_samples=1, num_prompts=1, strict=True)
-        scores = {"pass_at_1": 0.72, "avg_response_length_tokens": 150.0, "num_prompts_evaluated": 10}
+        scores = {"pass_at_1": 0.72, "pass_at_1_prompt": 0.65, "avg_response_length_tokens": 150.0, "num_prompts_evaluated": 10}
         wandb_dict = strategy.wandb_metrics(scores)
         assert "eval/pass_at_1" in wandb_dict
+        assert "eval/pass_at_1_prompt" in wandb_dict
         assert "eval/avg_response_length_tokens" in wandb_dict
 
 
@@ -226,6 +227,105 @@ def _get_function_params(filepath, func_name):
         if isinstance(node, ast.FunctionDef) and node.name == func_name:
             return [arg.arg for arg in node.args.args]
     raise ValueError(f"Function {func_name} not found in {filepath}")
+
+
+def test_instruction_level_pass_at_k():
+    """evaluate_multiple_responses_instruction calculates pass@k per instruction then averages."""
+    from tuning.training.eval_strategy import evaluate_multiple_responses_instruction, pass_at_k
+
+    inp = MagicMock()
+    inp.prompt = "test prompt"
+
+    # 4 responses, 3 instructions each
+    # Instruction 0: [T, T, F, T] → c=3
+    # Instruction 1: [T, F, F, F] → c=1
+    # Instruction 2: [F, F, T, T] → c=2
+    mock_results = [
+        MagicMock(follow_instruction_list=[True, True, False]),
+        MagicMock(follow_instruction_list=[True, False, False]),
+        MagicMock(follow_instruction_list=[False, False, True]),
+        MagicMock(follow_instruction_list=[True, False, True]),
+    ]
+
+    with patch("tuning.training.eval_strategy.evaluation_lib") as mock_eval_lib:
+        mock_eval_lib.test_instruction_following_loose.side_effect = mock_results
+        result = evaluate_multiple_responses_instruction(inp, ["r1", "r2", "r3", "r4"], k=2)
+
+    n = 4
+    expected_0 = pass_at_k(n, 3, 2)  # 1.0 (n-c=1 < k=2)
+    expected_1 = pass_at_k(n, 1, 2)  # 0.5
+    expected_2 = pass_at_k(n, 2, 2)  # 5/6
+    expected = (expected_0 + expected_1 + expected_2) / 3
+
+    assert abs(result - expected) < 1e-6
+
+
+def test_instruction_level_pass_at_1():
+    """Instruction-level pass@1 should equal average fraction of instructions followed."""
+    from tuning.training.eval_strategy import evaluate_multiple_responses_instruction, pass_at_k
+
+    inp = MagicMock()
+    inp.prompt = "test prompt"
+
+    # 1 response, 3 instructions: [T, F, T] → pass@1 per instruction = [1.0, 0.0, 1.0] → avg = 2/3
+    mock_results = [
+        MagicMock(follow_instruction_list=[True, False, True]),
+    ]
+
+    with patch("tuning.training.eval_strategy.evaluation_lib") as mock_eval_lib:
+        mock_eval_lib.test_instruction_following_loose.side_effect = mock_results
+        result = evaluate_multiple_responses_instruction(inp, ["r1"], k=1)
+
+    assert abs(result - 2.0 / 3.0) < 1e-6
+
+
+def test_ifeval_score_responses_all_metrics():
+    """score_responses produces instruction-level pass_at_k and prompt-level pass_at_k_prompt."""
+    from tuning.training.eval_strategy import IFEvalStrategy
+
+    with patch("tuning.training.eval_strategy.get_ifeval_test_dataset") as mock_dataset, \
+         patch("tuning.training.eval_strategy.evaluation_lib") as mock_eval_lib:
+
+        mock_dataset.return_value = Dataset.from_dict({
+            "messages": [[{"role": "user", "content": "p1"}]],
+            "prompt": ["p1"],
+        })
+        inp = MagicMock()
+        inp.prompt = "p1"
+        mock_eval_lib.read_prompt_list.return_value = [inp]
+
+        # strict=True (default) — both metrics use strict evaluation
+        strategy = IFEvalStrategy(k_values=[1], n_samples=2, num_prompts=1, strict=True)
+
+        # 1 prompt, 2 responses, 2 instructions each
+        # Strict: r1=[T,F] (fail prompt), r2=[T,T] (pass prompt)
+        #
+        # Called 4 times total:
+        #   2 from evaluate_single_response(strict=True)
+        #   2 from evaluate_multiple_responses_instruction(strict=True)
+        mock_eval_lib.test_instruction_following_strict.side_effect = [
+            MagicMock(follow_all_instructions=False, follow_instruction_list=[True, False]),
+            MagicMock(follow_all_instructions=True,  follow_instruction_list=[True, True]),
+            MagicMock(follow_all_instructions=False, follow_instruction_list=[True, False]),
+            MagicMock(follow_all_instructions=True,  follow_instruction_list=[True, True]),
+        ]
+
+        tokenizer = MagicMock()
+        tokenizer.side_effect = lambda texts, **kw: {"input_ids": [[0] * 5] * len(texts)}
+
+        results = [{"prompt": "p1", "responses": ["r1", "r2"]}]
+        scores = strategy.score_responses(results, tokenizer)
+
+        # Instruction-level (main): per-instruction pass@k averaged
+        # Instruction 0: c=2 (T,T) → pass_at_1(2,2,1)=1.0
+        # Instruction 1: c=1 (F,T) → pass_at_1(2,1,1)=0.5
+        # Average: 0.75
+        assert abs(scores["pass_at_1"] - 0.75) < 1e-6
+
+        # Prompt-level: [False, True] → pass_at_1(2,1,1) = 0.5
+        assert abs(scores["pass_at_1_prompt"] - 0.5) < 1e-6
+
+        assert scores["num_prompts_evaluated"] == 1
 
 
 def test_sft_training_accepts_primary_eval():

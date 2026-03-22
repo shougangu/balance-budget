@@ -91,12 +91,14 @@ def _parse_args(argv=None):
                         help="Metadata JSONL file from a previous SFT run (repeatable)")
 
     # SFT-specific
-    parser.add_argument("--sft-warmup-ratio", type=float, default=0.1)
+    parser.add_argument("--sft-warmup-ratio", type=float, default=0.0)
 
     # Training args
+    parser.add_argument("--sft-num-epochs", type=int, default=2)
     parser.add_argument("--sft-eval-steps", type=int, default=64)
     parser.add_argument("--sft-batch-size", type=int, default=16)
     parser.add_argument("--sft-grad-accum", type=int, default=1)
+    parser.add_argument("--dpo-num-epochs", type=int, default=3)
     parser.add_argument("--dpo-eval-steps", type=int, default=256)
     parser.add_argument("--dpo-batch-size", type=int, default=4)
     parser.add_argument("--dpo-grad-accum", type=int, default=4)
@@ -111,7 +113,7 @@ def _parse_args(argv=None):
     parser.add_argument("--sft-passk-targets", type=float, nargs="+", 
                         default=[0.05,0.1,0.15,0.2,0.25,0.3,0.35,0.4,0.45,0.5,0.55,0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95])
     parser.add_argument("--sft-passk-early", type=parse_early_tuple, nargs="*",
-                        default=[(1, 0.02), (2, 0.02), (3, 0.02), (4, 0.02), (5, 0.02)])
+                        default=[])
     parser.add_argument("--sft-passk-k-values", type=int, nargs="+", default=[1])
     parser.add_argument("--sft-passk-n-samples", type=int, default=1)
     parser.add_argument("--sft-passk-num-prompts", type=int, default=1500)
@@ -275,6 +277,7 @@ def run_sft(args):
     model_load_config = ModelLoadConfig()
     model_load_config.max_seq_length = args.max_seq_length
     training_args = TrainingArgumentsConfig()
+    training_args.num_train_epochs = args.sft_num_epochs
     training_args.eval_steps = args.sft_eval_steps
     training_args.per_device_train_batch_size = args.sft_batch_size
     training_args.gradient_accumulation_steps = args.sft_grad_accum
@@ -451,6 +454,7 @@ def run_dpo(args):
     model_load_config = ModelLoadConfig()
     model_load_config.max_seq_length = args.max_seq_length
     training_args = DPOTrainingConfig()
+    training_args.num_train_epochs = args.dpo_num_epochs
     training_args.eval_steps = args.dpo_eval_steps
     training_args.per_device_train_batch_size = args.dpo_batch_size
     training_args.gradient_accumulation_steps = args.dpo_grad_accum
