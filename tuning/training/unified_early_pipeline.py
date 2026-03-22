@@ -81,6 +81,12 @@ def _parse_args(argv=None):
     # Core
     parser.add_argument("--dataset", default="gsm8k", choices=["tuluif", "gsm8k"],)
     parser.add_argument("--train-size", type=int, default=10000)
+    parser.add_argument("--sft-data-size", type=int, default=None,
+                        help="Fixed SFT data size. When both --sft-data-size and --dpo-data-size are set, "
+                             "DPO uses a fixed dataset instead of remaining budget.")
+    parser.add_argument("--dpo-data-size", type=int, default=None,
+                        help="Fixed DPO data size. When both --sft-data-size and --dpo-data-size are set, "
+                             "DPO uses a fixed dataset instead of remaining budget.")
     parser.add_argument("--task-name", default="gsm8k", choices=["ifeval", "gsm8k"])
     parser.add_argument("--max-seq-length", type=int, default=1024)
     parser.add_argument("--seed", type=int, default=42)
@@ -259,10 +265,11 @@ def run_sft(args):
     set_chat_template(args.model)
     gpu_util = MODEL_TO_GPU_1[args.model]
 
+    sft_size = args.sft_data_size if args.sft_data_size is not None else args.train_size
     dataset_config = DatasetConfig(
         dataset=args.dataset,
         dataset_type="sft",
-        train_size=args.train_size,
+        train_size=sft_size,
     )
     run_config = SFTRunConfig(
         dataset_config=dataset_config,
@@ -406,8 +413,12 @@ def run_dpo(args):
         print("All checkpoints completed, nothing to do.")
         return
 
-    remaining = args.train_size - checkpoint["data_points_seen"]
-    if remaining <= 0:
+    fixed_split = args.sft_data_size is not None and args.dpo_data_size is not None
+    if fixed_split:
+        dpo_size = args.dpo_data_size
+    else:
+        dpo_size = args.train_size - checkpoint["data_points_seen"]
+    if dpo_size <= 0:
         print(f"Skipping {checkpoint['checkpoint_path']}: no data budget remaining")
         mark_completed(metadata_file, checkpoint["checkpoint_path"])
         return
@@ -427,7 +438,7 @@ def run_dpo(args):
     dataset_config = DatasetConfig(
         dataset=args.dataset,
         dataset_type="pt",
-        train_size=remaining,
+        train_size=dpo_size,
     )
     sft_run_config = SFTRunConfig(
         dataset_config=DatasetConfig(
