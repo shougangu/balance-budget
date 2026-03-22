@@ -342,3 +342,44 @@ def test_dpo_training_accepts_primary_eval():
     assert "primary_eval" in params
     assert "monitor_evals" in params
     assert "ifeval_config" not in params
+
+
+def test_score_responses_stashes_per_response_instructions():
+    """score_responses should attach per_response_instructions to each item dict."""
+    from tuning.training.eval_strategy import IFEvalStrategy
+
+    with patch("tuning.training.eval_strategy.get_ifeval_test_dataset") as mock_dataset, \
+         patch("tuning.training.eval_strategy.evaluation_lib") as mock_eval_lib:
+
+        mock_dataset.return_value = Dataset.from_dict({
+            "messages": [[{"role": "user", "content": "p1"}]],
+            "prompt": ["p1"],
+        })
+        inp = MagicMock()
+        inp.prompt = "p1"
+        mock_eval_lib.read_prompt_list.return_value = [inp]
+
+        strategy = IFEvalStrategy(k_values=[1], n_samples=2, num_prompts=1, strict=True)
+
+        # 1 prompt, 2 responses, 3 instructions each
+        # r1: [T, F, T], r2: [T, T, F]
+        mock_eval_lib.test_instruction_following_strict.side_effect = [
+            # evaluate_single_response calls (prompt-level)
+            MagicMock(follow_all_instructions=False, follow_instruction_list=[True, False, True]),
+            MagicMock(follow_all_instructions=False, follow_instruction_list=[True, True, False]),
+            # evaluate_multiple_responses_instruction calls (instruction-level)
+            MagicMock(follow_instruction_list=[True, False, True]),
+            MagicMock(follow_instruction_list=[True, True, False]),
+        ]
+
+        tokenizer = MagicMock()
+        tokenizer.side_effect = lambda texts, **kw: {"input_ids": [[0] * 5] * len(texts)}
+
+        results = [{"prompt": "p1", "responses": ["r1", "r2"]}]
+        strategy.score_responses(results, tokenizer)
+
+        assert "per_response_instructions" in results[0]
+        assert results[0]["per_response_instructions"] == [
+            [True, False, True],
+            [True, True, False],
+        ]

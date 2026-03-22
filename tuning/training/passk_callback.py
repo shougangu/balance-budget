@@ -482,6 +482,7 @@ class PassAtKStoppingCallback(TrainerCallback):
                 "responses",
                 "num_responses",
                 "per_response_correct",
+                "per_response_instructions",
                 "prompt_accuracy",
                 "stopping_metric_name",
                 "stopping_metric_value",
@@ -505,6 +506,7 @@ class PassAtKStoppingCallback(TrainerCallback):
 
                 correctness = item.get("per_response_correct", [])
                 prompt_accuracy = sum(correctness) / len(correctness) if correctness else None
+                instructions = item.get("per_response_instructions", [])
 
                 table.add_data(
                     global_step,
@@ -514,6 +516,7 @@ class PassAtKStoppingCallback(TrainerCallback):
                     responses_json,
                     len(responses),
                     json.dumps(correctness) if correctness else None,
+                    json.dumps(instructions) if instructions else None,
                     prompt_accuracy,
                     stopping_metric_name,
                     stopping_metric_value,

@@ -154,7 +154,9 @@ class IFEvalStrategy(EvalStrategy):
 
             eval_input = self.inputs_map[prompt]
 
-            prompt_results = [evaluate_single_response(eval_input, r, self.strict) for r in responses]
+            eval_fn = evaluation_lib.test_instruction_following_strict if self.strict else evaluation_lib.test_instruction_following_loose
+            eval_results = [eval_fn(eval_input, {prompt: r}) for r in responses]
+            prompt_results = [er.follow_all_instructions for er in eval_results]
             all_prompt_results.append(prompt_results)
 
             for k in self.k_values:
@@ -163,6 +165,7 @@ class IFEvalStrategy(EvalStrategy):
                 )
 
             item["per_response_correct"] = prompt_results
+            item["per_response_instructions"] = [list(er.follow_instruction_list) for er in eval_results]
 
         scores = {}
 
