@@ -44,7 +44,8 @@ def get_train_dataset(run_config: Union[PTRunConfig, SFTRunConfig]) -> DatasetDi
     full_dataset = load_from_disk(full_dataset_path)
     print(f"Full dataset: {full_dataset}")
 
-    sampled_dataset = get_random_train_subset(full_dataset, train_size)
+    unique_column = "prompt" if "prompt" in full_dataset["train"].column_names else None
+    sampled_dataset = get_random_train_subset(full_dataset, train_size, unique_column=None)
     print(f"Sampled dataset: {sampled_dataset}")
     if len(sampled_dataset['train']) > 0:
         print(f"Example training row: {sampled_dataset['train'][0]}")
