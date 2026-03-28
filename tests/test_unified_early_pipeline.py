@@ -416,7 +416,7 @@ class TestTaskNameDispatch:
 
     def test_default_sft_warmup_ratio(self):
         args = _parse_args(REQUIRED)
-        assert args.sft_warmup_ratio == 0.1
+        assert args.sft_warmup_ratio == 0.0
 
     def test_custom_sft_warmup_ratio(self):
         args = _parse_args(REQUIRED + ["--sft-warmup-ratio", "0.05"])

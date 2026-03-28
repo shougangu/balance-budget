@@ -1,5 +1,5 @@
-# ABOUTME: CLI-driven unified SFT+DPO pipeline with optional pass@k and perplexity callbacks.
-# ABOUTME: Supports SFT-only, DPO-only, and full SFT→DPO runs from a single command.
+# ABOUTME: CLI-driven unified SFT+post-training pipeline with optional pass@k and perplexity callbacks.
+# ABOUTME: Supports SFT→{DPO,GRPO,KTO} runs from a single command.
 
 import os
 import argparse
@@ -19,7 +19,7 @@ def _init_cuda_env():
 
 def _is_worker_mode():
     """True when running as a training worker (needs CUDA), not as orchestrator or in tests."""
-    return ("--run-sft" in sys.argv or "--run-dpo" in sys.argv) and "--run-all" not in sys.argv
+    return ("--run-sft" in sys.argv or "--run-dpo" in sys.argv or "--run-grpo" in sys.argv) and "--run-all" not in sys.argv
 
 
 if _is_worker_mode():
@@ -75,8 +75,13 @@ def _parse_args(argv=None):
                        help="Run SFT stage only")
     stage.add_argument("--run-dpo", action="store_true", default=False,
                        help="Run DPO stage only")
+    stage.add_argument("--run-grpo", action="store_true", default=False,
+                       help="Run GRPO stage only")
     stage.add_argument("--run-all", action="store_true", default=False,
                        help="Explicitly run both stages (default when none specified)")
+    stage.add_argument("--post-training-method", default="dpo",
+                       choices=["dpo", "grpo", "kto"],
+                       help="Post-training method to use after SFT")
 
     # Core
     parser.add_argument("--dataset", default="gsm8k", choices=["tuluif", "gsm8k"],)
@@ -108,12 +113,27 @@ def _parse_args(argv=None):
     parser.add_argument("--dpo-eval-steps", type=int, default=256)
     parser.add_argument("--dpo-batch-size", type=int, default=4)
     parser.add_argument("--dpo-grad-accum", type=int, default=4)
+    parser.add_argument("--grpo-num-epochs", type=int, default=1)
+    parser.add_argument("--grpo-eval-steps", type=int, default=64)
+    parser.add_argument("--grpo-batch-size", type=int, default=2)
+    parser.add_argument("--grpo-grad-accum", type=int, default=4)
+    parser.add_argument("--grpo-num-generations", type=int, default=8)
+    parser.add_argument("--grpo-max-completion-length", type=int, default=1024)
+    parser.add_argument("--grpo-max-prompt-length", type=int, default=512)
+    parser.add_argument("--grpo-beta", type=float, default=0.0)
+    parser.add_argument("--grpo-temperature", type=float, default=0.7)
+    parser.add_argument("--grpo-loss-type", default="grpo",
+                        choices=["grpo", "dr_grpo", "dapo", "bnpo"])
+    parser.add_argument("--grpo-data-size", type=int, default=None,
+                        help="Fixed GRPO data size. When set with --sft-data-size, "
+                             "GRPO uses a fixed dataset instead of remaining budget.")
 
     # Callback toggles
     parser.add_argument("--sft-enable-passk", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--sft-enable-ppl", action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument("--dpo-enable-passk", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--dpo-enable-ppl", action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument("--grpo-enable-passk", action=argparse.BooleanOptionalAction, default=True)
 
     # SFT pass@k
     parser.add_argument("--sft-passk-targets", type=float, nargs="+", 
@@ -152,6 +172,17 @@ def _parse_args(argv=None):
     parser.add_argument("--dpo-ppl-num-samples", type=int, default=541)
     parser.add_argument("--dpo-ppl-early", type=parse_early_tuple, nargs="*", default=[])
 
+    # GRPO pass@k
+    parser.add_argument("--grpo-passk-targets", type=float, nargs="+", default=[1.2])
+    parser.add_argument("--grpo-passk-early", type=parse_early_tuple, nargs="*", default=[])
+    parser.add_argument("--grpo-passk-k-values", type=int, nargs="+", default=[1])
+    parser.add_argument("--grpo-passk-n-samples", type=int, default=1)
+    parser.add_argument("--grpo-passk-num-prompts", type=int, default=1500)
+    parser.add_argument("--grpo-passk-temperature", type=float, default=0.5)
+    parser.add_argument("--grpo-passk-strict", action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument("--grpo-passk-num-inference-gpus", type=int, default=1)
+    parser.add_argument("--grpo-passk-persistent-vllm",
+                        action=argparse.BooleanOptionalAction, default=False)
 
     args = parser.parse_args(argv)
     if (args.sft_enable_ppl or args.dpo_enable_ppl) and args.max_seq_length == 1024:
@@ -512,6 +543,125 @@ def run_dpo(args):
     mark_completed(metadata_file, checkpoint["checkpoint_path"])
 
 
+def _build_reward_funcs(args):
+    """Build reward function list based on task name."""
+    from tuning.training.reward_functions import gsm8k_reward_func, ifeval_reward_func
+    if args.task_name == "gsm8k":
+        return [gsm8k_reward_func]
+    elif args.task_name == "ifeval":
+        return [ifeval_reward_func]
+    else:
+        raise ValueError(f"No reward function for task: {args.task_name}")
+
+
+def run_grpo(args):
+    """Run GRPO for the next non-completed checkpoint in the metadata file.
+
+    Processes exactly one checkpoint, marks it completed, then returns.
+    Process exit frees all GPU memory.
+    """
+    metadata_file = args.metadata_file[0]
+    checkpoint = next_checkpoint(metadata_file)
+    if checkpoint is None:
+        print("All checkpoints completed, nothing to do.")
+        return
+
+    fixed_split = args.sft_data_size is not None and args.grpo_data_size is not None
+    if fixed_split:
+        grpo_size = args.grpo_data_size
+    else:
+        grpo_size = args.train_size - checkpoint["data_points_seen"]
+    if grpo_size <= 0:
+        print(f"Skipping {checkpoint['checkpoint_path']}: no data budget remaining")
+        mark_completed(metadata_file, checkpoint["checkpoint_path"])
+        return
+
+    import wandb
+    from tuning.config import HF_MODEL_MAP, set_chat_template
+    from tuning.training.config_training import (
+        DatasetConfig, SFTRunConfig, PTRunConfig, ModelLoadConfig,
+        LoraConfig, GRPOTrainingConfig,
+    )
+    from tuning.training.grpo_training import train_model_grpo
+
+    set_chat_template(args.model)
+    gpu_util = MODEL_TO_GPU_2[args.model]
+    model_name = Path(checkpoint["checkpoint_path"]).name
+
+    dataset_config = DatasetConfig(
+        dataset=args.dataset,
+        dataset_type="rlvr",
+        train_size=grpo_size,
+    )
+    sft_run_config = SFTRunConfig(
+        dataset_config=DatasetConfig(
+            dataset=args.dataset,
+            dataset_type="sft",
+            train_size=checkpoint["data_points_seen"],
+            dynamic_path=model_name,
+        ),
+        model_name=args.model,
+        model_name_hf=HF_MODEL_MAP[args.model],
+        task_name=args.task_name,
+    )
+    run_config = PTRunConfig(
+        dataset_config=dataset_config,
+        model_name_hf=HF_MODEL_MAP[args.model],
+        model_name=args.model,
+        sft_run_config=sft_run_config,
+        task_name=args.task_name,
+        pft_method="grpo",
+        do_training=True,
+    )
+    lora_config = LoraConfig()
+    lora_config.use_gradient_checkpointing = True
+    model_load_config = ModelLoadConfig()
+    model_load_config.max_seq_length = args.max_seq_length
+    training_args = GRPOTrainingConfig()
+    training_args.num_train_epochs = args.grpo_num_epochs
+    training_args.eval_steps = args.grpo_eval_steps
+    training_args.per_device_train_batch_size = args.grpo_batch_size
+    training_args.gradient_accumulation_steps = args.grpo_grad_accum
+    training_args.num_generations = args.grpo_num_generations
+    training_args.max_completion_length = args.grpo_max_completion_length
+    training_args.max_prompt_length = args.grpo_max_prompt_length
+    training_args.beta = args.grpo_beta
+    training_args.temperature = args.grpo_temperature
+    training_args.loss_type = args.grpo_loss_type
+
+    passk_config, primary_eval, monitor_evals = _build_eval_components(args, "grpo", gpu_util)
+    reward_funcs = _build_reward_funcs(args)
+
+    tags = ["grpo", str(checkpoint["threshold_value"]), str(checkpoint["data_points_seen"])]
+    if primary_eval is not None:
+        tags.append(primary_eval.id)
+    if passk_config is not None:
+        k_val = primary_eval.stopping_k if primary_eval else 1
+        tags.append(f"p{k_val}")
+
+    with wandb.init(
+        name=run_config.model_name,
+        project=args.wandb_project,
+        job_type="grpo",
+        tags=tags,
+        config={"stage": "grpo"},
+        settings=wandb.Settings(init_timeout=300)
+    ):
+        train_model_grpo(
+            run_config=run_config,
+            lora_config=lora_config,
+            model_load_config=model_load_config,
+            training_args=training_args,
+            reward_funcs=reward_funcs,
+            passk_config=passk_config,
+            primary_eval=primary_eval,
+            monitor_evals=monitor_evals,
+            initial_global_step=checkpoint.get("global_step")
+        )
+
+    mark_completed(metadata_file, checkpoint["checkpoint_path"])
+
+
 def _build_base_cmd(argv):
     """Build base subprocess command by stripping orchestrator-only flags."""
     return [a for a in argv if a != "--run-all"]
@@ -521,7 +671,7 @@ def main():
     args = _parse_args()
     print(args)
 
-    if not any([args.run_sft, args.run_dpo, args.run_all]):
+    if not any([args.run_sft, args.run_dpo, args.run_grpo, args.run_all]):
         args.run_all = True
 
     # Worker mode: run in-process
@@ -533,11 +683,14 @@ def main():
         run_dpo(args)
         return
 
+    if args.run_grpo and not args.run_all:
+        run_grpo(args)
+        return
 
     # Orchestrator mode: spawn subprocesses
     base_cmd = _build_base_cmd(sys.argv)
     all_files = (args.metadata_file or [])
-    if not args.run_dpo:
+    if not (args.run_dpo or args.run_grpo):
         # SFT subprocess
         sft_cmd = [sys.executable] + base_cmd + ["--run-sft"]
         print(f"[orchestrator] Running SFT: {' '.join(sft_cmd)}")
@@ -551,20 +704,23 @@ def main():
             sys.exit("No metadata files from SFT and no --metadata-file provided")
         all_files = metadata_files + (args.metadata_file or [])
 
-        print(f"Metadata files for DPO: {all_files}")
-        # DPO subprocess loop: one subprocess per checkpoint
+        print(f"Metadata files for post-training: {all_files}")
+
+    # Post-training subprocess loop: one subprocess per checkpoint
+    pt_method = args.post_training_method
+    pt_flag = f"--run-{pt_method}" if pt_method != "dpo" else "--run-dpo"
     for metadata_file in all_files:
         if not Path(metadata_file).is_file():
             print(f"Warning: metadata file {metadata_file} does not exist, skipping")
             continue
         while next_checkpoint(metadata_file) is not None:
-            dpo_cmd = [sys.executable] + base_cmd + [
-                "--run-dpo", "--metadata-file", metadata_file,
+            pt_cmd = [sys.executable] + base_cmd + [
+                pt_flag, "--metadata-file", metadata_file,
             ]
-            print(f"[orchestrator] Running DPO: {' '.join(dpo_cmd)}")
-            result = subprocess.run(dpo_cmd)
+            print(f"[orchestrator] Running {pt_method.upper()}: {' '.join(pt_cmd)}")
+            result = subprocess.run(pt_cmd)
             if result.returncode != 0:
-                sys.exit(f"DPO subprocess failed with return code {result.returncode}")
+                sys.exit(f"{pt_method.upper()} subprocess failed with return code {result.returncode}")
 
 
 if __name__ == "__main__":
