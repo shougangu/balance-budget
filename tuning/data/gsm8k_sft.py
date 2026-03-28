@@ -33,6 +33,7 @@ class GSM8KSFT(HFDataset):
             prompt = GSM8K_STRING.format(question=prompt)
             for correct in correct_set:
                 rows.append({
+                    "prompt": prompt,
                     "messages": [
                         {
                             "role": "system",
