@@ -1,10 +1,10 @@
 #!/bin/bash
 #SBATCH --job-name=unified_early_pipeline
-#SBATCH --partition=gpubase_h100_b2,gpubase_h100_b3,gpubase_h100_b4,gpubase_h100_b5
+#SBATCH --partition=gpubase_h100_b1,gpubase_h100_b2,gpubase_h100_b3,gpubase_h100_b4,gpubase_h100_b5
 #SBATCH --gres=gpu:1
 #SBATCH -c 4
 #SBATCH --mem=80GB
-#SBATCH --time=12:00:00
+#SBATCH --time=3:00:00
 #SBATCH --output=/dev/null
 
 set -euo pipefail
@@ -28,7 +28,7 @@ if [[ -z "$WANDB_PROJECT" ]]; then
     exit 1
 fi
 
-exec > "${WANDB_PROJECT}_${SLURM_JOB_ID}.out" 2>&1
+exec > "${SLURM_JOB_ID}_${WANDB_PROJECT}.out" 2>&1
 
 python tuning/training/unified_early_pipeline.py "$@"
 
