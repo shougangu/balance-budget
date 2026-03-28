@@ -87,7 +87,7 @@ def train_model_kto(
     trainer = KTOTrainer(
         model = model,
         ref_model=None,
-        tokenizer = tokenizer,
+        processing_class = tokenizer,
         train_dataset = dataset["train"],
         eval_dataset = dataset["test"],
         args = KTOConfig(

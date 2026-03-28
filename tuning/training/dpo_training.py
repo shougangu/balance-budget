@@ -72,7 +72,7 @@ def train_model_dpo(
     trainer = DPOTrainer(
         model = model,
         ref_model = None,
-        tokenizer = tokenizer,
+        processing_class = tokenizer,
         train_dataset = raw_dataset["train"],
         eval_dataset = raw_dataset["test"],
         max_length = model_load_config.max_seq_length,
