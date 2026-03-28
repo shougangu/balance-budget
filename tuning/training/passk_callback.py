@@ -195,6 +195,7 @@ class PassAtKStoppingCallback(TrainerCallback):
         parallelism_str = f", data-parallel over {self.num_inference_gpus} GPUs" if self.num_inference_gpus > 1 else ""
         print(f"[PassAtKCallback] vLLM mode: {mode_str}{parallelism_str}, base_model_hf={base_model_hf}, gpu_mem={self.vllm_gpu_memory_utilization}")
         print(f"[PassAtKCallback] Chat template: {self._chat_template}")
+        print(f"[PassAtKCallback] Config: {config}")
 
         # Log a sample formatted prompt to verify template
         sample_messages = primary_eval.get_test_messages()[0]
@@ -211,8 +212,8 @@ class PassAtKStoppingCallback(TrainerCallback):
         if not self.model_name:
             self.model_name = kwargs.get("model")
         print(f"[PassAtKCallback] on_train_begin: model_name={self.model_name}")
-        now = datetime.datetime.now().strftime("%m%d_%H%M")
-        self.metadata_path = os.path.join(MODELS_METADATA_DIR, f"{self.model_name}_{self.primary_eval.stopping_metric()}-{now}.json")
+        now = datetime.datetime.now().strftime("%m%d_%H%M%S")
+        self.metadata_path = os.path.join(MODELS_METADATA_DIR, f"{self.model_name}_{self.primary_eval.id}_{self.primary_eval.stopping_metric()}-{now}.json")
 
         # Baseline evaluation before training starts
         self.on_evaluate(args, state, control, **kwargs)

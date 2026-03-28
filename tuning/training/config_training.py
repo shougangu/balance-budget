@@ -98,6 +98,12 @@ class PassAtKConfig(BaseModel):
     vllm_gpu_memory_utilization: float = 0.4  # GPU memory fraction for vLLM (conservative for coexistence with training)
     num_inference_gpus: int = 1  # Number of GPUs for data-parallel vLLM inference (>1 forces ephemeral mode)
 
+    def __str__(self):
+        lines = [f"[{self.__class__.__name__}]"]
+        for name, value in self:
+            lines.append(f"  {name}={value}")
+        return "\n".join(lines)
+
 
 class PerplexityConfig(BaseModel):
     """Configuration for perplexity evaluation callback."""
