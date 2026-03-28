@@ -1,6 +1,5 @@
 
-from trl import SFTTrainer
-from transformers import TrainingArguments
+from trl import SFTTrainer, SFTConfig
 from tuning.data.train_dataset import get_train_dataset
 from tuning.training.config_training import ModelLoadConfig, LoraConfig, SFTRunConfig, TrainingArgumentsConfig, PassAtKConfig, PerplexityConfig, DatasetConfig, sft_batch_size, effective_batch_size
 from tuning.training.perplexity_callback import PerplexityStoppingCallback
@@ -64,12 +63,12 @@ def train_model_sft(
         processing_class = tokenizer,
         train_dataset = dataset["train"],
         eval_dataset = dataset["test"],
-        dataset_text_field = "text",
-        max_seq_length = model_load_config.max_seq_length,
-        dataset_num_proc = 4,
-        packing = False,
         callbacks = callbacks if callbacks else None,
-        args = TrainingArguments(
+        args = SFTConfig(
+            dataset_text_field = "text",
+            max_length = model_load_config.max_seq_length,
+            dataset_num_proc = 4,
+            packing = False,
             **training_args.to_hf_args(output_dir=run_config.output_dir),
         ),
     )

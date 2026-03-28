@@ -75,9 +75,11 @@ def train_model_dpo(
         processing_class = tokenizer,
         train_dataset = raw_dataset["train"],
         eval_dataset = raw_dataset["test"],
-        max_length = model_load_config.max_seq_length,
         callbacks = callbacks if callbacks else None,
-        args = DPOConfig(**training_args.to_hf_args(output_dir=run_config.output_dir)),
+        args = DPOConfig(
+            max_length = model_load_config.max_seq_length,
+            **training_args.to_hf_args(output_dir=run_config.output_dir),
+        ),
     )
 
     # Insert at front so it injects train/total_global_step before WandbCallback reads logs.
