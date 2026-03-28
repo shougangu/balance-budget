@@ -87,6 +87,40 @@ class DPOTrainingConfig(TrainingArgumentsConfig):
         return d
 
 
+class GRPOTrainingConfig(TrainingArgumentsConfig):
+    num_generations: int = 8
+    max_completion_length: int = 1024
+    max_prompt_length: int = 512
+    beta: float = 0.0
+    temperature: float = 0.7
+    epsilon: float = 0.2
+    loss_type: str = "grpo"
+    scale_rewards: str = "group"
+    use_vllm: bool = False
+    vllm_gpu_memory_utilization: float = 0.3
+    learning_rate: float = 5e-6
+    num_train_epochs: int = 1
+    per_device_train_batch_size: int = 2
+    gradient_accumulation_steps: int = 4
+
+    def to_hf_args(self, output_dir: str) -> dict:
+        """Return kwargs for GRPOConfig constructor."""
+        d = super().to_hf_args(output_dir)
+        d["num_generations"] = self.num_generations
+        d["max_completion_length"] = self.max_completion_length
+        d["max_prompt_length"] = self.max_prompt_length
+        d["beta"] = self.beta
+        d["temperature"] = self.temperature
+        d["epsilon"] = self.epsilon
+        d["loss_type"] = self.loss_type
+        d["scale_rewards"] = self.scale_rewards
+        d["use_vllm"] = self.use_vllm
+        d["vllm_gpu_memory_utilization"] = self.vllm_gpu_memory_utilization
+        d.pop("eval_accumulation_steps", None)
+        d["save_strategy"] = "no"
+        return d
+
+
 class PassAtKConfig(BaseModel):
     """Configuration for generation-based evaluation callback."""
     target_pass_at_k: list[float] = [0.8]  # Target pass@k score to stop training (0.0 to 1.0)
@@ -176,7 +210,7 @@ class PTRunConfig(BaseModel):
             run_name = self.sft_run_config.run_name
         if self.dataset_config:
             run_name = f"{run_name}_{self.dataset_config.dataset_full_name}"
-        if self.pft_method == "kto":
+        if self.pft_method in ("kto", "grpo"):
             run_name = f"{run_name}_{self.pft_method}"
         if self.add_beta_run_name:
             run_name = f"{run_name}_beta-{self.beta}"

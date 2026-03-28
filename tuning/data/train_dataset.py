@@ -18,7 +18,10 @@ def get_train_dataset(run_config: Union[PTRunConfig, SFTRunConfig]) -> DatasetDi
         #     sft_run_name = sft_run_name.replace("_", "|").replace("-", "|")
         #     dataset_stub = f"pt-{sft_run_name}"
 
-        dataset_stub = f"pt-{run_config.dataset_config.dataset}"
+        if run_config.dataset_config.dataset_type == "rlvr":
+            dataset_stub = f"rlvr-{run_config.dataset_config.dataset}"
+        else:
+            dataset_stub = f"pt-{run_config.dataset_config.dataset}"
     elif run_config.run_type == "sft":
         dataset_stub = f"sft-{run_config.dataset_config.dataset}"
     
