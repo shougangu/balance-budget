@@ -421,3 +421,70 @@ class TestTaskNameDispatch:
     def test_custom_sft_warmup_ratio(self):
         args = _parse_args(REQUIRED + ["--sft-warmup-ratio", "0.05"])
         assert args.sft_warmup_ratio == 0.05
+
+
+# ---------------------------------------------------------------------------
+# GRPO pipeline args
+# ---------------------------------------------------------------------------
+
+class TestGRPOArgs:
+    def test_default_post_training_method(self):
+        args = _parse_args(REQUIRED)
+        assert args.post_training_method == "dpo"
+
+    def test_grpo_post_training_method(self):
+        args = _parse_args(REQUIRED + ["--post-training-method", "grpo"])
+        assert args.post_training_method == "grpo"
+
+    def test_run_grpo_flag(self):
+        args = _parse_args(REQUIRED + ["--run-grpo"])
+        assert args.run_grpo is True
+        assert args.run_dpo is False
+
+    def test_grpo_defaults(self):
+        args = _parse_args(REQUIRED)
+        assert args.grpo_num_epochs == 1
+        assert args.grpo_eval_steps == 64
+        assert args.grpo_batch_size == 2
+        assert args.grpo_grad_accum == 4
+        assert args.grpo_num_generations == 8
+        assert args.grpo_max_completion_length == 1024
+        assert args.grpo_max_prompt_length == 512
+        assert args.grpo_beta == 0.0
+        assert args.grpo_temperature == 0.7
+        assert args.grpo_loss_type == "grpo"
+        assert args.grpo_data_size is None
+
+    def test_grpo_custom_args(self):
+        args = _parse_args(REQUIRED + [
+            "--grpo-num-generations", "16",
+            "--grpo-beta", "0.1",
+            "--grpo-loss-type", "dr_grpo",
+            "--grpo-data-size", "5000",
+        ])
+        assert args.grpo_num_generations == 16
+        assert args.grpo_beta == 0.1
+        assert args.grpo_loss_type == "dr_grpo"
+        assert args.grpo_data_size == 5000
+
+    def test_grpo_enable_passk_default(self):
+        args = _parse_args(REQUIRED)
+        assert args.grpo_enable_passk is True
+
+    def test_grpo_passk_args(self):
+        args = _parse_args(REQUIRED + [
+            "--grpo-passk-targets", "0.5", "0.8",
+            "--grpo-passk-early", "1:0.02",
+        ])
+        assert args.grpo_passk_targets == [0.5, 0.8]
+        assert args.grpo_passk_early == [(1, 0.02)]
+
+    def test_grpo_data_budget_with_fixed_split(self):
+        """When --sft-data-size and --grpo-data-size are both set, GRPO uses fixed dataset."""
+        args = _parse_args(REQUIRED + [
+            "--sft-data-size", "3000",
+            "--grpo-data-size", "7000",
+            "--post-training-method", "grpo",
+        ])
+        assert args.sft_data_size == 3000
+        assert args.grpo_data_size == 7000
