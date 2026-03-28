@@ -151,6 +151,20 @@ class TestParseArgs:
     def test_default_train_size(self):
         assert _parse_args(REQUIRED).train_size == 10000
 
+    def test_default_sft_data_size_is_none(self):
+        assert _parse_args(REQUIRED).sft_data_size is None
+
+    def test_default_dpo_data_size_is_none(self):
+        assert _parse_args(REQUIRED).dpo_data_size is None
+
+    def test_custom_sft_data_size(self):
+        args = _parse_args(REQUIRED + ["--sft-data-size", "3000"])
+        assert args.sft_data_size == 3000
+
+    def test_custom_dpo_data_size(self):
+        args = _parse_args(REQUIRED + ["--dpo-data-size", "7000"])
+        assert args.dpo_data_size == 7000
+
     def test_default_task_name(self):
         assert _parse_args(REQUIRED).task_name == "gsm8k"
 
