@@ -24,7 +24,8 @@ def _is_worker_mode():
 
 if _is_worker_mode():
     _init_cuda_env()
-    import unsloth  # noqa: F401 - must be imported before trl/transformers/peft
+    if not ("--run-grpo" in sys.argv):      
+        import unsloth  # noqa: F401 - must be imported before trl/transformers/peft
 
 
 
@@ -114,14 +115,14 @@ def _parse_args(argv=None):
     parser.add_argument("--dpo-batch-size", type=int, default=4)
     parser.add_argument("--dpo-grad-accum", type=int, default=4)
     parser.add_argument("--grpo-num-epochs", type=int, default=1)
-    parser.add_argument("--grpo-eval-steps", type=int, default=64)
-    parser.add_argument("--grpo-batch-size", type=int, default=2)
-    parser.add_argument("--grpo-grad-accum", type=int, default=4)
+    parser.add_argument("--grpo-eval-steps", type=int, default=640)
+    parser.add_argument("--grpo-batch-size", type=int, default=8)
+    parser.add_argument("--grpo-grad-accum", type=int, default=1)
     parser.add_argument("--grpo-num-generations", type=int, default=8)
     parser.add_argument("--grpo-max-completion-length", type=int, default=1024)
     parser.add_argument("--grpo-max-prompt-length", type=int, default=512)
     parser.add_argument("--grpo-beta", type=float, default=0.0)
-    parser.add_argument("--grpo-temperature", type=float, default=0.7)
+    parser.add_argument("--grpo-temperature", type=float, default=1.0)
     parser.add_argument("--grpo-loss-type", default="grpo",
                         choices=["grpo", "dr_grpo", "dapo", "bnpo"])
     parser.add_argument("--grpo-data-size", type=int, default=None,
@@ -624,7 +625,7 @@ def run_grpo(args):
     training_args.gradient_accumulation_steps = args.grpo_grad_accum
     training_args.num_generations = args.grpo_num_generations
     training_args.max_completion_length = args.grpo_max_completion_length
-    training_args.max_prompt_length = args.grpo_max_prompt_length
+    # training_args.max_prompt_length = args.grpo_max_prompt_length
     training_args.beta = args.grpo_beta
     training_args.temperature = args.grpo_temperature
     training_args.loss_type = args.grpo_loss_type

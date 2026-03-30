@@ -175,6 +175,7 @@ class PassAtKStoppingCallback(TrainerCallback):
         self.vllm_gpu_memory_utilization = config.vllm_gpu_memory_utilization
         self.lora_max_rank = getattr(config, 'lora_max_rank', 32)
         self._vllm_engine = None
+        self._external_vllm = None
         self._lora_request_id = 0
         self._chat_template = self.tokenizer.chat_template
 
@@ -251,6 +252,9 @@ class PassAtKStoppingCallback(TrainerCallback):
         )
 
         print(f"[PassAtKCallback] Persistent vLLM engine initialized successfully")
+    
+    def set_trainer_vllm(self, llm):
+        self._external_vllm = llm
 
     def _save_lora_adapter(self, model, adapter_dir: str):
         """Save only the LoRA adapter weights (~50MB instead of ~2GB merged)."""
@@ -538,9 +542,12 @@ class PassAtKStoppingCallback(TrainerCallback):
         temp_dir = tempfile.mkdtemp()
 
         try:
-            self._save_lora_adapter(model, temp_dir)
+            if self._external_vllm is None:
+                self._save_lora_adapter(model, temp_dir)
 
-            if self.num_inference_gpus > 1:
+            if self._external_vllm is not None:
+                model_results = self._run_vllm_inference(self._external_vllm, eval_strategy)
+            elif self.num_inference_gpus > 1:
                 # Data-parallel mode: spawn N vLLM workers across GPUs
                 original_device = next(model.parameters()).device
                 model.cpu()
@@ -667,7 +674,7 @@ class PassAtKStoppingCallback(TrainerCallback):
 
                 if len(self.target_pass_at_k_thresholds) == 0:
                     print(f"[PassAtKCallback] All thresholds reached! Stopping training.")
-                    control.should_training_stop = True
+                    # control.should_training_stop = True
                 else:
                     print(f"[PassAtKCallback] Continuing training to next threshold: {self.target_pass_at_k_thresholds[0]}")
 
@@ -689,7 +696,7 @@ class PassAtKStoppingCallback(TrainerCallback):
                 self.early_tuples.pop(idx)
             if len(self.early_tuples) == 0:
                 print(f"[PassAtKCallback] All early_tuples triggered! Stopping training.")
-                control.should_training_stop = True
+                # control.should_training_stop = True
 
         self._last_eval_step = state.global_step
         return control

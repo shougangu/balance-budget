@@ -1,11 +1,8 @@
-# ABOUTME: GRPO (RLVR) training using TRL's GRPOTrainer with Unsloth LoRA.
+# ABOUTME: GRPO (RLVR) training using TRL's GRPOTrainer with standard HF/PEFT.
 # ABOUTME: Mirrors dpo_training.py pattern with verifiable reward functions.
 
 import torch
 import wandb
-from unsloth.models.rl import PatchFastRL
-from unsloth import FastLanguageModel
-PatchFastRL(algorithm="grpo_trainer", FastLanguageModel=FastLanguageModel)
 
 from tuning.config import MODELS_DIR
 from tuning.data.train_dataset import get_train_dataset
@@ -47,6 +44,7 @@ def train_model_grpo(
         model_name=run_config.model_name,
         model_load_config=model_load_config,
         lora_config=lora_config,
+        use_unsloth=False,
     )
     tokenizer = chat_template_func(tokenizer)
 
@@ -74,6 +72,11 @@ def train_model_grpo(
             **training_args.to_hf_args(output_dir=run_config.output_dir),
         ),
     )
+
+    for cb in callbacks or []:
+        if isinstance(cb, PassAtKStoppingCallback) and hasattr(trainer, 'vllm_generation'):
+            cb.set_trainer_vllm(trainer.vllm_generation.llm)
+            print(f"[GRPO] PassAtK callback will reuse GRPOTrainer's vLLM engine")
 
     if initial_global_step:
         from tuning.training.callback_utils import GlobalStepOffsetCallback
