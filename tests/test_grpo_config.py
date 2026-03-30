@@ -18,16 +18,17 @@ def test_grpo_config_defaults():
     config = GRPOTrainingConfig()
     assert config.num_generations == 8
     assert config.max_completion_length == 1024
-    assert config.max_prompt_length == 512
-    assert config.beta == 0.0
-    assert config.temperature == 0.7
+    assert config.beta == 0.01
+    assert config.temperature == 1.0
+    assert config.epsilon == 0.2
+    assert config.epsilon_high == 0.28
     assert config.loss_type == "grpo"
     assert config.scale_rewards == "group"
-    assert config.use_vllm is False
-    assert config.learning_rate == 5e-6
+    assert config.use_vllm is True
+    assert config.learning_rate == 1e-6
     assert config.num_train_epochs == 1
-    assert config.per_device_train_batch_size == 2
-    assert config.gradient_accumulation_steps == 4
+    assert config.per_device_train_batch_size == 8
+    assert config.gradient_accumulation_steps == 1
 
 
 def test_grpo_config_to_hf_args():
@@ -36,9 +37,10 @@ def test_grpo_config_to_hf_args():
     assert d["output_dir"] == "/tmp/test"
     assert d["num_generations"] == 8
     assert d["max_completion_length"] == 1024
-    assert d["max_prompt_length"] == 512
-    assert d["beta"] == 0.0
-    assert d["temperature"] == 0.7
+    assert d["beta"] == 0.01
+    assert d["temperature"] == 1.0
+    assert d["epsilon"] == 0.2
+    assert d["epsilon_high"] == 0.28
     assert d["loss_type"] == "grpo"
     assert d["scale_rewards"] == "group"
     assert d["save_strategy"] == "no"

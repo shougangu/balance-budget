@@ -92,18 +92,20 @@ class GRPOTrainingConfig(TrainingArgumentsConfig):
     num_generations: int = 8
     max_completion_length: int = 1024
     # max_prompt_length: int = 512
-    beta: float = 0.0
-    temperature: float = 0.7
+    beta: float = 0.01
+    temperature: float = 1.0
     epsilon: float = 0.2
-    loss_type: str = "grpo"
+    epsilon_high: float = 0.28
+    loss_type: str = "dapo"
     scale_rewards: str = "group"
     use_vllm: bool = True
     vllm_mode: str = "colocate"
     vllm_gpu_memory_utilization: float = 0.65 # 0.7 is perfect for Q2 and L1
-    learning_rate: float = 5e-6
+    learning_rate: float = 1e-6
     num_train_epochs: int = 1
     per_device_train_batch_size: int = 8
     per_device_eval_batch_size: int = 8
+    eval_steps: float = 640
     gradient_accumulation_steps: int = 1
     steps_per_generation: int = 3
 
@@ -116,6 +118,7 @@ class GRPOTrainingConfig(TrainingArgumentsConfig):
         d["beta"] = self.beta
         d["temperature"] = self.temperature
         d["epsilon"] = self.epsilon
+        d["epsilon_high"] = self.epsilon_high
         d["loss_type"] = self.loss_type
         d["scale_rewards"] = self.scale_rewards
         d["use_vllm"] = self.use_vllm

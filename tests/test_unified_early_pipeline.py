@@ -444,14 +444,14 @@ class TestGRPOArgs:
     def test_grpo_defaults(self):
         args = _parse_args(REQUIRED)
         assert args.grpo_num_epochs == 1
-        assert args.grpo_eval_steps == 64
-        assert args.grpo_batch_size == 2
-        assert args.grpo_grad_accum == 4
+        assert args.grpo_eval_steps == 640
+        assert args.grpo_batch_size == 8
+        assert args.grpo_grad_accum == 1
         assert args.grpo_num_generations == 8
         assert args.grpo_max_completion_length == 1024
         assert args.grpo_max_prompt_length == 512
         assert args.grpo_beta == 0.0
-        assert args.grpo_temperature == 0.7
+        assert args.grpo_temperature == 1.0
         assert args.grpo_loss_type == "grpo"
         assert args.grpo_data_size is None
 

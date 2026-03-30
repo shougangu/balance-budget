@@ -41,10 +41,19 @@ MODEL_TO_GPU_1 = {
 
 MODEL_TO_GPU_2 = {
     "llama3-1B": 0.7,
-    "llama3-3B": 0.62,  # can reach 
+    "llama3-3B": 0.62,  # can reach
     "llama3-8B": 0.62,
     "qwen2-2B": 0.65,
     "qwen2-3B": 0.65,
+    "qwen2-7B": 0.5,
+}
+
+MODEL_TO_GPU_3 = {
+    "llama3-1B": 0.7, # good
+    "llama3-3B": 0.6,
+    "llama3-8B": 0.5,
+    "qwen2-2B": 0.7, # good
+    "qwen2-3B": 0.65, #good
     "qwen2-7B": 0.5,
 }
 
@@ -106,7 +115,7 @@ def _parse_args(argv=None):
     parser.add_argument("--sft-warmup-ratio", type=float, default=0.0)
 
     # Training args
-    parser.add_argument("--sft-num-epochs", type=int, default=2)
+    parser.add_argument("--sft-num-epochs", type=int, default=1)
     parser.add_argument("--sft-eval-steps", type=int, default=64)
     parser.add_argument("--sft-batch-size", type=int, default=16)
     parser.add_argument("--sft-grad-accum", type=int, default=1)
@@ -121,9 +130,9 @@ def _parse_args(argv=None):
     parser.add_argument("--grpo-num-generations", type=int, default=8)
     parser.add_argument("--grpo-max-completion-length", type=int, default=1024)
     parser.add_argument("--grpo-max-prompt-length", type=int, default=512)
-    parser.add_argument("--grpo-beta", type=float, default=0.0)
+    parser.add_argument("--grpo-beta", type=float, default=0.01)
     parser.add_argument("--grpo-temperature", type=float, default=1.0)
-    parser.add_argument("--grpo-loss-type", default="grpo",
+    parser.add_argument("--grpo-loss-type", default="dapo",
                         choices=["grpo", "dr_grpo", "dapo", "bnpo"])
     parser.add_argument("--grpo-data-size", type=int, default=None,
                         help="Fixed GRPO data size. When set with --sft-data-size, "
@@ -586,7 +595,7 @@ def run_grpo(args):
     from tuning.training.grpo_training import train_model_grpo
 
     set_chat_template(args.model)
-    gpu_util = MODEL_TO_GPU_2[args.model]
+    gpu_util = MODEL_TO_GPU_3[args.model]
     model_name = Path(checkpoint["checkpoint_path"]).name
 
     dataset_config = DatasetConfig(
