@@ -31,7 +31,7 @@ class LoraConfig(BaseModel):
     use_gradient_checkpointing: bool = False
     random_state: int = 42
     use_rslora: bool = False
-    loftq_config: str = None
+    loftq_config: dict = {}
 
 class TrainingArgumentsConfig(BaseModel):
     # sft training parameters
@@ -61,12 +61,13 @@ class TrainingArgumentsConfig(BaseModel):
 
     def to_hf_args(self, output_dir: str) -> dict:
         """Return kwargs for TrainingArguments/DPOConfig constructor."""
-        from unsloth import is_bfloat16_supported
+        import torch
+        bf16_supported = torch.cuda.is_available() and torch.cuda.is_bf16_supported()
         d = self.model_dump()
         d.pop("beta", None)  # beta is DPO-specific, not a TrainingArguments field
         d["output_dir"] = output_dir
-        d["fp16"] = not is_bfloat16_supported()
-        d["bf16"] = is_bfloat16_supported()
+        d["fp16"] = not bf16_supported
+        d["bf16"] = bf16_supported
         d["seed"] = 42
         return d
 
@@ -90,32 +91,37 @@ class DPOTrainingConfig(TrainingArgumentsConfig):
 class GRPOTrainingConfig(TrainingArgumentsConfig):
     num_generations: int = 8
     max_completion_length: int = 1024
-    max_prompt_length: int = 512
+    # max_prompt_length: int = 512
     beta: float = 0.0
     temperature: float = 0.7
     epsilon: float = 0.2
     loss_type: str = "grpo"
     scale_rewards: str = "group"
-    use_vllm: bool = False
-    vllm_gpu_memory_utilization: float = 0.3
+    use_vllm: bool = True
+    vllm_mode: str = "colocate"
+    vllm_gpu_memory_utilization: float = 0.65 # 0.7 is perfect for Q2 and L1
     learning_rate: float = 5e-6
     num_train_epochs: int = 1
-    per_device_train_batch_size: int = 2
-    gradient_accumulation_steps: int = 4
+    per_device_train_batch_size: int = 8
+    per_device_eval_batch_size: int = 8
+    gradient_accumulation_steps: int = 1
+    steps_per_generation: int = 3
 
     def to_hf_args(self, output_dir: str) -> dict:
         """Return kwargs for GRPOConfig constructor."""
         d = super().to_hf_args(output_dir)
         d["num_generations"] = self.num_generations
         d["max_completion_length"] = self.max_completion_length
-        d["max_prompt_length"] = self.max_prompt_length
+        # d["max_prompt_length"] = self.max_prompt_length
         d["beta"] = self.beta
         d["temperature"] = self.temperature
         d["epsilon"] = self.epsilon
         d["loss_type"] = self.loss_type
         d["scale_rewards"] = self.scale_rewards
         d["use_vllm"] = self.use_vllm
+        d["vllm_mode"] = self.vllm_mode
         d["vllm_gpu_memory_utilization"] = self.vllm_gpu_memory_utilization
+        d["steps_per_generation"] = self.steps_per_generation
         d.pop("eval_accumulation_steps", None)
         d["save_strategy"] = "no"
         return d

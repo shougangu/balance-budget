@@ -133,10 +133,10 @@ class IFEvalStrategy(EvalStrategy):
         return self._n_samples
 
     def get_test_messages(self) -> List[List[dict]]:
-        return self.test_dataset["messages"]
+        return list(self.test_dataset["messages"])
 
     def get_test_prompts(self) -> List[str]:
-        return self.test_dataset["prompt"]
+        return list(self.test_dataset["prompt"])
 
     def score_responses(self, results: List[Dict], tokenizer) -> Dict[str, float]:
         all_prompt_results = []
@@ -234,10 +234,10 @@ class GSM8KEvalStrategy(EvalStrategy):
         return "gsm8k"
     
     def get_test_messages(self) -> List[List[dict]]:
-        return self.test_dataset["messages"]
+        return list(self.test_dataset["messages"])
 
     def get_test_prompts(self) -> List[str]:
-        return self.test_dataset["prompt"]
+        return list(self.test_dataset["prompt"])
 
     def score_responses(self, results: List[Dict], tokenizer) -> Dict[str, float]:
         all_results = []

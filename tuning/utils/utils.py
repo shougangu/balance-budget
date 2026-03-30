@@ -50,7 +50,7 @@ def chat_template_func(tokenizer):
         tokenizer,
         chat_template = chat_template, # Supports zephyr, chatml, mistral, llama, alpaca, vicuna, vicuna_old, unsloth
         mapping = {"role" : "from", "content" : "value", "user" : "human", "assistant" : "gpt"}, # ShareGPT style
-        map_eos_token = True, # Maps <|im_end|> to </s> instead
+        map_eos_token = False, # Maps <|im_end|> to </s> instead
     )
 
     if chat_template == "llama-3.1":
