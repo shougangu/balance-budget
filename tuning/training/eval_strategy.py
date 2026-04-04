@@ -1,5 +1,5 @@
 # ABOUTME: ABC for eval strategies injected into the generation eval callback.
-# ABOUTME: Includes IFEval and GSM8K pass@k implementations.
+# ABOUTME: Includes IFEval, GSM8K, and MATH-500 pass@k implementations.
 
 import numpy as np
 from abc import ABC, abstractmethod
@@ -8,8 +8,9 @@ from pathlib import Path
 from typing import List, Dict
 
 from instruction_following_eval import evaluation_lib
-from tuning.data.test_dataset import get_ifeval_test_dataset, get_gsm8k_test_dataset
+from tuning.data.test_dataset import get_ifeval_test_dataset, get_gsm8k_test_dataset, get_math500_test_dataset
 from tuning.evaluation.gsm8k_scoring import is_correct as gsm8k_is_correct
+from tuning.evaluation.math500_scoring import is_correct as math500_is_correct
 
 BASE_DIR = Path('/home/shougan/projects/aip-fredashi/shougan/balance-budget')
 IFEVAL_INPUT_PATH = BASE_DIR / "instruction_following_eval/data/input_data.jsonl"
@@ -282,5 +283,87 @@ class GSM8KEvalStrategy(EvalStrategy):
             key = f"pass_at_{k}"
             if key in scores:
                 metrics[f"eval/gsm8k_{key}"] = scores[key]
+        metrics["eval/avg_response_length_tokens"] = scores.get("avg_response_length_tokens", 0.0)
+        return metrics
+
+
+class MATH500EvalStrategy(EvalStrategy):
+    """MATH-500 evaluation using pass@k scoring with math-verify."""
+
+    def __init__(self, k_values=None, n_samples=1, num_prompts=None):
+        k_values = k_values or [1]
+        self.k_values = k_values
+        self._n_samples = n_samples
+        self.stopping_k = k_values[0]
+
+        self.test_dataset = get_math500_test_dataset(num_prompts=num_prompts)
+        self.reference_answers = {
+            prompt: ref
+            for prompt, ref in zip(
+                self.test_dataset["prompt"],
+                self.test_dataset["reference_answer"],
+            )
+        }
+
+        print(f"[MATH500EvalStrategy] k_values={k_values}, n_samples={n_samples}, "
+              f"num_prompts={len(self.test_dataset)}")
+
+    @property
+    def n_samples(self) -> int:
+        return self._n_samples
+
+    @property
+    def id(self) -> str:
+        return "math500"
+
+    def get_test_messages(self) -> List[List[dict]]:
+        return list(self.test_dataset["messages"])
+
+    def get_test_prompts(self) -> List[str]:
+        return list(self.test_dataset["prompt"])
+
+    def score_responses(self, results: List[Dict], tokenizer) -> Dict[str, float]:
+        all_results = []
+        response_token_lengths = []
+
+        for item in results:
+            prompt = item["prompt"]
+            responses = item["responses"]
+            ref = self.reference_answers[prompt]
+
+            encoded_batch = tokenizer(
+                responses, add_special_tokens=False, padding=False, truncation=False,
+            )
+            response_token_lengths.extend(len(ids) for ids in encoded_batch["input_ids"])
+
+            eval_results = [math500_is_correct(r, ref) for r in responses]
+            all_results.append(eval_results)
+
+            item["per_response_correct"] = eval_results
+
+        scores = {}
+        for k in self.k_values:
+            pass_at_k_scores = [pass_at_k(len(r), sum(r), k) for r in all_results]
+            scores[f"pass_at_{k}"] = np.mean(pass_at_k_scores)
+
+        scores["num_prompts_evaluated"] = len(all_results)
+        scores["avg_response_length_tokens"] = (
+            float(np.mean(response_token_lengths)) if response_token_lengths else 0.0
+        )
+        return scores
+
+    def stopping_metric(self) -> str:
+        return f"pass_at_{self.stopping_k}"
+
+    @property
+    def label_prefix(self) -> str:
+        return f"math500-p@{self.stopping_k}"
+
+    def wandb_metrics(self, scores: Dict[str, float]) -> Dict[str, float]:
+        metrics = {}
+        for k in self.k_values:
+            key = f"pass_at_{k}"
+            if key in scores:
+                metrics[f"eval/math500_{key}"] = scores[key]
         metrics["eval/avg_response_length_tokens"] = scores.get("avg_response_length_tokens", 0.0)
         return metrics

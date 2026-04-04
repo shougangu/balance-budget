@@ -1,4 +1,4 @@
-# ABOUTME: Tests for eval strategy ABC, IFEval, and GSM8K implementations.
+# ABOUTME: Tests for eval strategy ABC, IFEval, GSM8K, and MATH-500 implementations.
 # ABOUTME: Validates interface conformance and pass@k scoring logic.
 
 import pytest
@@ -383,3 +383,103 @@ def test_score_responses_stashes_per_response_instructions():
             [True, False, True],
             [True, True, False],
         ]
+
+
+def test_math500_strategy_implements_interface():
+    """MATH500EvalStrategy must implement all EvalStrategy abstract methods."""
+    from tuning.training.eval_strategy import MATH500EvalStrategy, EvalStrategy
+    assert issubclass(MATH500EvalStrategy, EvalStrategy)
+    with patch("tuning.training.eval_strategy.get_math500_test_dataset") as mock_dataset:
+        mock_dataset.return_value = Dataset.from_dict({
+            "messages": [[{"role": "user", "content": "test"}]],
+            "prompt": ["test"],
+            "reference_answer": [r"\frac{1}{2}"],
+        })
+        strategy = MATH500EvalStrategy(k_values=[1], n_samples=1, num_prompts=1)
+        assert hasattr(strategy, "get_test_messages")
+        assert hasattr(strategy, "score_responses")
+        assert hasattr(strategy, "stopping_metric")
+        assert hasattr(strategy, "wandb_metrics")
+        assert hasattr(strategy, "label_prefix")
+
+
+def test_math500_stopping_metric():
+    """MATH500 stopping metric should follow pass@k convention."""
+    from tuning.training.eval_strategy import MATH500EvalStrategy
+    with patch("tuning.training.eval_strategy.get_math500_test_dataset") as mock_dataset:
+        mock_dataset.return_value = Dataset.from_dict({
+            "messages": [[{"role": "user", "content": "test"}]],
+            "prompt": ["test"],
+            "reference_answer": ["42"],
+        })
+        strategy = MATH500EvalStrategy(k_values=[1, 5], n_samples=5, num_prompts=1)
+        assert strategy.stopping_metric() == "pass_at_1"
+
+
+def test_math500_label_prefix():
+    """MATH500 label_prefix should be 'math500-p@{stopping_k}'."""
+    from tuning.training.eval_strategy import MATH500EvalStrategy
+    with patch("tuning.training.eval_strategy.get_math500_test_dataset") as mock_dataset:
+        mock_dataset.return_value = Dataset.from_dict({
+            "messages": [[{"role": "user", "content": "test"}]],
+            "prompt": ["test"],
+            "reference_answer": ["42"],
+        })
+        strategy = MATH500EvalStrategy(k_values=[1], n_samples=1, num_prompts=1)
+        assert strategy.label_prefix == "math500-p@1"
+
+
+def test_math500_score_responses_boxed():
+    """score_responses should score \\boxed{} answers via math-verify."""
+    from tuning.training.eval_strategy import MATH500EvalStrategy
+    with patch("tuning.training.eval_strategy.get_math500_test_dataset") as mock_dataset:
+        mock_dataset.return_value = Dataset.from_dict({
+            "messages": [[{"role": "user", "content": "Q1"}], [{"role": "user", "content": "Q2"}]],
+            "prompt": ["Q1", "Q2"],
+            "reference_answer": ["42", r"\frac{1}{2}"],
+        })
+        tokenizer = MagicMock()
+        tokenizer.side_effect = lambda texts, **kw: {"input_ids": [[0] * 10] * len(texts)}
+        strategy = MATH500EvalStrategy(k_values=[1], n_samples=1, num_prompts=2)
+        results = [
+            {"prompt": "Q1", "responses": [r"$\boxed{42}$"]},           # correct
+            {"prompt": "Q2", "responses": [r"$\boxed{\frac{1}{3}}$"]},  # incorrect
+        ]
+        scores = strategy.score_responses(results, tokenizer)
+        assert scores["pass_at_1"] == 0.5
+        assert scores["num_prompts_evaluated"] == 2
+
+
+def test_math500_score_responses_hash_fallback():
+    """score_responses should accept #### format via fallback."""
+    from tuning.training.eval_strategy import MATH500EvalStrategy
+    with patch("tuning.training.eval_strategy.get_math500_test_dataset") as mock_dataset:
+        mock_dataset.return_value = Dataset.from_dict({
+            "messages": [[{"role": "user", "content": "Q1"}]],
+            "prompt": ["Q1"],
+            "reference_answer": ["42"],
+        })
+        tokenizer = MagicMock()
+        tokenizer.side_effect = lambda texts, **kw: {"input_ids": [[0] * 10] * len(texts)}
+        strategy = MATH500EvalStrategy(k_values=[1], n_samples=1, num_prompts=1)
+        results = [
+            {"prompt": "Q1", "responses": ["Step 1: ...\n#### 42"]},
+        ]
+        scores = strategy.score_responses(results, tokenizer)
+        assert scores["pass_at_1"] == 1.0
+
+
+def test_math500_wandb_metrics():
+    """wandb_metrics should prefix scores with eval/math500_."""
+    from tuning.training.eval_strategy import MATH500EvalStrategy
+    with patch("tuning.training.eval_strategy.get_math500_test_dataset") as mock_dataset:
+        mock_dataset.return_value = Dataset.from_dict({
+            "messages": [[{"role": "user", "content": "test"}]],
+            "prompt": ["test"],
+            "reference_answer": ["42"],
+        })
+        strategy = MATH500EvalStrategy(k_values=[1], n_samples=1, num_prompts=1)
+        scores = {"pass_at_1": 0.75, "num_prompts_evaluated": 10, "avg_response_length_tokens": 50.0}
+        wandb_dict = strategy.wandb_metrics(scores)
+        assert "eval/math500_pass_at_1" in wandb_dict
+        assert "eval/avg_response_length_tokens" in wandb_dict
