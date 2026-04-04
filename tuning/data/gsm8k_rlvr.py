@@ -32,7 +32,7 @@ class GSM8KRLVR(HFDataset):
 
     def format_dataset(self):
         rows = self._get_rows(self._dataset)
-        formatted_dataset = Dataset.from_list(rows).train_test_split(test_size=200, shuffle=False)
+        formatted_dataset = Dataset.from_list(rows).train_test_split(test_size=100, shuffle=False)
         print(f"RLVR GSM8K Dataset - {formatted_dataset}")
         print(f"Example row - {formatted_dataset['train'][0]}")
         self._dataset = formatted_dataset

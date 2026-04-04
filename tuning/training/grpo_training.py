@@ -38,6 +38,16 @@ def train_model_grpo(
 
     raw_dataset = get_train_dataset(run_config)
 
+    if run_config.simple_template:
+        def _strip_chat_template(example):
+            messages = example["prompt"]
+            example["prompt"] = messages[-1]["content"]
+            return example
+        raw_dataset["train"] = raw_dataset["train"].map(_strip_chat_template)
+        raw_dataset["test"] = raw_dataset["test"].map(_strip_chat_template)
+        print(f"[GRPO] Simple template enabled — prompts are plain strings")
+        print(f"Example prompt: {raw_dataset['train'][0]['prompt'][:200]}")
+
     print(f"Loading model from {model_path}")
     model, tokenizer = load_model_with_lora(
         model_path=model_path,

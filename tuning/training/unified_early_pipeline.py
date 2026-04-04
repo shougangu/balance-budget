@@ -50,11 +50,11 @@ MODEL_TO_GPU_2 = {
 
 MODEL_TO_GPU_3 = {
     "llama3-1B": 0.7, # good
-    "llama3-3B": 0.6,
+    "llama3-3B": 0.65,
     "llama3-8B": 0.5,
     "qwen2-2B": 0.7, # good
     "qwen2-3B": 0.65, #good
-    "qwen2-7B": 0.5,
+    "qwen2-7B": 0.53,
 }
 
 
@@ -130,13 +130,19 @@ def _parse_args(argv=None):
     parser.add_argument("--grpo-num-generations", type=int, default=8)
     parser.add_argument("--grpo-max-completion-length", type=int, default=1024)
     parser.add_argument("--grpo-max-prompt-length", type=int, default=512)
-    parser.add_argument("--grpo-beta", type=float, default=0.01)
+    parser.add_argument("--grpo-beta", type=float, default=0.0)
     parser.add_argument("--grpo-temperature", type=float, default=1.0)
-    parser.add_argument("--grpo-loss-type", default="dapo",
+    parser.add_argument("--grpo-loss-type", default="dr_grpo",
                         choices=["grpo", "dr_grpo", "dapo", "bnpo"])
+    parser.add_argument("--grpo-scale-rewards", default="false",
+                        choices=["group", "batch", "false"],
+                        help="Reward scaling method. 'false' disables scaling.")
     parser.add_argument("--grpo-data-size", type=int, default=None,
                         help="Fixed GRPO data size. When set with --sft-data-size, "
                              "GRPO uses a fixed dataset instead of remaining budget.")
+    parser.add_argument("--grpo-simple-template", action=argparse.BooleanOptionalAction,
+                        default=False,
+                        help="Skip chat template and pass raw prompt content as plain strings.")
 
     # Callback toggles
     parser.add_argument("--sft-enable-passk", action=argparse.BooleanOptionalAction, default=True)
@@ -622,6 +628,7 @@ def run_grpo(args):
         task_name=args.task_name,
         pft_method="grpo",
         do_training=True,
+        simple_template=args.grpo_simple_template,
     )
     lora_config = LoraConfig()
     lora_config.use_gradient_checkpointing = True
@@ -638,6 +645,9 @@ def run_grpo(args):
     training_args.beta = args.grpo_beta
     training_args.temperature = args.grpo_temperature
     training_args.loss_type = args.grpo_loss_type
+    scale_rewards = args.grpo_scale_rewards
+    training_args.scale_rewards = False if scale_rewards == "false" else scale_rewards
+    training_args.vllm_gpu_memory_utilization = gpu_util
 
     passk_config, primary_eval, monitor_evals = _build_eval_components(args, "grpo", gpu_util)
     reward_funcs = _build_reward_funcs(args)
@@ -649,12 +659,26 @@ def run_grpo(args):
         k_val = primary_eval.stopping_k if primary_eval else 1
         tags.append(f"p{k_val}")
 
+    sr_label = str(training_args.scale_rewards).lower()
+    grpo_label = f"b{training_args.beta}_{training_args.loss_type}_sr-{sr_label}"
+    tags.extend([f"beta-{training_args.beta}", training_args.loss_type, f"sr-{sr_label}"])
+    if run_config.simple_template:
+        grpo_label += "_simple"
+        tags.append("simple-template")
+    wandb_name = f"{run_config.model_name}_{grpo_label}"
+
     with wandb.init(
-        name=run_config.model_name,
+        name=wandb_name,
         project=args.wandb_project,
         job_type="grpo",
         tags=tags,
-        config={"stage": "grpo"},
+        config={
+            "stage": "grpo",
+            "beta": training_args.beta,
+            "loss_type": training_args.loss_type,
+            "scale_rewards": sr_label,
+            "simple_template": run_config.simple_template,
+        },
         settings=wandb.Settings(init_timeout=300)
     ):
         train_model_grpo(

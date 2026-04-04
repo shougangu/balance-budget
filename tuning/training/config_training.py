@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 from tuning.config import MODELS_DIR
-from typing import Optional
+from typing import Optional, Union
 import os
 
 BaseModel.model_config['protected_namespaces'] = ()
@@ -92,16 +92,16 @@ class GRPOTrainingConfig(TrainingArgumentsConfig):
     num_generations: int = 8
     max_completion_length: int = 1024
     # max_prompt_length: int = 512
-    beta: float = 0.01
+    beta: float = 0.0
     temperature: float = 1.0
     epsilon: float = 0.2
-    epsilon_high: float = 0.28
-    loss_type: str = "dapo"
-    scale_rewards: str = "group"
+    epsilon_high: float = 0.2
+    loss_type: str = "dr_grpo"
+    scale_rewards: Union[str, bool] = False
     use_vllm: bool = True
     vllm_mode: str = "colocate"
     vllm_gpu_memory_utilization: float = 0.65 # 0.7 is perfect for Q2 and L1
-    learning_rate: float = 1e-6
+    learning_rate: float = 3e-6
     num_train_epochs: int = 1
     per_device_train_batch_size: int = 8
     per_device_eval_batch_size: int = 8
@@ -211,6 +211,7 @@ class PTRunConfig(BaseModel):
     pft_method: str = "dpo"
     add_beta_run_name: bool = False
     beta: float = 0.1
+    simple_template: bool = False
 
     @property
     def run_name(self):
