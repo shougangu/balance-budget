@@ -1,5 +1,5 @@
 from datasets import Dataset
-from tuning.data.config import SYSTEM_MESSAGE_INSTRUCTION_FOLLOWING, SYSTEM_MESSAGE_GSM8K, GSM8K_STRING
+from tuning.data.config import SYSTEM_MESSAGE_INSTRUCTION_FOLLOWING, SYSTEM_MESSAGE_GSM8K, GSM8K_STRING, SYSTEM_MESSAGE_COMPMATH, COMPMATH_STRING
 from pathlib import Path
 import random
 import json
@@ -51,6 +51,42 @@ def get_gsm8k_test_dataset(num_prompts=None):
         prompt = GSM8K_STRING.format(question=question)
         messages_list.append([
             {"role": "system", "content": SYSTEM_MESSAGE_GSM8K},
+            {"role": "user", "content": prompt},
+        ])
+        prompts.append(prompt)
+        reference_answers.append(ref_answer)
+
+    dataset = Dataset.from_dict({
+        "messages": messages_list,
+        "prompt": prompts,
+        "reference_answer": reference_answers,
+    })
+
+    if num_prompts is not None:
+        dataset = dataset.select(range(min(num_prompts, len(dataset))))
+
+    return dataset
+
+
+def get_math500_test_dataset(num_prompts=None):
+    """Load MATH-500 test set with messages, prompt, and reference_answer columns.
+
+    Uses COMPMATH system prompt which asks the model to output $\\boxed{answer}$.
+    """
+    from datasets import load_dataset
+    math500 = load_dataset("HuggingFaceH4/MATH-500", split="test")
+
+    messages_list = []
+    prompts = []
+    reference_answers = []
+
+    for row in math500:
+        problem = row["problem"]
+        ref_answer = row["answer"]
+
+        prompt = COMPMATH_STRING.format(problem=problem)
+        messages_list.append([
+            {"role": "system", "content": SYSTEM_MESSAGE_COMPMATH},
             {"role": "user", "content": prompt},
         ])
         prompts.append(prompt)
