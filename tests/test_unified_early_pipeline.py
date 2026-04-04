@@ -414,6 +414,10 @@ class TestTaskNameDispatch:
         args = _parse_args(REQUIRED)
         assert args.task_name == "gsm8k"
 
+    def test_math500_task_name_accepted(self):
+        args = _parse_args(REQUIRED + ["--task-name", "math500"])
+        assert args.task_name == "math500"
+
     def test_default_sft_warmup_ratio(self):
         args = _parse_args(REQUIRED)
         assert args.sft_warmup_ratio == 0.0
