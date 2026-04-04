@@ -418,6 +418,18 @@ class TestTaskNameDispatch:
         args = _parse_args(REQUIRED + ["--task-name", "math500"])
         assert args.task_name == "math500"
 
+    def test_monitor_evals_default_empty(self):
+        args = _parse_args(REQUIRED)
+        assert args.monitor_evals == []
+
+    def test_monitor_evals_single(self):
+        args = _parse_args(REQUIRED + ["--monitor-evals", "math500"])
+        assert args.monitor_evals == ["math500"]
+
+    def test_monitor_evals_multiple(self):
+        args = _parse_args(REQUIRED + ["--monitor-evals", "math500", "ifeval"])
+        assert args.monitor_evals == ["math500", "ifeval"]
+
     def test_default_sft_warmup_ratio(self):
         args = _parse_args(REQUIRED)
         assert args.sft_warmup_ratio == 0.0

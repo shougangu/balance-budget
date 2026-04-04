@@ -103,6 +103,9 @@ def _parse_args(argv=None):
                         help="Fixed DPO data size. When both --sft-data-size and --dpo-data-size are set, "
                              "DPO uses a fixed dataset instead of remaining budget.")
     parser.add_argument("--task-name", default="gsm8k", choices=["ifeval", "gsm8k", "math500"])
+    parser.add_argument("--monitor-evals", nargs="*", default=[],
+                        choices=["ifeval", "gsm8k", "math500"],
+                        help="Additional eval benchmarks to monitor (logged to W&B, no stopping)")
     parser.add_argument("--max-seq-length", type=int, default=1024)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--metadata-merge", choices=["union", "passk", "ppl"], default="union",
@@ -281,7 +284,27 @@ def _build_eval_components(args, stage, gpu_util):
     else:
         raise ValueError(f"Unknown task name: {args.task_name}")
 
-    return passk_config, primary_eval, []
+    monitor_evals = _build_monitor_evals(args, k_values, n_samples)
+
+    return passk_config, primary_eval, monitor_evals
+
+
+def _build_monitor_evals(args, k_values, n_samples):
+    """Build monitor eval strategies from --monitor-evals arg."""
+    monitor_evals = []
+    for name in getattr(args, "monitor_evals", []):
+        if name == args.task_name:
+            continue  # skip if same as primary
+        if name == "math500":
+            from tuning.training.eval_strategy import MATH500EvalStrategy
+            monitor_evals.append(MATH500EvalStrategy(k_values=k_values, n_samples=n_samples))
+        elif name == "gsm8k":
+            from tuning.training.eval_strategy import GSM8KEvalStrategy
+            monitor_evals.append(GSM8KEvalStrategy(k_values=k_values, n_samples=n_samples))
+        elif name == "ifeval":
+            from tuning.training.eval_strategy import IFEvalStrategy
+            monitor_evals.append(IFEvalStrategy(k_values=k_values, n_samples=n_samples))
+    return monitor_evals
 
 
 def _sft_tags(passk_config, ppl_config, primary_eval=None):
