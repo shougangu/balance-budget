@@ -214,7 +214,8 @@ def test_gsm8k_wandb_metrics():
         scores = {"pass_at_1": 0.75, "num_prompts_evaluated": 10, "avg_response_length_tokens": 50.0}
         wandb_dict = strategy.wandb_metrics(scores)
         assert "eval/gsm8k_pass_at_1" in wandb_dict
-        assert "eval/avg_response_length_tokens" in wandb_dict
+        assert "eval/gsm8k_avg_response_length_tokens" in wandb_dict
+        assert "eval/avg_response_length_tokens" not in wandb_dict
 
 
 def _get_function_params(filepath, func_name):
@@ -482,4 +483,5 @@ def test_math500_wandb_metrics():
         scores = {"pass_at_1": 0.75, "num_prompts_evaluated": 10, "avg_response_length_tokens": 50.0}
         wandb_dict = strategy.wandb_metrics(scores)
         assert "eval/math500_pass_at_1" in wandb_dict
-        assert "eval/avg_response_length_tokens" in wandb_dict
+        assert "eval/math500_avg_response_length_tokens" in wandb_dict
+        assert "eval/avg_response_length_tokens" not in wandb_dict

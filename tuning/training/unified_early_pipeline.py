@@ -52,7 +52,7 @@ MODEL_TO_GPU_3 = {
     "llama3-1B": 0.7, # good
     "llama3-3B": 0.65,
     "llama3-8B": 0.5,
-    "qwen2-2B": 0.7, # good
+    "qwen2-2B": 0.7,
     "qwen2-3B": 0.65, #good
     "qwen2-7B": 0.53,
 }
@@ -115,6 +115,7 @@ def _parse_args(argv=None):
                         help="Metadata JSONL file from a previous SFT run (repeatable)")
 
     # SFT-specific
+    parser.add_argument("--sft-learning-rate", type=float, default=5e-5)
     parser.add_argument("--sft-warmup-ratio", type=float, default=0.0)
 
     # Training args
@@ -122,6 +123,7 @@ def _parse_args(argv=None):
     parser.add_argument("--sft-eval-steps", type=int, default=64)
     parser.add_argument("--sft-batch-size", type=int, default=16)
     parser.add_argument("--sft-grad-accum", type=int, default=1)
+    parser.add_argument("--dpo-learning-rate", type=float, default=5e-6)
     parser.add_argument("--dpo-num-epochs", type=int, default=3)
     parser.add_argument("--dpo-eval-steps", type=int, default=256)
     parser.add_argument("--dpo-batch-size", type=int, default=4)
@@ -135,9 +137,10 @@ def _parse_args(argv=None):
     parser.add_argument("--grpo-max-prompt-length", type=int, default=512)
     parser.add_argument("--grpo-beta", type=float, default=0.0)
     parser.add_argument("--grpo-temperature", type=float, default=1.0)
-    parser.add_argument("--grpo-loss-type", default="dr_grpo",
+    parser.add_argument("--grpo-learning-rate", type=float, default=1e-4)
+    parser.add_argument("--grpo-loss-type", default="dapo",
                         choices=["grpo", "dr_grpo", "dapo", "bnpo"])
-    parser.add_argument("--grpo-scale-rewards", default="false",
+    parser.add_argument("--grpo-scale-rewards", default="group",
                         choices=["group", "batch", "false"],
                         help="Reward scaling method. 'false' disables scaling.")
     parser.add_argument("--grpo-data-size", type=int, default=None,
@@ -365,6 +368,7 @@ def run_sft(args):
     training_args.per_device_train_batch_size = args.sft_batch_size
     training_args.gradient_accumulation_steps = args.sft_grad_accum
     training_args.warmup_ratio = args.sft_warmup_ratio
+    training_args.learning_rate = args.sft_learning_rate
 
     passk_config, primary_eval, monitor_evals = _build_eval_components(args, "sft", gpu_util)
     ppl_config = _sft_ppl_config(args)
@@ -545,6 +549,7 @@ def run_dpo(args):
     training_args.eval_steps = args.dpo_eval_steps
     training_args.per_device_train_batch_size = args.dpo_batch_size
     training_args.gradient_accumulation_steps = args.dpo_grad_accum
+    training_args.learning_rate = args.dpo_learning_rate
 
     passk_config, primary_eval, monitor_evals = _build_eval_components(args, "dpo", gpu_util)
     ppl_config = _dpo_ppl_config(args)
@@ -673,6 +678,7 @@ def run_grpo(args):
     # training_args.max_prompt_length = args.grpo_max_prompt_length
     training_args.beta = args.grpo_beta
     training_args.temperature = args.grpo_temperature
+    training_args.learning_rate = args.grpo_learning_rate
     training_args.loss_type = args.grpo_loss_type
     scale_rewards = args.grpo_scale_rewards
     training_args.scale_rewards = False if scale_rewards == "false" else scale_rewards
@@ -689,8 +695,13 @@ def run_grpo(args):
         tags.append(f"p{k_val}")
 
     sr_label = str(training_args.scale_rewards).lower()
-    grpo_label = f"b{training_args.beta}_{training_args.loss_type}_sr-{sr_label}"
-    tags.extend([f"beta-{training_args.beta}", training_args.loss_type, f"sr-{sr_label}"])
+    lr_label = f"lr{training_args.learning_rate:.0e}"
+    ga = training_args.gradient_accumulation_steps
+    bs = training_args.per_device_train_batch_size
+    prompts_per_update = (bs * ga) // training_args.num_generations
+    batch_label = f"{prompts_per_update}x{training_args.num_generations}"
+    grpo_label = f"b{training_args.beta}_{training_args.loss_type}_sr-{sr_label}_{lr_label}_{batch_label}"
+    tags.extend([f"beta-{training_args.beta}", training_args.loss_type, f"sr-{sr_label}", lr_label, batch_label])
     if run_config.simple_template:
         grpo_label += "_simple"
         tags.append("simple-template")
@@ -706,6 +717,10 @@ def run_grpo(args):
             "beta": training_args.beta,
             "loss_type": training_args.loss_type,
             "scale_rewards": sr_label,
+            "learning_rate": training_args.learning_rate,
+            "batch_size": training_args.per_device_train_batch_size,
+            "grad_accum": ga,
+            "prompts_per_update": prompts_per_update,
             "simple_template": run_config.simple_template,
         },
         settings=wandb.Settings(init_timeout=300)

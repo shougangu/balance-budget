@@ -96,18 +96,17 @@ class GRPOTrainingConfig(TrainingArgumentsConfig):
     temperature: float = 1.0
     epsilon: float = 0.2
     epsilon_high: float = 0.2
-    loss_type: str = "dr_grpo"
-    scale_rewards: Union[str, bool] = False
+    loss_type: str = "dapo"
+    scale_rewards: Union[str, bool] = "group"
     use_vllm: bool = True
     vllm_mode: str = "colocate"
     vllm_gpu_memory_utilization: float = 0.65 # 0.7 is perfect for Q2 and L1
-    learning_rate: float = 3e-6
+    learning_rate: float = 1e-4
     num_train_epochs: int = 1
     per_device_train_batch_size: int = 8
     per_device_eval_batch_size: int = 8
     eval_steps: float = 640
     gradient_accumulation_steps: int = 1
-    steps_per_generation: int = 3
 
     def to_hf_args(self, output_dir: str) -> dict:
         """Return kwargs for GRPOConfig constructor."""
@@ -124,7 +123,6 @@ class GRPOTrainingConfig(TrainingArgumentsConfig):
         d["use_vllm"] = self.use_vllm
         d["vllm_mode"] = self.vllm_mode
         d["vllm_gpu_memory_utilization"] = self.vllm_gpu_memory_utilization
-        d["steps_per_generation"] = self.steps_per_generation
         d.pop("eval_accumulation_steps", None)
         d["save_strategy"] = "no"
         return d

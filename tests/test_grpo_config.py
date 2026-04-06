@@ -12,20 +12,21 @@ if "unsloth" not in sys.modules:
     sys.modules["unsloth"] = _stub
 
 from tuning.training.config_training import GRPOTrainingConfig, PTRunConfig, SFTRunConfig, DatasetConfig
+from tuning.training.unified_early_pipeline import _parse_args
 
 
 def test_grpo_config_defaults():
     config = GRPOTrainingConfig()
     assert config.num_generations == 8
     assert config.max_completion_length == 1024
-    assert config.beta == 0.01
+    assert config.beta == 0.0
     assert config.temperature == 1.0
     assert config.epsilon == 0.2
-    assert config.epsilon_high == 0.28
-    assert config.loss_type == "grpo"
+    assert config.epsilon_high == 0.2
+    assert config.loss_type == "dapo"
     assert config.scale_rewards == "group"
     assert config.use_vllm is True
-    assert config.learning_rate == 1e-6
+    assert config.learning_rate == 1e-4
     assert config.num_train_epochs == 1
     assert config.per_device_train_batch_size == 8
     assert config.gradient_accumulation_steps == 1
@@ -37,11 +38,11 @@ def test_grpo_config_to_hf_args():
     assert d["output_dir"] == "/tmp/test"
     assert d["num_generations"] == 8
     assert d["max_completion_length"] == 1024
-    assert d["beta"] == 0.01
+    assert d["beta"] == 0.0
     assert d["temperature"] == 1.0
     assert d["epsilon"] == 0.2
-    assert d["epsilon_high"] == 0.28
-    assert d["loss_type"] == "grpo"
+    assert d["epsilon_high"] == 0.2
+    assert d["loss_type"] == "dapo"
     assert d["scale_rewards"] == "group"
     assert d["save_strategy"] == "no"
     # Should not contain fields that are not GRPOConfig params
@@ -63,3 +64,25 @@ def test_pt_run_config_grpo_naming():
     )
     assert "grpo" in run_config.run_name
     assert "rlvr-gsm8k-500" in run_config.run_name
+
+
+def test_sft_learning_rate_cli_arg():
+    args = _parse_args(["--model", "qwen2-3B", "--wandb-project", "test",
+                        "--sft-learning-rate", "2e-4"])
+    assert args.sft_learning_rate == 2e-4
+
+
+def test_dpo_learning_rate_cli_arg():
+    args = _parse_args(["--model", "qwen2-3B", "--wandb-project", "test",
+                        "--dpo-learning-rate", "1e-5"])
+    assert args.dpo_learning_rate == 1e-5
+
+
+def test_sft_learning_rate_default():
+    args = _parse_args(["--model", "qwen2-3B", "--wandb-project", "test"])
+    assert args.sft_learning_rate == 5e-5
+
+
+def test_dpo_learning_rate_default():
+    args = _parse_args(["--model", "qwen2-3B", "--wandb-project", "test"])
+    assert args.dpo_learning_rate == 5e-6
