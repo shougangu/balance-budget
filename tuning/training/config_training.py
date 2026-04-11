@@ -138,6 +138,7 @@ class PassAtKConfig(BaseModel):
     use_persistent_vllm: bool = True  # Keep vLLM engine alive between evals (saves cold-start time)
     vllm_gpu_memory_utilization: float = 0.4  # GPU memory fraction for vLLM (conservative for coexistence with training)
     num_inference_gpus: int = 1  # Number of GPUs for data-parallel vLLM inference (>1 forces ephemeral mode)
+    max_checkpoint_gap: int | None = None  # Save a fallback checkpoint if no checkpoint for this many data points
 
     def __str__(self):
         lines = [f"[{self.__class__.__name__}]"]

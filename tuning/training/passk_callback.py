@@ -149,6 +149,8 @@ class PassAtKStoppingCallback(TrainerCallback):
         self.metadata_path = None
         self.prevResults = []
         self._last_eval_step = -1
+        self.max_checkpoint_gap = getattr(config, "max_checkpoint_gap", None)
+        self._last_checkpoint_data_points = 0
 
         # Eval strategies
         self.primary_eval = primary_eval
@@ -654,6 +656,7 @@ class PassAtKStoppingCallback(TrainerCallback):
         # Check each threshold and save checkpoint if crossed (Fork Strategy)
         # Thresholds are sorted descending (hardest to easiest: 0.7, 0.5, 0.3)
         # We iterate to find the hardest threshold that current metric has reached
+        checkpoint_saved = False
         if not self.early_tuples:
             reached_threshold = None
             reached_index = None
@@ -667,6 +670,7 @@ class PassAtKStoppingCallback(TrainerCallback):
             if reached_threshold is not None:
                 print(f"[PassAtKCallback] Sweetspot threshold {reached_threshold} reached!")
                 checkpoint_path = self._save_sweetspot_checkpoint(model, reached_threshold, state, args)
+                checkpoint_saved = True
 
                 # Trim thresholds to only include harder ones (before current index)
                 self.target_pass_at_k_thresholds = self.target_pass_at_k_thresholds[:reached_index]
@@ -690,6 +694,7 @@ class PassAtKStoppingCallback(TrainerCallback):
                     if early_stopping:
                         label = f"{patience}@{min_increase}"
                         checkpoint_path = self._save_sweetspot_checkpoint(model, label, state, args)
+                        checkpoint_saved = True
                         print(f"[PassAtKCallback] Early tuple ({patience}, {min_increase}) triggered. Checkpoint: {checkpoint_path}")
                         triggered.append(idx)
             for idx in reversed(triggered):
@@ -697,6 +702,17 @@ class PassAtKStoppingCallback(TrainerCallback):
             if len(self.early_tuples) == 0:
                 print(f"[PassAtKCallback] All early_tuples triggered! Stopping training.")
                 # control.should_training_stop = True
+
+        # Gap checkpoint: ensure at least one checkpoint every max_checkpoint_gap data points
+        if self.max_checkpoint_gap is not None and data_points_seen > 0 and not checkpoint_saved:
+            gap = data_points_seen - self._last_checkpoint_data_points
+            if gap >= self.max_checkpoint_gap:
+                print(f"[PassAtKCallback] Gap checkpoint: {gap} data points since last checkpoint (max gap: {self.max_checkpoint_gap})")
+                self._save_sweetspot_checkpoint(model, f"gap-{data_points_seen}", state, args)
+                checkpoint_saved = True
+
+        if checkpoint_saved:
+            self._last_checkpoint_data_points = data_points_seen
 
         self._last_eval_step = state.global_step
         return control
