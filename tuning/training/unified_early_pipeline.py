@@ -150,6 +150,13 @@ def _parse_args(argv=None):
                         default=False,
                         help="Skip chat template and pass raw prompt content as plain strings.")
 
+    # GRPO LoRA
+    parser.add_argument("--grpo-lora-target-modules", type=str, nargs="+",
+                        default=None,
+                        help="LoRA target modules (default: all 7 projections)")
+    parser.add_argument("--grpo-lora-layers-fraction", type=float, default=1.0,
+                        help="Fraction of top layers to apply LoRA to (0.0-1.0, default: 1.0 = all layers)")
+
     # Callback toggles
     parser.add_argument("--sft-enable-passk", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--sft-enable-ppl", action=argparse.BooleanOptionalAction, default=False)
@@ -170,6 +177,8 @@ def _parse_args(argv=None):
     parser.add_argument("--sft-passk-num-inference-gpus", type=int, default=1)
     parser.add_argument("--sft-passk-persistent-vllm",
                         action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument("--sft-passk-max-checkpoint-gap", type=int, default=None,
+                        help="Save a fallback SFT checkpoint if no pass@k checkpoint for this many data points")
 
     # SFT perplexity
     parser.add_argument("--sft-ppl-thresholds", type=float, nargs="+", default=[1.0])
@@ -259,6 +268,7 @@ def _build_eval_components(args, stage, gpu_util):
         num_inference_gpus=getattr(args, f"{prefix}_passk_num_inference_gpus"),
         use_persistent_vllm=getattr(args, f"{prefix}_passk_persistent_vllm"),
         vllm_gpu_memory_utilization=gpu_util,
+        max_checkpoint_gap=getattr(args, f"{prefix}_passk_max_checkpoint_gap", None),
     )
 
     k_values = getattr(args, f"{prefix}_passk_k_values", [1])
@@ -666,6 +676,8 @@ def run_grpo(args):
     )
     lora_config = LoraConfig()
     lora_config.use_gradient_checkpointing = True
+    if args.grpo_lora_target_modules is not None:
+        lora_config.target_modules = args.grpo_lora_target_modules
     model_load_config = ModelLoadConfig()
     model_load_config.max_seq_length = args.max_seq_length
     training_args = GRPOTrainingConfig()
@@ -694,34 +706,14 @@ def run_grpo(args):
         k_val = primary_eval.stopping_k if primary_eval else 1
         tags.append(f"p{k_val}")
 
-    sr_label = str(training_args.scale_rewards).lower()
-    lr_label = f"lr{training_args.learning_rate:.0e}"
-    ga = training_args.gradient_accumulation_steps
-    bs = training_args.per_device_train_batch_size
-    prompts_per_update = (bs * ga) // training_args.num_generations
-    batch_label = f"{prompts_per_update}x{training_args.num_generations}"
-    grpo_label = f"b{training_args.beta}_{training_args.loss_type}_sr-{sr_label}_{lr_label}_{batch_label}"
-    tags.extend([f"beta-{training_args.beta}", training_args.loss_type, f"sr-{sr_label}", lr_label, batch_label])
-    if run_config.simple_template:
-        grpo_label += "_simple"
-        tags.append("simple-template")
-    wandb_name = f"{run_config.model_name}_{grpo_label}"
 
     with wandb.init(
-        name=wandb_name,
+        name=run_config.model_name,
         project=args.wandb_project,
         job_type="grpo",
         tags=tags,
         config={
             "stage": "grpo",
-            "beta": training_args.beta,
-            "loss_type": training_args.loss_type,
-            "scale_rewards": sr_label,
-            "learning_rate": training_args.learning_rate,
-            "batch_size": training_args.per_device_train_batch_size,
-            "grad_accum": ga,
-            "prompts_per_update": prompts_per_update,
-            "simple_template": run_config.simple_template,
         },
         settings=wandb.Settings(init_timeout=300)
     ):
@@ -734,7 +726,8 @@ def run_grpo(args):
             passk_config=passk_config,
             primary_eval=primary_eval,
             monitor_evals=monitor_evals,
-            initial_global_step=checkpoint.get("global_step")
+            initial_global_step=checkpoint.get("global_step"),
+            lora_layers_fraction=args.grpo_lora_layers_fraction,
         )
 
     mark_completed(metadata_file, checkpoint["checkpoint_path"])
