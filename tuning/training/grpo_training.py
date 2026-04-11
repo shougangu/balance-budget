@@ -8,7 +8,8 @@ from tuning.config import MODELS_DIR
 from tuning.data.train_dataset import get_train_dataset
 from tuning.training.config_training import PTRunConfig, LoraConfig, ModelLoadConfig, GRPOTrainingConfig
 from tuning.training.passk_callback import PassAtKStoppingCallback
-from tuning.training.model_utils import load_model_with_lora, save_trained_model
+from tuning.training.model_utils import load_model_with_lora, save_trained_model, top_layer_indices
+
 from tuning.utils.utils import chat_template_func
 from trl import GRPOTrainer, GRPOConfig
 from typing import Callable, List
@@ -26,6 +27,7 @@ def train_model_grpo(
     primary_eval = None,
     monitor_evals = None,
     initial_global_step = None,
+    lora_layers_fraction = 1.0,
 ):
     # Resolve model path: SFT checkpoint or base HF model
     if run_config.sft_run_config:
@@ -48,6 +50,10 @@ def train_model_grpo(
         print(f"[GRPO] Simple template enabled — prompts are plain strings")
         print(f"Example prompt: {raw_dataset['train'][0]['prompt'][:200]}")
 
+    layers = None
+    if lora_layers_fraction < 1.0:
+        layers = top_layer_indices(run_config.model_name_hf, lora_layers_fraction)
+
     print(f"Loading model from {model_path}")
     model, tokenizer = load_model_with_lora(
         model_path=model_path,
@@ -55,6 +61,7 @@ def train_model_grpo(
         model_load_config=model_load_config,
         lora_config=lora_config,
         use_unsloth=False,
+        layers_to_transform=layers,
     )
     tokenizer = chat_template_func(tokenizer)
 

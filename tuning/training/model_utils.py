@@ -5,7 +5,25 @@ import json
 import torch
 
 
-def load_model_with_lora(model_path, model_name, model_load_config, lora_config, use_unsloth=True):
+def top_layer_indices(model_name_hf, fraction):
+    """Return the layer indices for the top fraction of a model's transformer layers.
+
+    Args:
+        model_name_hf: HuggingFace model path (used to read num_hidden_layers from config).
+        fraction: Float 0.0-1.0, fraction of top layers to keep.
+                  E.g. 0.2 on a 28-layer model returns [22, 23, 24, 25, 26, 27].
+    """
+    from transformers import AutoConfig
+    config = AutoConfig.from_pretrained(model_name_hf)
+    num_layers = config.num_hidden_layers
+    num_trainable = num_layers - int(num_layers * (1.0 - fraction))
+    start = num_layers - num_trainable
+    indices = list(range(start, num_layers))
+    print(f"[layers_to_transform] {num_trainable}/{num_layers} layers: {indices}")
+    return indices
+
+
+def load_model_with_lora(model_path, model_name, model_load_config, lora_config, use_unsloth=True, layers_to_transform=None):
     """Load a pretrained model and apply LoRA configuration.
 
     Handles model-specific target_modules (e.g., qwen2-7B needs embed_tokens/lm_head).
@@ -75,6 +93,7 @@ def load_model_with_lora(model_path, model_name, model_load_config, lora_config,
             use_rslora=lora_config.use_rslora,
             loftq_config=lora_config.loftq_config,
             task_type="CAUSAL_LM",
+            layers_to_transform=layers_to_transform,
         )
         model = get_peft_model(model, peft_config)
 
