@@ -468,7 +468,7 @@ class TestGRPOArgs:
         assert args.grpo_max_prompt_length == 512
         assert args.grpo_beta == 0.0
         assert args.grpo_temperature == 1.0
-        assert args.grpo_loss_type == "grpo"
+        assert args.grpo_loss_type == "dapo"
         assert args.grpo_data_size is None
 
     def test_grpo_custom_args(self):
@@ -504,3 +504,17 @@ class TestGRPOArgs:
         ])
         assert args.sft_data_size == 3000
         assert args.grpo_data_size == 7000
+
+
+# ---------------------------------------------------------------------------
+# --sft-passk-max-checkpoint-gap CLI arg
+# ---------------------------------------------------------------------------
+
+class TestMaxCheckpointGapArg:
+    def test_default_is_none(self):
+        args = _parse_args(REQUIRED)
+        assert args.sft_passk_max_checkpoint_gap is None
+
+    def test_custom_value(self):
+        args = _parse_args(REQUIRED + ["--sft-passk-max-checkpoint-gap", "1024"])
+        assert args.sft_passk_max_checkpoint_gap == 1024
