@@ -42,6 +42,29 @@ LLAMA_31_SIMPLE_TEMPLATE = """\
 """
 
 
+SIMPLE_TEMPLATE = """\
+{% if 'role' in messages[0] %}{{- bos_token }}\
+{%- for message in messages %}\
+{%- if message['role'] != 'system' %}\
+{{ message['content'] }}\
+{%- endif %}\
+{%- endfor %}\
+{%- if not add_generation_prompt %}\
+{{- eos_token }}\
+{%- endif %}\
+{% else %}{{- bos_token }}\
+{%- for message in messages %}\
+{%- if message['from'] != 'system' %}\
+{{ message['value'] }}\
+{%- endif %}\
+{%- endfor %}\
+{%- if not add_generation_prompt %}\
+{{- eos_token }}\
+{%- endif %}\
+{% endif %}\
+"""
+
+
 def chat_template_func(tokenizer):
     from unsloth.chat_templates import get_chat_template
 
@@ -134,6 +157,7 @@ def apply_chat_template_pt(tokenizer, dataset):
 STOP_TOKENS = {
     "chatml": ["<|im_end|>", "<|end_of_text|>"],
     "llama-3.1": ["<|eot_id|>", "<|end_of_text|>"],
+    "simple": ["<|end_of_text|>", "</s>"],
 }
 
 
