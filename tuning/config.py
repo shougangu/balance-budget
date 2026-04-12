@@ -33,6 +33,7 @@ HF_MODEL_MAP = {
 }
 
 DEFAULT_CHAT_TEMPLATE = "chatml"
+_BASE_CHAT_TEMPLATE = None
 
 MODEL_CHAT_TEMPLATE_MAP = {
     "llama3-8B": "llama-3.1",
@@ -65,7 +66,13 @@ def resolve_chat_template(model_name: str, override: str = None) -> str:
     return DEFAULT_CHAT_TEMPLATE
 
 
-def set_chat_template(model_name: str) -> str:
-    global DEFAULT_CHAT_TEMPLATE
-    DEFAULT_CHAT_TEMPLATE = resolve_chat_template(model_name)
+def set_chat_template(model_name: str, simple: bool = False) -> str:
+    global DEFAULT_CHAT_TEMPLATE, _BASE_CHAT_TEMPLATE
+    resolved = resolve_chat_template(model_name)
+    if simple:
+        _BASE_CHAT_TEMPLATE = resolved
+        DEFAULT_CHAT_TEMPLATE = "simple"
+    else:
+        _BASE_CHAT_TEMPLATE = None
+        DEFAULT_CHAT_TEMPLATE = resolved
     return DEFAULT_CHAT_TEMPLATE
