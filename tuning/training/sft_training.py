@@ -8,6 +8,7 @@ from tuning.training.model_utils import load_model_with_lora, save_trained_model
 from tuning.utils.utils import chat_template_func, apply_chat_template, get_response_delimiters
 from typing import List, Optional
 from pathlib import Path
+import tuning.config
 from tuning.config import HF_MODEL_MAP, MODELS_DIR
 import torch
 import wandb
@@ -73,9 +74,11 @@ def train_model_sft(
         ),
     )
 
-    # Mask non-response tokens in labels using template-specific delimiters
-    from unsloth import train_on_responses_only
-    train_on_responses_only(trainer, **get_response_delimiters())
+    # Mask non-response tokens in labels using template-specific delimiters.
+    # Simple template has no structural delimiters — train on entire sequence.
+    if tuning.config.DEFAULT_CHAT_TEMPLATE != "simple":
+        from unsloth import train_on_responses_only
+        train_on_responses_only(trainer, **get_response_delimiters())
 
     print(trainer.args.to_dict())
 
