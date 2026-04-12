@@ -20,4 +20,6 @@ Step n: <step n>
 $\\boxed{Final answer}$"""
 
 GSM8K_STRING = """Question: {question}\nAnswer:"""
-COMPMATH_STRING = """Problem: {problem}\nAnswer:""" 
+COMPMATH_STRING = """Problem: {problem}\nAnswer:"""
+
+SYSTEM_MESSAGE_OPENMATH = r"""You are a helpful assistant who is an expert at solving math problems. Solve the following math problem. Put your final answer in $\boxed{answer}$."""
