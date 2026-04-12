@@ -548,3 +548,26 @@ class TestMaxCheckpointGapArg:
     def test_custom_value(self):
         args = _parse_args(REQUIRED + ["--sft-passk-max-checkpoint-gap", "1024"])
         assert args.sft_passk_max_checkpoint_gap == 1024
+
+
+# ---------------------------------------------------------------------------
+# --simple-template CLI arg
+# ---------------------------------------------------------------------------
+
+class TestSimpleTemplateArg:
+    def test_default_simple_template_is_false(self):
+        args = _parse_args(REQUIRED)
+        assert args.simple_template is False
+
+    def test_simple_template_flag(self):
+        args = _parse_args(REQUIRED + ["--simple-template"])
+        assert args.simple_template is True
+
+    def test_no_simple_template_flag(self):
+        args = _parse_args(REQUIRED + ["--no-simple-template"])
+        assert args.simple_template is False
+
+    def test_grpo_simple_template_removed(self):
+        """Old --grpo-simple-template flag should no longer be accepted."""
+        with pytest.raises(SystemExit):
+            _parse_args(REQUIRED + ["--grpo-simple-template"])

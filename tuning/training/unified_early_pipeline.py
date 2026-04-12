@@ -146,9 +146,9 @@ def _parse_args(argv=None):
     parser.add_argument("--grpo-data-size", type=int, default=None,
                         help="Fixed GRPO data size. When set with --sft-data-size, "
                              "GRPO uses a fixed dataset instead of remaining budget.")
-    parser.add_argument("--grpo-simple-template", action=argparse.BooleanOptionalAction,
+    parser.add_argument("--simple-template", action=argparse.BooleanOptionalAction,
                         default=False,
-                        help="Skip chat template and pass raw prompt content as plain strings.")
+                        help="Use minimal template that strips system prompts and chat scaffolding.")
 
     # GRPO LoRA
     parser.add_argument("--grpo-lora-target-modules", type=str, nargs="+",
@@ -351,7 +351,7 @@ def run_sft(args):
     from tuning.training.sft_training import train_model_sft
     from tuning.utils.gpu import cleanup_gpu
 
-    set_chat_template(args.model)
+    set_chat_template(args.model, simple=args.simple_template)
     gpu_util = MODEL_TO_GPU_1[args.model]
 
     sft_size = args.sft_data_size if args.sft_data_size is not None else args.train_size
@@ -521,7 +521,7 @@ def run_dpo(args):
     )
     from tuning.training.dpo_training import train_model_dpo
 
-    set_chat_template(args.model)
+    set_chat_template(args.model, simple=args.simple_template)
     gpu_util = MODEL_TO_GPU_2[args.model]
     model_name = Path(checkpoint["checkpoint_path"]).name
 
@@ -652,7 +652,7 @@ def run_grpo(args):
     )
     from tuning.training.grpo_training import train_model_grpo
 
-    set_chat_template(args.model)
+    set_chat_template(args.model, simple=args.simple_template)
     gpu_util = MODEL_TO_GPU_3[args.model]
     model_name = Path(checkpoint["checkpoint_path"]).name
 
@@ -680,7 +680,7 @@ def run_grpo(args):
         task_name=args.task_name,
         pft_method="grpo",
         do_training=True,
-        simple_template=args.grpo_simple_template,
+        simple_template=args.simple_template,
     )
     lora_config = LoraConfig()
     lora_config.use_gradient_checkpointing = True
