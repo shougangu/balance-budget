@@ -2,6 +2,7 @@
 # ABOUTME: Verifies training/inference modes, system prompt stripping, and ShareGPT format.
 
 import pytest
+from unittest.mock import patch, MagicMock
 from jinja2 import BaseLoader, Environment
 
 import tuning.config
@@ -91,3 +92,44 @@ class TestSimpleStopTokens:
             assert "</s>" in result
         finally:
             tuning.config.DEFAULT_CHAT_TEMPLATE = original
+
+
+class TestChatTemplateFuncSimpleMode:
+    @pytest.fixture(autouse=True)
+    def restore_globals(self):
+        original = tuning.config.DEFAULT_CHAT_TEMPLATE
+        original_base = tuning.config._BASE_CHAT_TEMPLATE
+        yield
+        tuning.config.DEFAULT_CHAT_TEMPLATE = original
+        tuning.config._BASE_CHAT_TEMPLATE = original_base
+
+    def test_simple_mode_overrides_tokenizer_chat_template(self):
+        """When DEFAULT_CHAT_TEMPLATE is 'simple', chat_template_func should
+        set tokenizer.chat_template to SIMPLE_TEMPLATE."""
+        import sys
+
+        tuning.config.DEFAULT_CHAT_TEMPLATE = "simple"
+        tuning.config._BASE_CHAT_TEMPLATE = "chatml"
+
+        mock_tokenizer = MagicMock()
+        mock_tokenizer.chat_template = "original"
+
+        def fake_get_chat_template(tokenizer, chat_template, mapping, map_eos_token):
+            assert chat_template == "chatml", "Should use _BASE_CHAT_TEMPLATE for unsloth setup"
+            return tokenizer
+
+        # Mock the unsloth module hierarchy so the local import inside
+        # chat_template_func succeeds without a GPU.
+        mock_chat_templates = MagicMock()
+        mock_chat_templates.get_chat_template = fake_get_chat_template
+        mock_unsloth = MagicMock()
+        mock_unsloth.chat_templates = mock_chat_templates
+
+        with patch.dict(sys.modules, {
+            "unsloth": mock_unsloth,
+            "unsloth.chat_templates": mock_chat_templates,
+        }):
+            from tuning.utils.utils import chat_template_func
+            result = chat_template_func(mock_tokenizer)
+
+        assert result.chat_template == SIMPLE_TEMPLATE
