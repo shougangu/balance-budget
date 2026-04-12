@@ -23,6 +23,7 @@ class PerplexityStoppingCallback(TrainerCallback):
         # Sort thresholds in ascending order (hardest to easiest: 2.0, 2.5, 3.0)
         # Lower perplexity = harder to reach, so we process from smallest to largest
         self.perplexity_thresholds = sorted(config.perplexity_thresholds, reverse=False)
+        self._step_offset = int(getattr(config, "initial_global_step", 0) or 0)
         self.test_dataset = test_dataset
         self.tokenizer = tokenizer
         self.num_samples = config.num_samples
@@ -134,7 +135,7 @@ class PerplexityStoppingCallback(TrainerCallback):
             return control
         
         current_perplexity = self.evaluate_perplexity(model)
-        wandb.log({"eval/perplexity": current_perplexity, "train/global_step": state.global_step})
+        wandb.log({"eval/perplexity": current_perplexity, "train/global_step": state.global_step, "train/total_global_step": state.global_step + self._step_offset})
         self.prevResults.append(current_perplexity)
         
         print(f"\n[PerplexityCallback] Step {state.global_step}, Data Points {data_points_seen}: PPL = {current_perplexity:.4f}")

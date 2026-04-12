@@ -95,9 +95,12 @@ def train_model_grpo(
             cb.set_trainer_vllm(trainer.vllm_generation.llm)
             print(f"[GRPO] PassAtK callback will reuse GRPOTrainer's vLLM engine")
 
+    # Swap the default WandbCallback for one that bridges train/global_step across runs.
     if initial_global_step:
-        from tuning.training.callback_utils import GlobalStepOffsetCallback
-        trainer.callback_handler.callbacks.insert(0, GlobalStepOffsetCallback(initial_global_step))
+        from transformers.integrations import WandbCallback
+        from tuning.training.callback_utils import OffsetAwareWandbCallback
+        trainer.pop_callback(WandbCallback)
+        trainer.add_callback(OffsetAwareWandbCallback(initial_global_step))
 
     try:
         trainer_stats = trainer.train()

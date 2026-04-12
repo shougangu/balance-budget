@@ -564,6 +564,12 @@ def run_dpo(args):
     passk_config, primary_eval, monitor_evals = _build_eval_components(args, "dpo", gpu_util)
     ppl_config = _dpo_ppl_config(args)
 
+    initial_step = checkpoint.get("global_step", 0)
+    if passk_config is not None:
+        passk_config.initial_global_step = initial_step
+    if ppl_config is not None:
+        ppl_config.initial_global_step = initial_step
+
     perplexity_test_dataset = None
     if ppl_config is not None:
         from tuning.data.train_dataset import get_train_dataset
@@ -698,6 +704,10 @@ def run_grpo(args):
 
     passk_config, primary_eval, monitor_evals = _build_eval_components(args, "grpo", gpu_util)
     reward_funcs = _build_reward_funcs(args)
+
+    initial_step = checkpoint.get("global_step", 0)
+    if passk_config is not None:
+        passk_config.initial_global_step = initial_step
 
     tags = ["grpo", str(checkpoint["threshold_value"]), str(checkpoint["data_points_seen"])]
     if primary_eval is not None:

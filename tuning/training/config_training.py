@@ -139,6 +139,7 @@ class PassAtKConfig(BaseModel):
     vllm_gpu_memory_utilization: float = 0.4  # GPU memory fraction for vLLM (conservative for coexistence with training)
     num_inference_gpus: int = 1  # Number of GPUs for data-parallel vLLM inference (>1 forces ephemeral mode)
     max_checkpoint_gap: int | None = None  # Save a fallback checkpoint if no checkpoint for this many data points
+    initial_global_step: int = 0  # Step offset for W&B logging continuity across chained runs
 
     def __str__(self):
         lines = [f"[{self.__class__.__name__}]"]
@@ -153,6 +154,7 @@ class PerplexityConfig(BaseModel):
     num_samples: int = 100
     early_tuples: list[tuple[int, float]] | None = None  # Each tuple: (patience, min_decrease)
     enabled: bool = True
+    initial_global_step: int = 0  # Step offset for W&B logging continuity across chained runs
 
 
 class DatasetConfig(BaseModel):

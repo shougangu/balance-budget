@@ -300,26 +300,16 @@ class TestMetadataIPC:
 # ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
-# GlobalStepOffsetCallback
+# OffsetAwareWandbCallback
 # ---------------------------------------------------------------------------
 
-class TestGlobalStepOffsetCallback:
-    def test_does_not_mutate_global_step(self):
-        from tuning.training.callback_utils import GlobalStepOffsetCallback
+class TestOffsetAwareWandbCallback:
+    def test_on_log_injects_total_global_step(self):
+        from tuning.training.callback_utils import OffsetAwareWandbCallback
         from transformers import TrainerState
 
-        callback = GlobalStepOffsetCallback(initial_global_step=100)
-        state = TrainerState()
-        state.global_step = 5
-
-        callback.on_log(args=None, state=state, control=None, logs={})
-        assert state.global_step == 5, "global_step must not be mutated"
-
-    def test_adds_total_global_step_to_logs(self):
-        from tuning.training.callback_utils import GlobalStepOffsetCallback
-        from transformers import TrainerState
-
-        callback = GlobalStepOffsetCallback(initial_global_step=100)
+        callback = OffsetAwareWandbCallback(initial_global_step=100)
+        callback._wandb = None  # makes super().on_log a no-op
         state = TrainerState()
         state.global_step = 5
         logs = {}
@@ -327,11 +317,24 @@ class TestGlobalStepOffsetCallback:
         callback.on_log(args=None, state=state, control=None, logs=logs)
         assert logs["train/total_global_step"] == 105
 
-    def test_zero_offset_skips_injection(self):
-        from tuning.training.callback_utils import GlobalStepOffsetCallback
+    def test_does_not_mutate_global_step(self):
+        from tuning.training.callback_utils import OffsetAwareWandbCallback
         from transformers import TrainerState
 
-        callback = GlobalStepOffsetCallback(initial_global_step=0)
+        callback = OffsetAwareWandbCallback(initial_global_step=100)
+        callback._wandb = None
+        state = TrainerState()
+        state.global_step = 5
+
+        callback.on_log(args=None, state=state, control=None, logs={})
+        assert state.global_step == 5
+
+    def test_zero_offset_skips_injection(self):
+        from tuning.training.callback_utils import OffsetAwareWandbCallback
+        from transformers import TrainerState
+
+        callback = OffsetAwareWandbCallback(initial_global_step=0)
+        callback._wandb = None
         state = TrainerState()
         state.global_step = 5
         logs = {}
@@ -340,10 +343,11 @@ class TestGlobalStepOffsetCallback:
         assert "train/total_global_step" not in logs
 
     def test_none_offset_skips_injection(self):
-        from tuning.training.callback_utils import GlobalStepOffsetCallback
+        from tuning.training.callback_utils import OffsetAwareWandbCallback
         from transformers import TrainerState
 
-        callback = GlobalStepOffsetCallback(initial_global_step=None)
+        callback = OffsetAwareWandbCallback(initial_global_step=None)
+        callback._wandb = None
         state = TrainerState()
         state.global_step = 5
         logs = {}
@@ -351,32 +355,58 @@ class TestGlobalStepOffsetCallback:
         callback.on_log(args=None, state=state, control=None, logs=logs)
         assert "train/total_global_step" not in logs
 
-    def test_on_train_begin_calls_define_metric(self):
-        from tuning.training.callback_utils import GlobalStepOffsetCallback
-        from unittest.mock import patch, MagicMock
+    def test_setup_redefines_step_metric_after_super(self):
+        """The override's define_metric calls must run AFTER the parent's,
+        so that wandb's last-write-wins resolution lands on train/total_global_step."""
+        from tuning.training.callback_utils import OffsetAwareWandbCallback
+        from transformers.integrations import WandbCallback
+        from unittest.mock import MagicMock, patch
 
-        callback = GlobalStepOffsetCallback(initial_global_step=100)
+        callback = OffsetAwareWandbCallback(initial_global_step=100)
         mock_wandb = MagicMock()
-        mock_wandb.run = True
+        callback._wandb = mock_wandb
 
-        with patch.dict("sys.modules", {"wandb": mock_wandb}):
-            callback.on_train_begin(args=None, state=None, control=None)
+        # Stub super().setup() to record the parent's define_metric calls
+        # without needing to mock all of HF's wandb init internals.
+        def fake_super_setup(self, args, state, model, **kwargs):
+            self._wandb.define_metric("train/global_step")
+            self._wandb.define_metric("*", step_metric="train/global_step", step_sync=True)
 
-        mock_wandb.define_metric.assert_any_call("train/total_global_step")
-        mock_wandb.define_metric.assert_any_call("*", step_metric="train/total_global_step")
+        with patch.object(WandbCallback, "setup", fake_super_setup):
+            callback.setup(args=None, state=None, model=None)
 
-    def test_on_train_begin_skips_when_no_offset(self):
-        from tuning.training.callback_utils import GlobalStepOffsetCallback
-        from unittest.mock import patch, MagicMock
+        glob_calls = [
+            c for c in mock_wandb.define_metric.call_args_list
+            if c.args == ("*",)
+        ]
+        assert len(glob_calls) >= 2, "Expected both super and override to define '*'"
+        last_glob_call = glob_calls[-1]
+        assert last_glob_call.kwargs.get("step_metric") == "train/total_global_step", (
+            f"Expected last define_metric('*', ...) to use train/total_global_step, "
+            f"got {last_glob_call}"
+        )
 
-        callback = GlobalStepOffsetCallback(initial_global_step=0)
+    def test_setup_with_zero_offset_does_not_redefine(self):
+        from tuning.training.callback_utils import OffsetAwareWandbCallback
+        from transformers.integrations import WandbCallback
+        from unittest.mock import MagicMock, patch
+
+        callback = OffsetAwareWandbCallback(initial_global_step=0)
         mock_wandb = MagicMock()
-        mock_wandb.run = True
+        callback._wandb = mock_wandb
 
-        with patch.dict("sys.modules", {"wandb": mock_wandb}):
-            callback.on_train_begin(args=None, state=None, control=None)
+        def fake_super_setup(self, args, state, model, **kwargs):
+            self._wandb.define_metric("*", step_metric="train/global_step", step_sync=True)
 
-        mock_wandb.define_metric.assert_not_called()
+        with patch.object(WandbCallback, "setup", fake_super_setup):
+            callback.setup(args=None, state=None, model=None)
+
+        glob_calls = [
+            c for c in mock_wandb.define_metric.call_args_list
+            if c.args == ("*",)
+        ]
+        assert len(glob_calls) == 1
+        assert glob_calls[0].kwargs.get("step_metric") == "train/global_step"
 
 
 # ---------------------------------------------------------------------------

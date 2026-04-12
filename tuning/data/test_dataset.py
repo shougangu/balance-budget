@@ -86,7 +86,7 @@ def get_math500_test_dataset(num_prompts=None):
 
         prompt = COMPMATH_STRING.format(problem=problem)
         messages_list.append([
-            {"role": "system", "content": SYSTEM_MESSAGE_COMPMATH},
+            {"role": "system", "content": SYSTEM_MESSAGE_GSM8K},
             {"role": "user", "content": prompt},
         ])
         prompts.append(prompt)

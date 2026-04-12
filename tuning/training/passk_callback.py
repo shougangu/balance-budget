@@ -142,6 +142,7 @@ class PassAtKStoppingCallback(TrainerCallback):
         # Higher pass@k = harder to reach, so we process from largest to smallest
         self.target_pass_at_k_thresholds = sorted(config.target_pass_at_k, reverse=True)
         self.early_tuples = list(config.early_tuples) if config.early_tuples else None
+        self._step_offset = int(getattr(config, "initial_global_step", 0) or 0)
         self.tokenizer = tokenizer
         self.temperature = config.temperature
         self.max_tokens = config.max_tokens
@@ -533,6 +534,7 @@ class PassAtKStoppingCallback(TrainerCallback):
 
             wandb.log({
                 "train/global_step": global_step,
+                "train/total_global_step": global_step + self._step_offset,
                 table_key: table,
             })
         except Exception as exc:
@@ -617,7 +619,7 @@ class PassAtKStoppingCallback(TrainerCallback):
         scores, raw_results = self._run_eval_with_results(model, self.primary_eval)
 
         # Log primary eval metrics to wandb
-        log_dict = {"train/global_step": state.global_step}
+        log_dict = {"train/global_step": state.global_step, "train/total_global_step": state.global_step + self._step_offset}
         log_dict.update(self.primary_eval.wandb_metrics(scores))
         wandb.log(log_dict)
 
@@ -639,7 +641,7 @@ class PassAtKStoppingCallback(TrainerCallback):
         # Run monitor evals (wandb logging only, no stopping)
         for monitor_eval in self.monitor_evals:
             monitor_scores, monitor_raw_results = self._run_eval_with_results(model, monitor_eval)
-            monitor_log = {"train/global_step": state.global_step}
+            monitor_log = {"train/global_step": state.global_step, "train/total_global_step": state.global_step + self._step_offset}
             monitor_log.update(monitor_eval.wandb_metrics(monitor_scores))
             wandb.log(monitor_log)
             monitor_stopping_key = monitor_eval.stopping_metric()

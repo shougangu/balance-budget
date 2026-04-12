@@ -1,26 +1,34 @@
 import os
 import json
-from transformers import TrainerState, TrainerCallback
+from transformers import TrainerState
+from transformers.integrations import WandbCallback
 from transformers.training_args import TrainingArguments
 from tuning.config import MODELS_DIR
 
 
-class GlobalStepOffsetCallback(TrainerCallback):
-    """Injects train/total_global_step into W&B logs for cross-run step continuity."""
+class OffsetAwareWandbCallback(WandbCallback):
+    """WandbCallback that bridges train/global_step across chained runs.
 
-    def __init__(self, initial_global_step):
-        self.offset = initial_global_step or 0
+    Defines train/total_global_step as the W&B step metric *after* the parent
+    setup() runs, so wandb's last-write-wins resolution lands on our definition.
+    Injects train/total_global_step into every log dict before super().on_log
+    uploads it to wandb.
+    """
 
-    def on_train_begin(self, args, state, control, **kwargs):
-        if self.offset:
-            import wandb
-            if wandb.run:
-                wandb.define_metric("train/total_global_step")
-                wandb.define_metric("*", step_metric="train/total_global_step")
+    def __init__(self, initial_global_step=0):
+        super().__init__()
+        self._offset = int(initial_global_step or 0)
 
-    def on_log(self, args, state, control, logs=None, **kwargs):
-        if self.offset and logs is not None:
-            logs["train/total_global_step"] = state.global_step + self.offset
+    def setup(self, args, state, model, **kwargs):
+        super().setup(args, state, model, **kwargs)
+        if self._offset and self._wandb is not None and getattr(self._wandb, "define_metric", None):
+            self._wandb.define_metric("train/total_global_step")
+            self._wandb.define_metric("*", step_metric="train/total_global_step", step_sync=True)
+
+    def on_log(self, args, state, control, model=None, logs=None, **kwargs):
+        if self._offset and logs is not None:
+            logs["train/total_global_step"] = state.global_step + self._offset
+        return super().on_log(args, state, control, model=model, logs=logs, **kwargs)
 
 
 def compute_data_points_seen(state: TrainerState, args: TrainingArguments) -> int:
