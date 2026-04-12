@@ -13,6 +13,7 @@ def test_openmath_system_message_exists():
 
 
 from tuning.data.openmath_sft import OpenMathSFT
+from tuning.data.openmath_rlvr import OpenMathRLVR
 
 
 def _make_fake_openmath_rows():
@@ -77,3 +78,67 @@ class TestOpenMathSFT:
         all_prompts = list(train["prompt"]) + list(test["prompt"])
         count_2plus2 = sum(1 for p in all_prompts if "2+2" in p)
         assert count_2plus2 == 2
+
+
+class TestOpenMathRLVR:
+    def _make_loader(self):
+        loader = OpenMathRLVR()
+        loader._dataset = _make_fake_openmath_rows()
+        return loader
+
+    def test_filters_to_math_sources_only(self):
+        """Only math and augmented_math rows should survive filtering."""
+        loader = self._make_loader()
+        loader.format_dataset()
+        dataset = loader.get_dataset()
+        train = dataset["train"]
+        test_split = dataset["test"]
+        all_prompts = [p[1]["content"] for p in list(train["prompt"]) + list(test_split["prompt"])]
+        # gsm8k source rows should be excluded
+        assert not any("5*5" in p for p in all_prompts), "gsm8k source should be excluded"
+        assert not any("1+1" in p for p in all_prompts), "augmented_gsm8k source should be excluded"
+
+    def test_rlvr_has_prompt_and_reference_answer(self):
+        loader = self._make_loader()
+        loader.format_dataset()
+        dataset = loader.get_dataset()
+        train = dataset["train"]
+        assert "prompt" in train.column_names
+        assert "reference_answer" in train.column_names
+
+    def test_rlvr_prompt_format(self):
+        """Prompt should be [system, user] message list."""
+        loader = self._make_loader()
+        loader.format_dataset()
+        dataset = loader.get_dataset()
+        train = dataset["train"]
+        row = train[0]
+        assert isinstance(row["prompt"], list)
+        assert len(row["prompt"]) == 2
+        assert row["prompt"][0]["role"] == "system"
+        assert row["prompt"][1]["role"] == "user"
+        assert "boxed" in row["prompt"][0]["content"]
+        assert "Problem:" in row["prompt"][1]["content"]
+
+    def test_rlvr_deduplicates_by_problem(self):
+        """RLVR should have one row per unique problem, not per solution."""
+        loader = self._make_loader()
+        loader.format_dataset()
+        dataset = loader.get_dataset()
+        train = dataset["train"]
+        test_split = dataset["test"]
+        all_prompts = [p[1]["content"] for p in list(train["prompt"]) + list(test_split["prompt"])]
+        # "What is 2+2?" appears twice in math source but should be deduped to 1
+        assert len(all_prompts) == len(set(all_prompts)), "RLVR should have unique prompts"
+        # 2 unique math/augmented_math problems: "2+2" and "3+3"
+        assert len(all_prompts) == 2
+
+    def test_rlvr_reference_answer(self):
+        """reference_answer should come from expected_answer field."""
+        loader = self._make_loader()
+        loader.format_dataset()
+        dataset = loader.get_dataset()
+        train = dataset["train"]
+        test_split = dataset["test"]
+        all_answers = list(train["reference_answer"]) + list(test_split["reference_answer"])
+        assert all(isinstance(a, str) and len(a) > 0 for a in all_answers)
