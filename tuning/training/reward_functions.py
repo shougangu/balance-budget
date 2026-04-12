@@ -1,7 +1,8 @@
 # ABOUTME: Reward functions for GRPO/RLVR training matching TRL's GRPOTrainer interface.
-# ABOUTME: GSM8K uses binary correctness; IFEval uses fractional instruction compliance.
+# ABOUTME: GSM8K and MATH-500 use binary correctness; IFEval uses fractional instruction compliance.
 
-from tuning.evaluation.gsm8k_scoring import is_correct
+from tuning.evaluation.gsm8k_scoring import is_correct as gsm8k_is_correct
+from tuning.evaluation.math500_scoring import is_correct as math500_is_correct
 
 
 def _extract_text(completion):
@@ -17,7 +18,19 @@ def gsm8k_reward_func(prompts, completions, reference_answer, **kwargs):
     rewards = []
     for completion, ref in zip(completions, reference_answer):
         text = _extract_text(completion)
-        rewards.append(1.0 if is_correct(text, ref) else 0.0)
+        rewards.append(1.0 if gsm8k_is_correct(text, ref) else 0.0)
+    return rewards
+
+
+def math500_reward_func(prompts, completions, reference_answer, **kwargs):
+    """Binary reward: 1.0 if the completion's answer matches the reference, 0.0 otherwise.
+
+    Uses math-verify for extraction (handles \\boxed{} and $...$) with #### fallback.
+    """
+    rewards = []
+    for completion, ref in zip(completions, reference_answer):
+        text = _extract_text(completion)
+        rewards.append(1.0 if math500_is_correct(text, ref) else 0.0)
     return rewards
 
 

@@ -94,7 +94,7 @@ def _parse_args(argv=None):
                        help="Post-training method to use after SFT")
 
     # Core
-    parser.add_argument("--dataset", default="gsm8k", choices=["tuluif", "gsm8k"],)
+    parser.add_argument("--dataset", default="gsm8k", choices=["tuluif", "gsm8k", "openmath"],)
     parser.add_argument("--train-size", type=int, default=10000)
     parser.add_argument("--sft-data-size", type=int, default=None,
                         help="Fixed SFT data size. When both --sft-data-size and --dpo-data-size are set, "
@@ -611,9 +611,11 @@ def run_dpo(args):
 
 def _build_reward_funcs(args):
     """Build reward function list based on task name."""
-    from tuning.training.reward_functions import gsm8k_reward_func, ifeval_reward_func
+    from tuning.training.reward_functions import gsm8k_reward_func, math500_reward_func, ifeval_reward_func
     if args.task_name == "gsm8k":
         return [gsm8k_reward_func]
+    elif args.task_name == "math500":
+        return [math500_reward_func]
     elif args.task_name == "ifeval":
         return [ifeval_reward_func]
     else:

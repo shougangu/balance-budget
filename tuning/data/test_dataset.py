@@ -1,5 +1,5 @@
 from datasets import Dataset
-from tuning.data.config import SYSTEM_MESSAGE_INSTRUCTION_FOLLOWING, SYSTEM_MESSAGE_GSM8K, GSM8K_STRING, SYSTEM_MESSAGE_COMPMATH, COMPMATH_STRING
+from tuning.data.config import SYSTEM_MESSAGE_INSTRUCTION_FOLLOWING, SYSTEM_MESSAGE_GSM8K, GSM8K_STRING, SYSTEM_MESSAGE_COMPMATH, SYSTEM_MESSAGE_OPENMATH, COMPMATH_STRING
 from pathlib import Path
 import random
 import json
@@ -86,7 +86,7 @@ def get_math500_test_dataset(num_prompts=None):
 
         prompt = COMPMATH_STRING.format(problem=problem)
         messages_list.append([
-            {"role": "system", "content": SYSTEM_MESSAGE_GSM8K},
+            {"role": "system", "content": SYSTEM_MESSAGE_OPENMATH},
             {"role": "user", "content": prompt},
         ])
         prompts.append(prompt)

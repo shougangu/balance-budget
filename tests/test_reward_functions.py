@@ -1,7 +1,7 @@
-# ABOUTME: Tests for GRPO reward functions (GSM8K and IFEval).
+# ABOUTME: Tests for GRPO reward functions (GSM8K, MATH-500, and IFEval).
 # ABOUTME: Validates reward interface, correctness scoring, and edge cases.
 
-from tuning.training.reward_functions import gsm8k_reward_func, ifeval_reward_func
+from tuning.training.reward_functions import gsm8k_reward_func, math500_reward_func, ifeval_reward_func
 
 
 class TestGSM8KReward:
@@ -46,6 +46,61 @@ class TestGSM8KReward:
         rewards = gsm8k_reward_func(
             prompts=[{"role": "user", "content": "q1"}],
             completions=[[{"role": "assistant", "content": "#### 42"}]],
+            reference_answer=["42"],
+        )
+        assert rewards == [1.0]
+
+
+class TestMATH500Reward:
+    def test_boxed_correct_gets_reward_1(self):
+        rewards = math500_reward_func(
+            prompts=["What is 2+2?"],
+            completions=[r"Step 1: 2+2=4. $\boxed{4}$"],
+            reference_answer=["4"],
+        )
+        assert rewards == [1.0]
+
+    def test_boxed_incorrect_gets_reward_0(self):
+        rewards = math500_reward_func(
+            prompts=["What is 2+2?"],
+            completions=[r"$\boxed{5}$"],
+            reference_answer=["4"],
+        )
+        assert rewards == [0.0]
+
+    def test_hash_fallback_correct(self):
+        """math500_reward_func should also handle #### format as fallback."""
+        rewards = math500_reward_func(
+            prompts=["What is 2+2?"],
+            completions=["Step 1: 2+2=4\n\n#### 4"],
+            reference_answer=["4"],
+        )
+        assert rewards == [1.0]
+
+    def test_no_answer_gets_reward_0(self):
+        rewards = math500_reward_func(
+            prompts=["What is 2+2?"],
+            completions=["I don't know."],
+            reference_answer=["4"],
+        )
+        assert rewards == [0.0]
+
+    def test_batch_of_mixed_answers(self):
+        rewards = math500_reward_func(
+            prompts=["q1", "q2", "q3"],
+            completions=[
+                r"$\boxed{42}$",
+                r"$\boxed{99}$",
+                r"$\boxed{7}$",
+            ],
+            reference_answer=["42", "100", "7"],
+        )
+        assert rewards == [1.0, 0.0, 1.0]
+
+    def test_conversational_format_completions(self):
+        rewards = math500_reward_func(
+            prompts=[{"role": "user", "content": "q1"}],
+            completions=[[{"role": "assistant", "content": r"$\boxed{42}$"}]],
             reference_answer=["42"],
         )
         assert rewards == [1.0]

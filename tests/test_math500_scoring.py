@@ -70,9 +70,9 @@ def test_get_math500_test_dataset_loads():
         assert "prompt" in ds.column_names
         assert "reference_answer" in ds.column_names
         assert len(ds) == 2
-        # System message uses COMPMATH (asks for \boxed{} format)
-        from tuning.data.config import SYSTEM_MESSAGE_COMPMATH
-        assert ds[0]["messages"][0]["content"] == SYSTEM_MESSAGE_COMPMATH
+        # System message uses OPENMATH (asks for \boxed{} format)
+        from tuning.data.config import SYSTEM_MESSAGE_OPENMATH
+        assert ds[0]["messages"][0]["content"] == SYSTEM_MESSAGE_OPENMATH
         # User message uses COMPMATH_STRING template
         assert "Problem:" in ds[0]["messages"][1]["content"]
         assert "What is 2+2?" in ds[0]["messages"][1]["content"]
