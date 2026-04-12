@@ -12,27 +12,32 @@ class OpenMathSFT(HFDataset):
     def __init__(self):
         super().__init__("openmath")
 
-    def _get_rows(self, dataset):
-        rows = []
-        for i in range(len(dataset)):
-            row = dataset[i]
-            if row["problem_source"] not in MATH_SOURCES:
-                continue
+    def _format_rows(self, dataset):
+        filtered = dataset.filter(
+            lambda rows: [s in MATH_SOURCES for s in rows["problem_source"]],
+            batched=True,
+        )
+
+        def transform(row):
             prompt = COMPMATH_STRING.format(problem=row["problem"])
-            rows.append({
+            return {
                 "prompt": prompt,
                 "messages": [
                     {"role": "system", "content": SYSTEM_MESSAGE_OPENMATH},
                     {"role": "user", "content": prompt},
                     {"role": "assistant", "content": row["generated_solution"]},
                 ],
-            })
-        return rows
+            }
+
+        return filtered.map(
+            transform,
+            remove_columns=filtered.column_names,
+        )
 
     def format_dataset(self):
-        rows = self._get_rows(self._dataset)
-        formatted_dataset = Dataset.from_list(rows).train_test_split(
-            test_size=min(200, len(rows) - 1), shuffle=False
+        formatted = self._format_rows(self._dataset)
+        formatted_dataset = formatted.train_test_split(
+            test_size=min(200, len(formatted) - 1), shuffle=False
         )
         print(f"OpenMath SFT Dataset - {formatted_dataset}")
         print(f"Example row - {formatted_dataset['train'][0]}")

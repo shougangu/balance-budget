@@ -13,12 +13,13 @@ class OpenMathRLVR(HFDataset):
         super().__init__("openmath")
 
     def _get_rows(self, dataset):
+        filtered = dataset.filter(
+            lambda rows: [s in MATH_SOURCES for s in rows["problem_source"]],
+            batched=True,
+        )
         seen = set()
         rows = []
-        for i in range(len(dataset)):
-            row = dataset[i]
-            if row["problem_source"] not in MATH_SOURCES:
-                continue
+        for row in filtered:
             formatted = COMPMATH_STRING.format(problem=row["problem"])
             if formatted in seen:
                 continue

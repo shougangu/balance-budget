@@ -166,7 +166,7 @@ def apply_chat_template_pt(tokenizer, dataset):
 STOP_TOKENS = {
     "chatml": ["<|im_end|>", "<|end_of_text|>"],
     "llama-3.1": ["<|eot_id|>", "<|end_of_text|>"],
-    "simple": ["<|end_of_text|>", "</s>"],
+    "simple": ["<|end_of_text|>", "</s>", "<|im_end|>", "<|eot_id|>"],
 }
 
 

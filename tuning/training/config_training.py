@@ -101,7 +101,7 @@ class GRPOTrainingConfig(TrainingArgumentsConfig):
     use_vllm: bool = True
     vllm_mode: str = "colocate"
     vllm_gpu_memory_utilization: float = 0.65 # 0.7 is perfect for Q2 and L1
-    learning_rate: float = 1e-4
+    learning_rate: float = 5e-5
     num_train_epochs: int = 1
     per_device_train_batch_size: int = 8
     per_device_eval_batch_size: int = 8

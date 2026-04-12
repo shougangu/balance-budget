@@ -186,3 +186,4 @@ CLAUDE.md
 .gemini/
 gha-creds-*.json
 docs/
+artifacts/*
