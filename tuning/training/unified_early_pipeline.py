@@ -52,7 +52,7 @@ MODEL_TO_GPU_3 = {
     "llama3-1B": 0.7, # good
     "llama3-3B": 0.65,
     "llama3-8B": 0.5,
-    "qwen2-2B": 0.7,
+    "qwen2-2B": 0.65,
     "qwen2-3B": 0.6, #good
     "qwen2-7B": 0.53,
 }
@@ -137,7 +137,7 @@ def _parse_args(argv=None):
     parser.add_argument("--grpo-max-prompt-length", type=int, default=512)
     parser.add_argument("--grpo-beta", type=float, default=0.0)
     parser.add_argument("--grpo-temperature", type=float, default=1.0)
-    parser.add_argument("--grpo-learning-rate", type=float, default=5e-5)
+    parser.add_argument("--grpo-learning-rate", type=float, default=1e-5)
     parser.add_argument("--grpo-loss-type", default="dapo",
                         choices=["grpo", "dr_grpo", "dapo", "bnpo"])
     parser.add_argument("--grpo-scale-rewards", default="group",
@@ -738,8 +738,7 @@ def run_grpo(args):
             passk_config=passk_config,
             primary_eval=primary_eval,
             monitor_evals=monitor_evals,
-            # initial_global_step=checkpoint.get("global_step"),
-            initial_global_step=0,
+            initial_global_step=checkpoint.get("global_step"),
             lora_layers_fraction=args.grpo_lora_layers_fraction,
         )
 
