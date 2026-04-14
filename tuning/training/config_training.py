@@ -107,6 +107,7 @@ class GRPOTrainingConfig(TrainingArgumentsConfig):
     per_device_eval_batch_size: int = 8
     eval_steps: float = 640
     gradient_accumulation_steps: int = 1
+    log_completions: bool = True
 
     def to_hf_args(self, output_dir: str) -> dict:
         """Return kwargs for GRPOConfig constructor."""
@@ -123,6 +124,7 @@ class GRPOTrainingConfig(TrainingArgumentsConfig):
         d["use_vllm"] = self.use_vllm
         d["vllm_mode"] = self.vllm_mode
         d["vllm_gpu_memory_utilization"] = self.vllm_gpu_memory_utilization
+        d["log_completions"] = self.log_completions
         d.pop("eval_accumulation_steps", None)
         d["save_strategy"] = "no"
         return d
