@@ -551,7 +551,6 @@ def run_dpo(args):
         do_training=True,
     )
     lora_config = LoraConfig()
-    lora_config.use_gradient_checkpointing = True
     model_load_config = ModelLoadConfig()
     model_load_config.max_seq_length = args.max_seq_length
     training_args = DPOTrainingConfig()
@@ -683,7 +682,6 @@ def run_grpo(args):
         simple_template=args.simple_template,
     )
     lora_config = LoraConfig()
-    lora_config.use_gradient_checkpointing = True
     if args.grpo_lora_target_modules is not None:
         lora_config.target_modules = args.grpo_lora_target_modules
     model_load_config = ModelLoadConfig()

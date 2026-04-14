@@ -81,7 +81,8 @@ def load_model_with_lora(model_path, model_name, model_load_config, lora_config,
         )
 
         if lora_config.use_gradient_checkpointing:
-            model.gradient_checkpointing_enable()
+            model.gradient_checkpointing_enable() 
+            # "unsloth" mode, default for Unsloth, is still truthy, so we keep standard checkpointing here
 
         target_modules = list(lora_config.target_modules)
         peft_config = PeftLoraConfig(

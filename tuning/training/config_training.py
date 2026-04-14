@@ -17,8 +17,8 @@ def effective_batch_size(dataset_size: int):
     return 16  # Increased for H100/L40 GPUs
 
 class ModelLoadConfig(BaseModel):
-    max_seq_length: str = 1024 
-    dtype: str = None 
+    max_seq_length: int = 1024 
+    dtype: Optional[str] = None 
     load_in_4bit: bool = False 
 
 class LoraConfig(BaseModel):
@@ -28,7 +28,7 @@ class LoraConfig(BaseModel):
     lora_alpha: int = 32
     lora_dropout: int = 0
     bias: str = "none"
-    use_gradient_checkpointing: bool = False
+    use_gradient_checkpointing: str = "unsloth"
     random_state: int = 42
     use_rslora: bool = False
     loftq_config: dict = {}
