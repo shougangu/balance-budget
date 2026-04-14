@@ -283,7 +283,7 @@ class GSM8KEvalStrategy(EvalStrategy):
             key = f"pass_at_{k}"
             if key in scores:
                 metrics[f"eval/gsm8k_{key}"] = scores[key]
-        metrics["eval/avg_response_length_tokens"] = scores.get("avg_response_length_tokens", 0.0)
+        metrics["eval/gsm8k_avg_response_length_tokens"] = scores.get("avg_response_length_tokens", 0.0)
         return metrics
 
 
@@ -365,5 +365,5 @@ class MATH500EvalStrategy(EvalStrategy):
             key = f"pass_at_{k}"
             if key in scores:
                 metrics[f"eval/math500_{key}"] = scores[key]
-        metrics["eval/avg_response_length_tokens"] = scores.get("avg_response_length_tokens", 0.0)
+        metrics["eval/math500_avg_response_length_tokens"] = scores.get("avg_response_length_tokens", 0.0)
         return metrics
