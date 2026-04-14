@@ -711,7 +711,7 @@ class PassAtKStoppingCallback(TrainerCallback):
             gap = data_points_seen - self._last_checkpoint_data_points
             if gap >= self.max_checkpoint_gap:
                 print(f"[PassAtKCallback] Gap checkpoint: {gap} data points since last checkpoint (max gap: {self.max_checkpoint_gap})")
-                self._save_sweetspot_checkpoint(model, f"gap-{data_points_seen}", state, args)
+                self._save_sweetspot_checkpoint(model, f"gap-{data_points_seen}-{stopping_value}", state, args)
                 checkpoint_saved = True
 
         if checkpoint_saved:
