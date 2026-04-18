@@ -1,7 +1,7 @@
 from typing import Union
 from tuning.training.config_training import DatasetConfig, PTRunConfig, SFTRunConfig
 from tuning.data.utils import get_random_train_subset
-from datasets import load_from_disk, DatasetDict
+from datasets import Dataset, load_from_disk, DatasetDict
 from tuning.config import DATASETS_DIR
 from pathlib import Path
 
@@ -32,7 +32,13 @@ def get_train_dataset(run_config: Union[PTRunConfig, SFTRunConfig]) -> DatasetDi
     if Path(check_path).exists():
         print(f"Dataset already exists at {check_path}")
 
-        full_dataset = load_from_disk(check_path)
+        try:
+            full_dataset = load_from_disk(check_path)
+        except (IndexError, FileNotFoundError):
+            # datasets 4.8.2 can't reload 0-row splits (no arrow file written for 0/0 shards)
+            test = Dataset.load_from_disk(f"{check_path}/test")
+            train = Dataset.from_dict({col: [] for col in test.column_names})
+            full_dataset = DatasetDict({"train": train, "test": test})
         print(f"Sampled dataset: {full_dataset}")
         if len(full_dataset['train']) > 0:
             print(f"Example training row: {full_dataset['train'][0]}")
