@@ -38,7 +38,7 @@ if _is_worker_mode():
 
 MODEL_TO_GPU_1 = {
 "llama3-1B": 0.75,
-"llama3-3B": 0.6, # (0.65 gives 79% peak with multi with one 97% spike?)
+"llama3-3B": 0.75, # (0.65 gives 79% peak with multi with one 97% spike?)
 "llama3-8B": 0.6,  # (0.68 gives 90% peak)
 "qwen2-2B": 0.65,
 "qwen2-3B": 0.65, # (0.65 gives 76% peak with non-persistence but one 91% spike?)
@@ -123,6 +123,8 @@ def _parse_args(argv=None):
                        help="Number of concurrent post-training workers. "
                             "When >1, the orchestrator submits --parallel-1 sbatch jobs "
                             "and runs as the Nth worker itself.")
+    stage.add_argument("--short", action="store_true", default=False,
+                       help="Run the parallel sbatch with shorter time limit for better queue times.")
 
     # Core
     parser.add_argument("--dataset", default="gsm8k", choices=["tuluif", "gsm8k", "openmath"],)
@@ -251,6 +253,8 @@ def _parse_args(argv=None):
     args = parser.parse_args(argv)
     if (args.sft_enable_ppl or args.dpo_enable_ppl) and args.max_seq_length == 1024:
         args.max_seq_length = 4096
+    if args.short:
+        SBATCH_WORKER_SCRIPT = "tuning/slurm/unified_early_pipeline_short.sh"
     return args
 
 
@@ -424,6 +428,7 @@ def run_sft(args):
         job_type="sft",
         tags=tags,
         config={"stage": "sft", "seed": args.seed, "eval_seed": tuning.config.get_eval_seed()},
+        settings=wandb.Settings(init_timeout=300),
     ):
         model, tokenizer, trainer, callbacks = train_model_sft(
             run_config=run_config,

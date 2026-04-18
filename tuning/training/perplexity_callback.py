@@ -45,7 +45,7 @@ class PerplexityStoppingCallback(TrainerCallback):
         if not self.model_name:
             self.model_name = kwargs.get("model")
         print(f"[PerplexityCallback] on_train_begin: model_name={self.model_name}")
-        now = datetime.datetime.now().strftime("%m%d_%H%M")
+        now = datetime.datetime.now().strftime("%m%d_%H%M%S")
         self.metadata_path = os.path.join(MODELS_METADATA_DIR, f"{self.model_name}_ppl-{now}.json")
 
         # Baseline evaluation before training starts
