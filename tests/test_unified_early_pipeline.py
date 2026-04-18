@@ -12,6 +12,7 @@ from tuning.training.unified_early_pipeline import (
     load_checkpoints,
     _parse_args,
     next_checkpoint,
+    claim_next_checkpoint,
     mark_completed,
     print_metadata_paths,
     parse_metadata_from_output,
@@ -265,6 +266,67 @@ class TestMetadataWorkQueue:
         assert row["data_points_seen"] == 512
         assert row["threshold_type"] == "pass_at_1"
         assert row["completed"] is True
+
+
+class TestClaimNextCheckpoint:
+    def test_claims_first_available_row(self, tmp_path):
+        f = tmp_path / "meta.jsonl"
+        _write_jsonl(f, [PASSK_ROW, PPL_ROW])
+        result = claim_next_checkpoint(str(f))
+        assert result["checkpoint_path"] == "/models/cp1"
+
+    def test_marks_row_as_claimed(self, tmp_path):
+        f = tmp_path / "meta.jsonl"
+        _write_jsonl(f, [PASSK_ROW, PPL_ROW])
+        claim_next_checkpoint(str(f))
+        with open(f) as fh:
+            lines = [json.loads(l) for l in fh]
+        assert lines[0]["claimed"] is True
+        assert lines[1].get("claimed", False) is False
+
+    def test_skips_already_claimed_rows(self, tmp_path):
+        f = tmp_path / "meta.jsonl"
+        claimed_row = {**PASSK_ROW, "claimed": True}
+        _write_jsonl(f, [claimed_row, PPL_ROW])
+        result = claim_next_checkpoint(str(f))
+        assert result["checkpoint_path"] == "/models/cp2"
+
+    def test_skips_completed_rows(self, tmp_path):
+        f = tmp_path / "meta.jsonl"
+        completed_row = {**PASSK_ROW, "completed": True}
+        _write_jsonl(f, [completed_row, PPL_ROW])
+        result = claim_next_checkpoint(str(f))
+        assert result["checkpoint_path"] == "/models/cp2"
+
+    def test_returns_none_when_nothing_available(self, tmp_path):
+        f = tmp_path / "meta.jsonl"
+        _write_jsonl(f, [
+            {**PASSK_ROW, "completed": True},
+            {**PPL_ROW, "claimed": True},
+        ])
+        assert claim_next_checkpoint(str(f)) is None
+
+    def test_preserves_other_fields(self, tmp_path):
+        f = tmp_path / "meta.jsonl"
+        _write_jsonl(f, [PASSK_ROW])
+        claim_next_checkpoint(str(f))
+        with open(f) as fh:
+            row = json.loads(fh.readline())
+        assert row["data_points_seen"] == 512
+        assert row["threshold_type"] == "pass_at_1"
+        assert row["claimed"] is True
+
+    def test_sequential_claims_pick_different_rows(self, tmp_path):
+        f = tmp_path / "meta.jsonl"
+        _write_jsonl(f, [PASSK_ROW, PPL_ROW, PASSK_ROW_2])
+        first = claim_next_checkpoint(str(f))
+        second = claim_next_checkpoint(str(f))
+        third = claim_next_checkpoint(str(f))
+        fourth = claim_next_checkpoint(str(f))
+        assert first["checkpoint_path"] == "/models/cp1"
+        assert second["checkpoint_path"] == "/models/cp2"
+        assert third["checkpoint_path"] == "/models/cp3"
+        assert fourth is None
 
 
 # ---------------------------------------------------------------------------

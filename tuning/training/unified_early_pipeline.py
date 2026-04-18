@@ -462,18 +462,49 @@ def next_checkpoint(metadata_file):
     return None
 
 
-def mark_completed(metadata_file, checkpoint_path):
-    """Mark a checkpoint as completed in the metadata file."""
+def _update_row(metadata_file, predicate, updates):
+    """Find first row matching predicate, apply updates dict, rewrite file.
+
+    Returns the updated row, or None if no row matched.
+    """
     with open(metadata_file) as f:
         lines = f.readlines()
+    target = None
     with open(metadata_file, "w") as f:
         for line in lines:
             if not line.strip():
                 continue
             row = json.loads(line)
-            if row["checkpoint_path"] == checkpoint_path:
-                row["completed"] = True
+            if target is None and predicate(row):
+                row.update(updates)
+                target = row
             f.write(json.dumps(row) + "\n")
+    return target
+
+
+def claim_next_checkpoint(metadata_file):
+    """Pick the next unclaimed+uncompleted checkpoint and mark it claimed.
+
+    No file locking: race window is near-simultaneous sbatch starts, worst case
+    is one checkpoint trained twice. Fine for our use case.
+    """
+    row = _update_row(
+        metadata_file,
+        lambda r: not r.get("claimed") and not r.get("completed"),
+        {"claimed": True},
+    )
+    if row:
+        print(f"Claimed checkpoint: {row['checkpoint_path']} (threshold {row.get('threshold_value')}, type {row.get('threshold_type')})")
+    return row
+
+
+def mark_completed(metadata_file, checkpoint_path):
+    """Mark a checkpoint as completed in the metadata file."""
+    _update_row(
+        metadata_file,
+        lambda r: r["checkpoint_path"] == checkpoint_path,
+        {"completed": True},
+    )
 
 
 def print_metadata_paths(paths):
