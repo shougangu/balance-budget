@@ -3,6 +3,7 @@
 
 import re
 from math_verify import parse, verify, LatexExtractionConfig
+from math_verify.errors import TimeoutException
 
 HASH_PATTERN = re.compile(r"####\s*(.*)")
 EXTRACTION_CONFIG = [LatexExtractionConfig()]
@@ -16,6 +17,14 @@ def is_correct(response: str, reference: str) -> bool:
     Reference answers are wrapped in \\boxed{} for parsing since
     math-verify can't parse bare numbers/expressions.
     """
+    try:
+        return _is_correct_inner(response, reference)
+    except TimeoutException:
+        print(f"[math500_scoring] TimeoutException: ref={reference!r}, response={response[:200]!r}")
+        return False
+
+
+def _is_correct_inner(response: str, reference: str) -> bool:
     gold = parse(rf"\boxed{{{reference}}}", extraction_config=EXTRACTION_CONFIG)
     if not gold:
         return False

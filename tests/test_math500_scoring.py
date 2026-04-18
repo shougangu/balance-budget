@@ -49,6 +49,16 @@ class TestIsCorrectNoAnswer:
         assert is_correct("", "9") is False
 
 
+class TestIsCorrectTimeout:
+    """Tests that math-verify timeouts are treated as incorrect, not crashes."""
+
+    def test_timeout_returns_false(self):
+        from unittest.mock import patch
+        from math_verify.errors import TimeoutException
+        with patch("tuning.evaluation.math500_scoring.parse", side_effect=TimeoutException("Operation timed out!")):
+            assert is_correct(r"$\boxed{9}$", "9") is False
+
+
 def test_get_math500_test_dataset_loads():
     """get_math500_test_dataset returns a Dataset with expected columns and COMPMATH prompt."""
     from unittest.mock import patch
