@@ -76,3 +76,24 @@ def set_chat_template(model_name: str, simple: bool = False) -> str:
         _BASE_CHAT_TEMPLATE = None
         DEFAULT_CHAT_TEMPLATE = resolved
     return DEFAULT_CHAT_TEMPLATE
+
+
+DEFAULT_SEED = 42
+DEFAULT_EVAL_SEED = None  # When None, eval uses DEFAULT_SEED
+
+
+def set_seed(seed: int):
+    """Set the global training seed. Call once at pipeline start, like set_chat_template()."""
+    global DEFAULT_SEED
+    DEFAULT_SEED = seed
+
+
+def set_eval_seed(seed: int):
+    """Set the global eval seed (pass@k generation). Call once at pipeline start."""
+    global DEFAULT_EVAL_SEED
+    DEFAULT_EVAL_SEED = seed
+
+
+def get_eval_seed() -> int:
+    """Return the eval seed: DEFAULT_EVAL_SEED if set, else DEFAULT_SEED."""
+    return DEFAULT_EVAL_SEED if DEFAULT_EVAL_SEED is not None else DEFAULT_SEED
