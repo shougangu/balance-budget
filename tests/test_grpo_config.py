@@ -11,8 +11,17 @@ if "unsloth" not in sys.modules:
     _stub.is_bfloat16_supported = lambda: True
     sys.modules["unsloth"] = _stub
 
+import pytest
+import tuning.config
 from tuning.training.config_training import GRPOTrainingConfig, PTRunConfig, SFTRunConfig, DatasetConfig
 from tuning.training.unified_early_pipeline import _parse_args
+
+
+@pytest.fixture(autouse=True)
+def restore_seed_globals():
+    orig = tuning.config.DEFAULT_SEED
+    yield
+    tuning.config.DEFAULT_SEED = orig
 
 
 def test_grpo_config_defaults():
@@ -86,3 +95,52 @@ def test_sft_learning_rate_default():
 def test_dpo_learning_rate_default():
     args = _parse_args(["--model", "qwen2-3B", "--wandb-project", "test"])
     assert args.dpo_learning_rate == 5e-6
+
+
+def test_training_arguments_config_seed_uses_global_default():
+    tuning.config.set_seed(42)
+    from tuning.training.config_training import TrainingArgumentsConfig
+    d = TrainingArgumentsConfig().to_hf_args(output_dir="/tmp/test")
+    assert d["seed"] == 42
+
+
+def test_training_arguments_config_seed_follows_set_seed():
+    tuning.config.set_seed(7)
+    from tuning.training.config_training import TrainingArgumentsConfig
+    d = TrainingArgumentsConfig().to_hf_args(output_dir="/tmp/test")
+    assert d["seed"] == 7
+
+
+def test_dpo_config_seed_follows_set_seed():
+    tuning.config.set_seed(13)
+    from tuning.training.config_training import DPOTrainingConfig
+    d = DPOTrainingConfig().to_hf_args(output_dir="/tmp/test")
+    assert d["seed"] == 13
+
+
+def test_grpo_config_seed_follows_set_seed():
+    tuning.config.set_seed(99)
+    from tuning.training.config_training import GRPOTrainingConfig
+    d = GRPOTrainingConfig().to_hf_args(output_dir="/tmp/test")
+    assert d["seed"] == 99
+
+
+def test_lora_config_random_state_resolves_from_global():
+    tuning.config.set_seed(7)
+    from tuning.training.config_training import LoraConfig
+    config = LoraConfig()
+    assert config.random_state == 7
+
+
+def test_lora_config_random_state_default_is_42():
+    tuning.config.set_seed(42)
+    from tuning.training.config_training import LoraConfig
+    config = LoraConfig()
+    assert config.random_state == 42
+
+
+def test_lora_config_random_state_explicit_overrides_global():
+    tuning.config.set_seed(7)
+    from tuning.training.config_training import LoraConfig
+    config = LoraConfig(random_state=99)
+    assert config.random_state == 99

@@ -1,4 +1,5 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
+import tuning.config
 from tuning.config import MODELS_DIR
 from typing import Optional, Union
 import os
@@ -29,9 +30,15 @@ class LoraConfig(BaseModel):
     lora_dropout: int = 0
     bias: str = "none"
     use_gradient_checkpointing: str = "unsloth"
-    random_state: int = 42
+    random_state: Optional[int] = None
     use_rslora: bool = False
     loftq_config: dict = {}
+
+    @model_validator(mode="after")
+    def _resolve_defaults(self):
+        if self.random_state is None:
+            self.random_state = tuning.config.DEFAULT_SEED
+        return self
 
 class TrainingArgumentsConfig(BaseModel):
     # sft training parameters
@@ -68,7 +75,7 @@ class TrainingArgumentsConfig(BaseModel):
         d["output_dir"] = output_dir
         d["fp16"] = not bf16_supported
         d["bf16"] = bf16_supported
-        d["seed"] = 42
+        d["seed"] = tuning.config.DEFAULT_SEED
         return d
 
 
