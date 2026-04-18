@@ -17,6 +17,7 @@ from collections import defaultdict
 from vllm import LLM, SamplingParams
 from vllm.lora.request import LoRARequest
 
+import tuning.config
 from tuning.config import MODELS_METADATA_DIR
 from tuning.inference.config_inference import VLLMSamplingParamsConfig
 from tuning.utils.gpu import cleanup_gpu
@@ -45,7 +46,7 @@ def partition_prompts(messages: List, num_chunks: int) -> List[List]:
 def _data_parallel_worker(worker_id, cuda_device, messages_chunk, base_model_hf, adapter_path,
                           n_samples, temperature, max_tokens, chat_template,
                           lora_max_rank, gpu_memory_utilization, result_queue,
-                          stop_tokens=None):
+                          stop_tokens=None, seed=None):
     """Worker function for data-parallel vLLM inference. Runs in a subprocess.
 
     Each worker pins itself to a single GPU, creates an ephemeral vLLM engine,
@@ -76,9 +77,9 @@ def _data_parallel_worker(worker_id, cuda_device, messages_chunk, base_model_hf,
             n=n_samples,
             temperature=temperature,
             max_tokens=max_tokens,
+            stop=stop_tokens or [],
+            seed=seed,
         )
-        if stop_tokens:
-            inference_config.stop = stop_tokens
         sampling_params = SamplingParams(**inference_config.model_dump())
 
         lora_request = LoRARequest(
@@ -387,9 +388,10 @@ class PassAtKStoppingCallback(TrainerCallback):
         result_queue = ctx.Queue()
 
         processes = []
-        # Compute stop tokens here since subprocess won't have the global set
+        # Compute stop tokens and eval seed here since subprocess won't have the globals set
         from tuning.utils.utils import get_stop_tokens
         stop_tokens = get_stop_tokens()
+        eval_seed = tuning.config.get_eval_seed()
 
         for i in range(actual_num_workers):
             p = ctx.Process(
@@ -399,7 +401,8 @@ class PassAtKStoppingCallback(TrainerCallback):
                     adapter_path, eval_strategy.n_samples, self.temperature, self.max_tokens,
                     self._chat_template, self.lora_max_rank,
                     self.vllm_gpu_memory_utilization, result_queue,
-                    stop_tokens, # picked up in subprocess since global may not be set due to spawn context
+                    stop_tokens,
+                    eval_seed,
                 ),
             )
             p.start()
