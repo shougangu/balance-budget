@@ -4,7 +4,6 @@ from pathlib import Path
 import random
 import json
 
-random.seed(42)
 RESAMPLE = False
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent  # Goes up to balance-budget directory

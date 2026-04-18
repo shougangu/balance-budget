@@ -60,3 +60,32 @@ def test_data_parallel_worker_signature_accepts_seed():
     from tuning.training.passk_callback import _data_parallel_worker
     sig = inspect.signature(_data_parallel_worker)
     assert "seed" in sig.parameters
+
+
+def test_data_modules_do_not_reseed_on_import():
+    """Importing data modules must not mutate the global random state.
+
+    The pipeline calls random.seed(args.seed) once via _init_seeds() before
+    any data loading. Module-level random.seed(42) would overwrite that if
+    imports happened after the pipeline seeded.
+    """
+    import random
+    import importlib
+
+    random.seed(999)
+    _ = random.random()
+    expected_next = random.random()
+
+    # Re-seed to reset the stream before importing
+    random.seed(999)
+    _ = random.random()
+
+    # Force re-import of data modules
+    for mod_name in ("tuning.data.utils", "tuning.data.hf_dataset", "tuning.data.test_dataset"):
+        if mod_name in sys.modules:
+            importlib.reload(sys.modules[mod_name])
+        else:
+            importlib.import_module(mod_name)
+
+    # Global random must be untouched: the next call should produce expected_next
+    assert random.random() == expected_next

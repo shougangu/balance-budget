@@ -9,8 +9,6 @@ from datasets import Dataset, DatasetDict, concatenate_datasets, load_dataset, l
 from tuning.config import DATASETS_DIR
 
 
-random.seed(42)
-
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 

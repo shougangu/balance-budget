@@ -1,8 +1,6 @@
 from datasets import DatasetDict
 import random
 
-random.seed(42)
-
 
 def get_random_train_subset(dataset: DatasetDict, train_size: int,
                             unique_column: str = None) -> DatasetDict:
