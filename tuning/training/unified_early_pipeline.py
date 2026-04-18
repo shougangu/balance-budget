@@ -829,12 +829,15 @@ def main():
         if not Path(metadata_file).is_file():
             print(f"Warning: metadata file {metadata_file} does not exist, skipping")
             continue
-        while next_checkpoint(metadata_file) is not None:
+        while True:
             pt_cmd = [sys.executable] + base_cmd + [
                 pt_flag, "--metadata-file", metadata_file,
             ]
             print(f"[orchestrator] Running {pt_method.upper()}: {' '.join(pt_cmd)}")
             result = subprocess.run(pt_cmd)
+            if result.returncode == 42:
+                print(f"[orchestrator] No more checkpoints in {metadata_file}, moving on")
+                break
             if result.returncode != 0:
                 sys.exit(f"{pt_method.upper()} subprocess failed with return code {result.returncode}")
 
