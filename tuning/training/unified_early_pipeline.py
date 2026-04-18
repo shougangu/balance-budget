@@ -4,9 +4,12 @@
 import os
 import argparse
 import json
+import random
 import sys
 import subprocess
 from pathlib import Path
+
+import tuning.config
 
 
 SBATCH_WORKER_SCRIPT = "tuning/slurm/unified_early_pipeline.sh"
@@ -72,6 +75,27 @@ def parse_early_tuple(s):
         )
 
 
+def effective_eval_seed(seed: int, eval_seed: int | None) -> int:
+    """Return eval_seed when set, else the master seed."""
+    return eval_seed if eval_seed is not None else seed
+
+
+def _init_seeds(args):
+    """Set global seed state from CLI args. Call once per stage, like set_chat_template().
+
+    Sets tuning.config.DEFAULT_SEED, tuning.config.DEFAULT_EVAL_SEED,
+    and seeds the Python random module for data loading.
+
+    Note: after this call DEFAULT_EVAL_SEED is always an int (either
+    args.eval_seed or args.seed), so get_eval_seed()'s None-fallback
+    path is only exercised before init or in tests.
+    """
+    from tuning.config import set_seed, set_eval_seed
+    set_seed(args.seed)
+    set_eval_seed(effective_eval_seed(args.seed, args.eval_seed))
+    random.seed(args.seed)
+
+
 def _parse_args(argv=None):
     parser = argparse.ArgumentParser(
         description="Unified SFT+DPO pipeline with pass@k and perplexity callbacks."
@@ -115,6 +139,8 @@ def _parse_args(argv=None):
                         help="Additional eval benchmarks to monitor (logged to W&B, no stopping)")
     parser.add_argument("--max-seq-length", type=int, default=1024)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--eval_seed", type=int, default=None,
+                        help="Override seed for pass@k eval generation. When None, uses --seed.")
     parser.add_argument("--metadata-merge", choices=["union", "passk", "ppl"], default="union",
                         help="Which checkpoint types to use for DPO")
     parser.add_argument("--metadata-file", action="append", dest="metadata_file",
@@ -358,6 +384,7 @@ def run_sft(args):
     from tuning.training.sft_training import train_model_sft
     from tuning.utils.gpu import cleanup_gpu
 
+    _init_seeds(args)
     set_chat_template(args.model, simple=args.simple_template)
     gpu_util = MODEL_TO_GPU_1[args.model]
 
@@ -396,7 +423,7 @@ def run_sft(args):
         project=args.wandb_project,
         job_type="sft",
         tags=tags,
-        config={"stage": "sft"},
+        config={"stage": "sft", "seed": args.seed, "eval_seed": tuning.config.get_eval_seed()},
     ):
         model, tokenizer, trainer, callbacks = train_model_sft(
             run_config=run_config,
@@ -559,6 +586,7 @@ def run_dpo(args):
     )
     from tuning.training.dpo_training import train_model_dpo
 
+    _init_seeds(args)
     set_chat_template(args.model, simple=args.simple_template)
     gpu_util = MODEL_TO_GPU_2[args.model]
     model_name = Path(checkpoint["checkpoint_path"]).name
@@ -627,7 +655,7 @@ def run_dpo(args):
         project=args.wandb_project,
         job_type="dpo",
         tags=tags,
-        config={"stage": "dpo"},
+        config={"stage": "dpo", "seed": args.seed, "eval_seed": tuning.config.get_eval_seed()},
         settings=wandb.Settings(init_timeout=300)
     ):
         train_model_dpo(
@@ -689,6 +717,7 @@ def run_grpo(args):
     )
     from tuning.training.grpo_training import train_model_grpo
 
+    _init_seeds(args)
     set_chat_template(args.model, simple=args.simple_template)
     gpu_util = MODEL_TO_GPU_3[args.model]
     model_name = Path(checkpoint["checkpoint_path"]).name
@@ -762,6 +791,8 @@ def run_grpo(args):
         tags=tags,
         config={
             "stage": "grpo",
+            "seed": args.seed,
+            "eval_seed": tuning.config.get_eval_seed(),
         },
         settings=wandb.Settings(init_timeout=300)
     ):

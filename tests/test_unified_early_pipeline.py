@@ -790,3 +790,85 @@ class TestSimpleTemplateArg:
         """Old --grpo-simple-template flag should no longer be accepted."""
         with pytest.raises(SystemExit):
             _parse_args(REQUIRED + ["--grpo-simple-template"])
+
+
+import tuning.config
+
+
+@pytest.fixture(autouse=True)
+def restore_seed_globals():
+    orig_seed = tuning.config.DEFAULT_SEED
+    orig_eval = tuning.config.DEFAULT_EVAL_SEED
+    yield
+    tuning.config.DEFAULT_SEED = orig_seed
+    tuning.config.DEFAULT_EVAL_SEED = orig_eval
+
+
+class TestSeedArgs:
+    def test_seed_default(self):
+        args = _parse_args(["--model", "llama3-1B", "--wandb-project", "test"])
+        assert args.seed == 42
+
+    def test_seed_override(self):
+        args = _parse_args([
+            "--model", "llama3-1B", "--wandb-project", "test",
+            "--seed", "7",
+        ])
+        assert args.seed == 7
+
+    def test_eval_seed_default_none(self):
+        args = _parse_args(["--model", "llama3-1B", "--wandb-project", "test"])
+        assert args.eval_seed is None
+
+    def test_eval_seed_override(self):
+        args = _parse_args([
+            "--model", "llama3-1B", "--wandb-project", "test",
+            "--eval_seed", "99",
+        ])
+        assert args.eval_seed == 99
+
+
+class TestEffectiveEvalSeed:
+    def test_effective_eval_seed_falls_back_to_seed(self):
+        from tuning.training.unified_early_pipeline import effective_eval_seed
+        assert effective_eval_seed(seed=42, eval_seed=None) == 42
+
+    def test_effective_eval_seed_override_wins(self):
+        from tuning.training.unified_early_pipeline import effective_eval_seed
+        assert effective_eval_seed(seed=42, eval_seed=7) == 7
+
+
+class TestInitSeeds:
+    def test_init_seeds_sets_globals(self):
+        from tuning.training.unified_early_pipeline import _init_seeds
+        args = _parse_args([
+            "--model", "llama3-1B", "--wandb-project", "test",
+            "--seed", "7", "--eval_seed", "99",
+        ])
+        _init_seeds(args)
+        assert tuning.config.DEFAULT_SEED == 7
+        assert tuning.config.DEFAULT_EVAL_SEED == 99
+        assert tuning.config.get_eval_seed() == 99
+
+    def test_init_seeds_eval_seed_falls_back(self):
+        from tuning.training.unified_early_pipeline import _init_seeds
+        args = _parse_args([
+            "--model", "llama3-1B", "--wandb-project", "test",
+            "--seed", "7",
+        ])
+        _init_seeds(args)
+        assert tuning.config.DEFAULT_SEED == 7
+        assert tuning.config.get_eval_seed() == 7
+
+    def test_init_seeds_seeds_random(self):
+        import random
+        from tuning.training.unified_early_pipeline import _init_seeds
+        args = _parse_args([
+            "--model", "llama3-1B", "--wandb-project", "test",
+            "--seed", "123",
+        ])
+        _init_seeds(args)
+        val1 = random.random()
+        # Re-seed and verify same stream
+        random.seed(123)
+        assert random.random() == val1
