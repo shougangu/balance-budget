@@ -28,6 +28,8 @@ if [[ -z "$WANDB_PROJECT" ]]; then
     exit 1
 fi
 
+scontrol update JobId="$SLURM_JOB_ID" JobName="$WANDB_PROJECT"
+
 exec > "${SLURM_JOB_ID}_${WANDB_PROJECT}.out" 2>&1
 
 python tuning/training/unified_early_pipeline.py "$@"

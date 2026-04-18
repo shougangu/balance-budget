@@ -179,7 +179,7 @@ class TestPassAtKStepBridging:
         table_payloads = [
             call.args[0]
             for call in mock_log.call_args_list
-            if any(k.startswith("eval/raw_generations/") for k in call.args[0])
+            if any(k.startswith("raw_generations/") for k in call.args[0])
         ]
         assert table_payloads, "Expected at least one raw-generation table log"
         for payload in table_payloads:

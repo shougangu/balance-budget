@@ -130,12 +130,12 @@ def test_on_evaluate_logs_primary_raw_generation_table():
 
     payloads = [call.args[0] for call in mock_log.call_args_list]
     table_payloads = [
-        d for d in payloads if any(k.startswith("eval/raw_generations/") for k in d.keys())
+        d for d in payloads if any(k.startswith("raw_generations/") for k in d.keys())
     ]
     assert len(table_payloads) == 1
 
-    key = next(k for k in table_payloads[0].keys() if k.startswith("eval/raw_generations/"))
-    assert key == "eval/raw_generations/ifeval/step_5"
+    key = next(k for k in table_payloads[0].keys() if k.startswith("raw_generations/"))
+    assert key == "raw_generations/ifeval/step_5"
 
     table = table_payloads[0][key]
     assert table.columns == [
@@ -186,10 +186,10 @@ def test_on_evaluate_logs_monitor_raw_generation_table():
     payloads = [call.args[0] for call in mock_log.call_args_list]
     table_keys = []
     for payload in payloads:
-        table_keys.extend([k for k in payload.keys() if k.startswith("eval/raw_generations/")])
+        table_keys.extend([k for k in payload.keys() if k.startswith("raw_generations/")])
 
-    assert "eval/raw_generations/ifeval/step_7" in table_keys
-    assert "eval/raw_generations/gsm8k/step_7" in table_keys
+    assert "raw_generations/ifeval/step_7" in table_keys
+    assert "raw_generations/gsm8k/step_7" in table_keys
 
 
 def test_table_logging_failure_is_non_fatal():

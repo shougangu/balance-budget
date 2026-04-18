@@ -483,7 +483,7 @@ class PassAtKStoppingCallback(TrainerCallback):
     ) -> None:
         """Best-effort logging of raw generations as a per-step W&B table."""
         eval_slug = eval_strategy.id
-        table_key = f"eval/raw_generations/{eval_slug}/step_{global_step}"
+        table_key = f"raw_generations/{eval_slug}/step_{global_step}"
 
         try:
             table = wandb.Table(columns=[
