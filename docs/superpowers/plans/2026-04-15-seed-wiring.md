@@ -4,11 +4,19 @@
 
 **Goal:** Thread the `--seed` CLI arg through all currently-hardcoded RNG in the unified early pipeline (training, LoRA init, data sampling, pass@k eval generation), add a `--eval_seed` override, and log both to W&B — all while preserving today's default behavior (42 everywhere).
 
-**Architecture:** Pydantic configs (`TrainingArgumentsConfig`, `VLLMSamplingParamsConfig`, `PassAtKConfig`) gain `seed` fields. The pipeline reads `args.seed` and `args.eval_seed`, sets training/lora seeds via those configs, calls `random.seed(args.seed)` once before any data loading (replacing the module-level `random.seed(42)` calls in three data files), computes `effective_eval_seed = args.eval_seed if args.eval_seed is not None else args.seed`, and hands it to `PassAtKConfig.seed`. `PassAtKStoppingCallback` propagates that seed into every `VLLMSamplingParamsConfig` it constructs, including the subprocess data-parallel worker.
+**Architecture:** Two globals in `tuning/config.py` — `DEFAULT_SEED` and `DEFAULT_EVAL_SEED` — mirror the existing `DEFAULT_CHAT_TEMPLATE` pattern. The pipeline calls `_init_seeds(args)` once per stage, which calls `set_seed()`, `set_eval_seed()`, and `random.seed()`. All downstream consumers resolve to these globals at runtime:
+
+- `TrainingArgumentsConfig.to_hf_args()` reads `tuning.config.DEFAULT_SEED` (replacing hardcoded 42)
+- `VLLMSamplingParamsConfig` resolves its `seed` field from `get_eval_seed()` via a `model_validator` (same pattern as `_resolve_stop_tokens` reads `DEFAULT_CHAT_TEMPLATE`)
+- `LoraConfig` resolves `random_state` from `tuning.config.DEFAULT_SEED` via a `model_validator` (same pattern — no explicit per-object assignment needed in the pipeline)
+- Module-level `random.seed(42)` calls in data files are removed; `_init_seeds` calls `random.seed()` once before any data loading
+- Subprocess data-parallel workers: parent reads `tuning.config.get_eval_seed()` directly at spawn time and passes as an arg (globals aren't inherited across `spawn` context — same reason stop_tokens are passed explicitly)
 
 **Tech Stack:** Python, Pydantic, TRL (SFTConfig/DPOConfig/GRPOConfig), unsloth (FastLanguageModel.get_peft_model), vLLM (SamplingParams), pytest
 
 **Spec:** `docs/superpowers/specs/2026-04-15-seed-wiring-design.md`
+
+**Spec deviations:** The spec describes seed passing via explicit callback parameters ("the callback receives the effective eval seed and injects it"). This plan uses global resolution via `model_validator` instead, matching the existing `DEFAULT_CHAT_TEMPLATE` → `get_stop_tokens()` pattern. This eliminates per-object seed wiring in the pipeline — `LoraConfig()`, `TrainingArgumentsConfig().to_hf_args()`, and `VLLMSamplingParamsConfig()` all resolve from globals automatically. Only the subprocess path needs explicit passing (same as `stop_tokens` today).
 
 ---
 
@@ -16,54 +24,203 @@
 
 | File | Action | Responsibility |
 |------|--------|----------------|
-| `tuning/inference/config_inference.py` | Modify | Add `seed: Optional[int] = None` field to `VLLMSamplingParamsConfig` |
-| `tuning/training/config_training.py` | Modify | Add `seed: int = 42` field to `TrainingArgumentsConfig`; `to_hf_args()` uses `self.seed`. Add `seed: Optional[int] = None` field to `PassAtKConfig` |
-| `tuning/training/passk_callback.py` | Modify | `PassAtKStoppingCallback` reads `config.seed`; passes to every `VLLMSamplingParamsConfig` construction site (persistent, ephemeral, subprocess worker) |
+| `tuning/config.py` | Modify | Add `DEFAULT_SEED`, `DEFAULT_EVAL_SEED`, `set_seed()`, `set_eval_seed()`, `get_eval_seed()` |
+| `tuning/inference/config_inference.py` | Modify | Add `seed: Optional[int] = None` field; model_validator resolves from `get_eval_seed()` when None |
+| `tuning/training/config_training.py` | Modify | `to_hf_args()` reads `tuning.config.DEFAULT_SEED` instead of hardcoded 42; `LoraConfig` resolves `random_state` from global via model_validator |
+| `tuning/training/passk_callback.py` | Modify | Subprocess worker accepts `seed` kwarg; parent reads `tuning.config.get_eval_seed()` directly at spawn time |
 | `tuning/data/utils.py` | Modify | Remove module-level `random.seed(42)` |
 | `tuning/data/hf_dataset.py` | Modify | Remove module-level `random.seed(42)` |
 | `tuning/data/test_dataset.py` | Modify | Remove module-level `random.seed(42)` |
-| `tuning/training/unified_early_pipeline.py` | Modify | Add `--eval_seed` arg; in `run_sft`/`run_dpo`/`run_grpo`: call `random.seed(args.seed)`, set `lora_config.random_state = args.seed`, set `training_args.seed = args.seed`, set `passk_config.seed = effective_eval_seed`, log seeds to W&B config |
-| `tests/test_vllm_sampling_params_global.py` | Modify | Add test: seed field exists with default None; seed is passed through to model_dump |
-| `tests/test_grpo_config.py` | Modify | Add test: `TrainingArgumentsConfig(seed=7).to_hf_args(...)` injects 7 (not hardcoded 42) |
-| `tests/test_unified_early_pipeline.py` | Modify | Add tests for `--seed` and `--eval_seed` parsing; effective-eval-seed helper |
-| `tests/test_seed_wiring.py` | Create | Tests for `PassAtKConfig.seed` default; data-module import does not reseed global random |
+| `tuning/training/unified_early_pipeline.py` | Modify | Add `--eval_seed` arg; add `_init_seeds(args)` helper; call it once per stage; log seeds to W&B |
+| `tests/test_seed_wiring.py` | Create | Tests for global seed config, VLLMSamplingParamsConfig resolver, data-module side-effects, worker signature |
+| `tests/test_vllm_sampling_params_global.py` | Modify | Add seed resolver tests |
+| `tests/test_grpo_config.py` | Modify | Add test: `to_hf_args()` follows `set_seed()` |
+| `tests/test_unified_early_pipeline.py` | Modify | Add `--eval_seed` parsing tests; effective-eval-seed helper tests |
 
 ---
 
-### Task 1: Add `seed` field to `VLLMSamplingParamsConfig`
+### Task 1: Add seed globals to `tuning/config.py`
 
 **Files:**
-- Modify: `tuning/inference/config_inference.py:1-20`
-- Test: `tests/test_vllm_sampling_params_global.py`
+- Modify: `tuning/config.py`
+- Create: `tests/test_seed_wiring.py`
 
 - [ ] **Step 1: Write failing tests**
 
-Append to `tests/test_vllm_sampling_params_global.py`:
+Create `tests/test_seed_wiring.py`:
 
 ```python
-def test_vllm_sampling_params_seed_defaults_none():
+# ABOUTME: Tests for seed wiring — global seed config, VLLMSamplingParamsConfig resolver,
+# ABOUTME: data module side effects, and subprocess worker signature.
+
+import sys
+from types import ModuleType
+
+# Stub unsloth before importing config (crashes without GPU)
+if "unsloth" not in sys.modules:
+    _stub = ModuleType("unsloth")
+    _stub.is_bfloat16_supported = lambda: True
+    sys.modules["unsloth"] = _stub
+
+import pytest
+import tuning.config
+
+
+@pytest.fixture(autouse=True)
+def restore_seed_globals():
+    """Reset seed globals after each test."""
+    orig_seed = tuning.config.DEFAULT_SEED
+    orig_eval = tuning.config.DEFAULT_EVAL_SEED
+    yield
+    tuning.config.DEFAULT_SEED = orig_seed
+    tuning.config.DEFAULT_EVAL_SEED = orig_eval
+
+
+def test_default_seed_is_42():
+    assert tuning.config.DEFAULT_SEED == 42
+
+
+def test_default_eval_seed_is_none():
+    assert tuning.config.DEFAULT_EVAL_SEED is None
+
+
+def test_set_seed_updates_global():
+    tuning.config.set_seed(99)
+    assert tuning.config.DEFAULT_SEED == 99
+
+
+def test_set_eval_seed_updates_global():
+    tuning.config.set_eval_seed(13)
+    assert tuning.config.DEFAULT_EVAL_SEED == 13
+
+
+def test_get_eval_seed_returns_eval_seed_when_set():
+    tuning.config.set_seed(42)
+    tuning.config.set_eval_seed(99)
+    assert tuning.config.get_eval_seed() == 99
+
+
+def test_get_eval_seed_falls_back_to_default_seed():
+    tuning.config.set_seed(7)
+    tuning.config.DEFAULT_EVAL_SEED = None
+    assert tuning.config.get_eval_seed() == 7
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `pytest tests/test_seed_wiring.py -v`
+Expected: FAIL with `AttributeError: module 'tuning.config' has no attribute 'DEFAULT_SEED'`.
+
+- [ ] **Step 3: Add seed globals to `tuning/config.py`**
+
+At the end of `tuning/config.py` (after the `set_chat_template` function), add:
+
+```python
+DEFAULT_SEED = 42
+DEFAULT_EVAL_SEED = None  # When None, eval uses DEFAULT_SEED
+
+
+def set_seed(seed: int):
+    """Set the global training seed. Call once at pipeline start, like set_chat_template()."""
+    global DEFAULT_SEED
+    DEFAULT_SEED = seed
+
+
+def set_eval_seed(seed: int):
+    """Set the global eval seed (pass@k generation). Call once at pipeline start."""
+    global DEFAULT_EVAL_SEED
+    DEFAULT_EVAL_SEED = seed
+
+
+def get_eval_seed() -> int:
+    """Return the eval seed: DEFAULT_EVAL_SEED if set, else DEFAULT_SEED."""
+    return DEFAULT_EVAL_SEED if DEFAULT_EVAL_SEED is not None else DEFAULT_SEED
+```
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+Run: `pytest tests/test_seed_wiring.py -v`
+Expected: all 7 tests PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add tuning/config.py tests/test_seed_wiring.py
+git commit -m "Add DEFAULT_SEED and DEFAULT_EVAL_SEED globals to tuning/config.py"
+```
+
+---
+
+### Task 2: Add `seed` field to `VLLMSamplingParamsConfig` with global resolver
+
+**Files:**
+- Modify: `tuning/inference/config_inference.py`
+- Test: `tests/test_vllm_sampling_params_global.py`
+
+The `seed` field defaults to `None`. The existing `_resolve_stop_tokens` validator is expanded into `_resolve_defaults`, which also resolves `seed` from `tuning.config.get_eval_seed()` when None — same pattern, same validator. When the subprocess passes `seed` explicitly, the validator sees a non-None value and skips resolution.
+
+**Behavioral change:** Previously vLLM evals ran without a seed (stochastic). After this task, they default to `seed=42` via the global resolver. This is intentional — it makes evals reproducible by default, matching training's existing `seed=42` default. The spec describes the field as stochastic-when-None, but the resolver ensures None is never passed to vLLM.
+
+- [ ] **Step 1: Write failing tests**
+
+Add a `restore_seed_globals` fixture and new tests to `tests/test_vllm_sampling_params_global.py`:
+
+```python
+@pytest.fixture(autouse=True)
+def restore_seed_globals():
+    orig_seed = tuning.config.DEFAULT_SEED
+    orig_eval = tuning.config.DEFAULT_EVAL_SEED
+    yield
+    tuning.config.DEFAULT_SEED = orig_seed
+    tuning.config.DEFAULT_EVAL_SEED = orig_eval
+
+
+def test_vllm_sampling_params_seed_resolves_from_global():
+    """When seed is not set, it resolves from the global eval seed."""
+    tuning.config.set_seed(7)
+    tuning.config.DEFAULT_EVAL_SEED = None  # falls back to DEFAULT_SEED
     from tuning.inference.config_inference import VLLMSamplingParamsConfig
 
     config = VLLMSamplingParamsConfig()
-    assert config.seed is None
+    assert config.seed == 7
 
 
-def test_vllm_sampling_params_seed_roundtrips_through_model_dump():
+def test_vllm_sampling_params_seed_resolves_eval_seed_override():
+    """When DEFAULT_EVAL_SEED is set, it takes priority."""
+    tuning.config.set_seed(42)
+    tuning.config.set_eval_seed(99)
+    from tuning.inference.config_inference import VLLMSamplingParamsConfig
+
+    config = VLLMSamplingParamsConfig()
+    assert config.seed == 99
+
+
+def test_vllm_sampling_params_seed_explicit_overrides_global():
+    """When seed is passed explicitly, global is ignored."""
+    tuning.config.set_seed(42)
+    tuning.config.set_eval_seed(99)
     from tuning.inference.config_inference import VLLMSamplingParamsConfig
 
     config = VLLMSamplingParamsConfig(seed=7)
     assert config.seed == 7
+
+
+def test_vllm_sampling_params_seed_roundtrips_through_model_dump():
+    tuning.config.set_seed(42)
+    from tuning.inference.config_inference import VLLMSamplingParamsConfig
+
+    config = VLLMSamplingParamsConfig(seed=7)
     assert config.model_dump()["seed"] == 7
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
 
 Run: `pytest tests/test_vllm_sampling_params_global.py -v`
-Expected: FAIL with `AttributeError: 'VLLMSamplingParamsConfig' object has no attribute 'seed'` for both new tests.
+Expected: FAIL — `VLLMSamplingParamsConfig` has no `seed` attribute.
 
-- [ ] **Step 3: Add `seed` field**
+- [ ] **Step 3: Add `seed` field and expand resolver**
 
-Edit `tuning/inference/config_inference.py` to read:
+Edit `tuning/inference/config_inference.py`:
 
 ```python
 from pydantic import BaseModel, model_validator
@@ -82,10 +239,13 @@ class VLLMSamplingParamsConfig(BaseModel):
     seed: Optional[int] = None
 
     @model_validator(mode="after")
-    def _resolve_stop_tokens(self):
+    def _resolve_defaults(self):
         from tuning.utils.utils import get_stop_tokens
+        import tuning.config
         if not self.stop:
             self.stop = get_stop_tokens()
+        if self.seed is None:
+            self.seed = tuning.config.get_eval_seed()
         return self
 
 if __name__ == "__main__":
@@ -95,233 +255,166 @@ if __name__ == "__main__":
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `pytest tests/test_vllm_sampling_params_global.py -v`
-Expected: all 4 tests PASS.
+Expected: all tests PASS (including existing stop-token tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add tuning/inference/config_inference.py tests/test_vllm_sampling_params_global.py
-git commit -m "Add optional seed field to VLLMSamplingParamsConfig"
+git commit -m "Add seed field to VLLMSamplingParamsConfig with global resolver"
 ```
 
 ---
 
-### Task 2: Add `seed` field to `PassAtKConfig`
+### Task 3: Make `TrainingArgumentsConfig.to_hf_args()` and `LoraConfig.random_state` read `DEFAULT_SEED`
 
 **Files:**
-- Modify: `tuning/training/config_training.py:133-150`
-- Create: `tests/test_seed_wiring.py`
-
-- [ ] **Step 1: Write failing test**
-
-Create `tests/test_seed_wiring.py`:
-
-```python
-# ABOUTME: Tests for seed wiring — config seed fields and data module side effects.
-# ABOUTME: Verifies PassAtKConfig.seed, and that data modules do not reseed global random on import.
-
-import sys
-from types import ModuleType
-
-
-# Stub unsloth before importing config (crashes without GPU)
-if "unsloth" not in sys.modules:
-    _stub = ModuleType("unsloth")
-    _stub.is_bfloat16_supported = lambda: True
-    sys.modules["unsloth"] = _stub
-
-
-def test_passk_config_seed_defaults_none():
-    from tuning.training.config_training import PassAtKConfig
-    assert PassAtKConfig().seed is None
-
-
-def test_passk_config_seed_set():
-    from tuning.training.config_training import PassAtKConfig
-    assert PassAtKConfig(seed=7).seed == 7
-```
-
-- [ ] **Step 2: Run tests to verify they fail**
-
-Run: `pytest tests/test_seed_wiring.py -v`
-Expected: FAIL for both new tests with validation error ("Extra inputs are not permitted" or "seed").
-
-- [ ] **Step 3: Add `seed` field**
-
-In `tuning/training/config_training.py`, modify the `PassAtKConfig` class (currently lines 133-150) to add `seed` after `initial_global_step`:
-
-```python
-class PassAtKConfig(BaseModel):
-    """Configuration for generation-based evaluation callback."""
-    target_pass_at_k: list[float] = [0.8]  # Target pass@k score to stop training (0.0 to 1.0)
-    early_tuples: list[tuple[int, float]] | None = None  # Each tuple: (patience, min_increase)
-    temperature: float = 0.5  # Sampling temperature for generation
-    max_tokens: int = 4096  # Maximum tokens to generate per response
-    enabled: bool = True  # Whether to enable the callback
-    use_persistent_vllm: bool = True  # Keep vLLM engine alive between evals (saves cold-start time)
-    vllm_gpu_memory_utilization: float = 0.4  # GPU memory fraction for vLLM (conservative for coexistence with training)
-    num_inference_gpus: int = 1  # Number of GPUs for data-parallel vLLM inference (>1 forces ephemeral mode)
-    max_checkpoint_gap: int | None = None  # Save a fallback checkpoint if no checkpoint for this many data points
-    initial_global_step: int = 0  # Step offset for W&B logging continuity across chained runs
-    seed: Optional[int] = None  # Seed for vLLM pass@k generation; None = stochastic (vLLM default)
-
-    def __str__(self):
-        lines = [f"[{self.__class__.__name__}]"]
-        for name, value in self:
-            lines.append(f"  {name}={value}")
-        return "\n".join(lines)
-```
-
-(`Optional` is already imported at the top of the file.)
-
-- [ ] **Step 4: Run tests to verify they pass**
-
-Run: `pytest tests/test_seed_wiring.py -v`
-Expected: both new tests PASS.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add tuning/training/config_training.py tests/test_seed_wiring.py
-git commit -m "Add optional seed field to PassAtKConfig"
-```
-
----
-
-### Task 3: Make `TrainingArgumentsConfig.to_hf_args()` use `self.seed`
-
-**Files:**
-- Modify: `tuning/training/config_training.py:36-72`
+- Modify: `tuning/training/config_training.py:24-34` (LoraConfig), `config_training.py:62-72` (to_hf_args)
 - Test: `tests/test_grpo_config.py`
+
+Both `to_hf_args()` and `LoraConfig.random_state` currently hardcode 42. Both are changed to resolve from `tuning.config.DEFAULT_SEED` at runtime:
+- `to_hf_args()` reads the global directly (called at runtime, so it always gets the current value)
+- `LoraConfig` uses a `model_validator` to resolve `random_state` from the global (same pattern as `VLLMSamplingParamsConfig` in Task 2)
 
 - [ ] **Step 1: Write failing tests**
 
-Append to `tests/test_grpo_config.py`:
+Add `import pytest` and `import tuning.config` to the top of `tests/test_grpo_config.py`, plus a fixture and new tests:
 
 ```python
-def test_training_arguments_config_seed_default():
+import pytest
+import tuning.config
+
+
+@pytest.fixture(autouse=True)
+def restore_seed_globals():
+    orig = tuning.config.DEFAULT_SEED
+    yield
+    tuning.config.DEFAULT_SEED = orig
+
+
+def test_training_arguments_config_seed_uses_global_default():
+    tuning.config.set_seed(42)
     from tuning.training.config_training import TrainingArgumentsConfig
     d = TrainingArgumentsConfig().to_hf_args(output_dir="/tmp/test")
     assert d["seed"] == 42
 
 
-def test_training_arguments_config_seed_override():
+def test_training_arguments_config_seed_follows_set_seed():
+    tuning.config.set_seed(7)
     from tuning.training.config_training import TrainingArgumentsConfig
-    config = TrainingArgumentsConfig()
-    config.seed = 7
-    d = config.to_hf_args(output_dir="/tmp/test")
+    d = TrainingArgumentsConfig().to_hf_args(output_dir="/tmp/test")
     assert d["seed"] == 7
 
 
-def test_dpo_config_inherits_seed_override():
+def test_dpo_config_seed_follows_set_seed():
+    tuning.config.set_seed(13)
     from tuning.training.config_training import DPOTrainingConfig
-    config = DPOTrainingConfig()
-    config.seed = 13
-    d = config.to_hf_args(output_dir="/tmp/test")
+    d = DPOTrainingConfig().to_hf_args(output_dir="/tmp/test")
     assert d["seed"] == 13
 
 
-def test_grpo_config_inherits_seed_override():
+def test_grpo_config_seed_follows_set_seed():
+    tuning.config.set_seed(99)
     from tuning.training.config_training import GRPOTrainingConfig
-    config = GRPOTrainingConfig()
-    config.seed = 99
-    d = config.to_hf_args(output_dir="/tmp/test")
+    d = GRPOTrainingConfig().to_hf_args(output_dir="/tmp/test")
     assert d["seed"] == 99
+
+
+def test_lora_config_random_state_resolves_from_global():
+    tuning.config.set_seed(7)
+    from tuning.training.config_training import LoraConfig
+    config = LoraConfig()
+    assert config.random_state == 7
+
+
+def test_lora_config_random_state_default_is_42():
+    tuning.config.set_seed(42)
+    from tuning.training.config_training import LoraConfig
+    config = LoraConfig()
+    assert config.random_state == 42
+
+
+def test_lora_config_random_state_explicit_overrides_global():
+    tuning.config.set_seed(7)
+    from tuning.training.config_training import LoraConfig
+    config = LoraConfig(random_state=99)
+    assert config.random_state == 99
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
 
 Run: `pytest tests/test_grpo_config.py -v`
-Expected: the three `_override` tests FAIL with `42 != 7/13/99` (seed is hardcoded). The `_default` test passes.
+Expected: `_follows_set_seed` tests FAIL with `7 != 42` / `13 != 42` / `99 != 42`; `lora_config_random_state_resolves_from_global` FAIL with `42 != 7`.
 
-- [ ] **Step 3: Add `seed` field and use it in `to_hf_args`**
+- [ ] **Step 3: Add `import tuning.config` and model_validator to `LoraConfig`**
 
-In `tuning/training/config_training.py`, modify `TrainingArgumentsConfig` (lines 36-72):
+In `tuning/training/config_training.py`, add `import tuning.config` and `from pydantic import model_validator` at the top of the file (after the existing imports).
 
-1. Add `seed: int = 42` as a new field (e.g., right after `eval_accumulation_steps`).
-2. Change the hardcoded assignment at line 71 from `d["seed"] = 42` to `d["seed"] = self.seed`.
-
-Resulting relevant portion of `TrainingArgumentsConfig`:
+Change `LoraConfig` to use a sentinel default and resolve from the global:
 
 ```python
-class TrainingArgumentsConfig(BaseModel):
-    # sft training parameters
-    per_device_train_batch_size: int = 16
-    gradient_accumulation_steps: int = EFFECTIVE_BATCH_SIZE // per_device_train_batch_size
-    per_device_eval_batch_size: int = 2
-    eval_strategy: str = "steps"
-    eval_steps: float = 4
-    logging_steps: int = 1
-    do_eval: bool = True
-    warmup_ratio: int = 0.1
-    num_train_epochs: int = 2
-    learning_rate: float = 5e-5
-    optim: str = "adamw_8bit"
-    weight_decay: float = 0.01
-    lr_scheduler_type: str = "cosine"
-    report_to: list[str] = ["wandb"]
-    save_strategy: str = "no"
-    save_steps: int = 4
-    save_total_limit: int = 1
-    load_best_model_at_end: bool = False
-    dataloader_drop_last: bool = False
-    dataloader_num_workers: int = 2
-    eval_accumulation_steps: int = 1
-    seed: int = 42
+class LoraConfig(BaseModel):
+    r: int = 32
+    target_modules: list = ["q_proj", "k_proj", "v_proj", "o_proj",
+                            "gate_proj", "up_proj", "down_proj",]
+    lora_alpha: int = 32
+    lora_dropout: int = 0
+    bias: str = "none"
+    use_gradient_checkpointing: str = "unsloth"
+    random_state: Optional[int] = None
+    use_rslora: bool = False
+    loftq_config: dict = {}
 
-    def to_hf_args(self, output_dir: str) -> dict:
-        """Return kwargs for TrainingArguments/DPOConfig constructor."""
-        import torch
-        bf16_supported = torch.cuda.is_available() and torch.cuda.is_bf16_supported()
-        d = self.model_dump()
-        d.pop("beta", None)
-        d["output_dir"] = output_dir
-        d["fp16"] = not bf16_supported
-        d["bf16"] = bf16_supported
-        d["seed"] = self.seed
-        return d
+    @model_validator(mode="after")
+    def _resolve_defaults(self):
+        if self.random_state is None:
+            self.random_state = tuning.config.DEFAULT_SEED
+        return self
 ```
 
-(Note: `seed` is already in `d` via `model_dump()` after this change, but the explicit `d["seed"] = self.seed` line is retained for clarity and symmetry with the other `d[...] = ...` assignments.)
+- [ ] **Step 4: Change `to_hf_args` to read the global**
 
-- [ ] **Step 4: Run tests to verify they pass**
+In the same file, change line 71 from:
+
+```python
+        d["seed"] = 42
+```
+
+to:
+
+```python
+        d["seed"] = tuning.config.DEFAULT_SEED
+```
+
+- [ ] **Step 5: Run tests to verify they pass**
 
 Run: `pytest tests/test_grpo_config.py -v`
-Expected: all tests in the file PASS.
+Expected: all tests PASS.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add tuning/training/config_training.py tests/test_grpo_config.py
-git commit -m "Thread seed through TrainingArgumentsConfig.to_hf_args"
+git commit -m "TrainingArgumentsConfig.to_hf_args and LoraConfig.random_state resolve from DEFAULT_SEED"
 ```
 
 ---
 
-### Task 4: Thread seed through `PassAtKStoppingCallback` into `VLLMSamplingParamsConfig`
+### Task 4: Thread eval seed through subprocess data-parallel worker
 
 **Files:**
-- Modify: `tuning/training/passk_callback.py:45-114` (subprocess worker signature + body), `passk_callback.py:132-202` (callback init), `passk_callback.py:279-310` (persistent/ephemeral path), `passk_callback.py:386-407` (data-parallel subprocess spawn)
+- Modify: `tuning/training/passk_callback.py:45-48` (worker signature), `passk_callback.py:74-82` (worker body), `passk_callback.py:386-406` (data-parallel spawn)
 - Test: `tests/test_seed_wiring.py`
+
+The persistent/ephemeral `_run_vllm_inference` path needs **no changes** — `VLLMSamplingParamsConfig()` resolves its seed from `tuning.config.get_eval_seed()` via the model_validator (Task 2). No seed is stored on the callback class.
+
+The subprocess path needs explicit seed passing because globals aren't inherited across `spawn` context. The parent reads `tuning.config.get_eval_seed()` directly at spawn time (same as it reads `get_stop_tokens()`) and passes it to the worker.
 
 - [ ] **Step 1: Write failing test**
 
 Append to `tests/test_seed_wiring.py`:
 
 ```python
-def test_passk_callback_reads_seed_from_config(monkeypatch):
-    """PassAtKStoppingCallback stores config.seed as self.seed."""
-    # We cannot fully instantiate the callback (needs tokenizer + model), so
-    # we mimic the attribute assignment the __init__ performs and assert
-    # that a callback constructed from a PassAtKConfig with seed=13 would
-    # end up with self.seed == 13. This is a contract test on the field.
-    from tuning.training.config_training import PassAtKConfig
-    config = PassAtKConfig(seed=13)
-    # The getattr fallback mirrors the callback init pattern used for other
-    # optional fields (lora_max_rank, max_checkpoint_gap, initial_global_step).
-    assert getattr(config, "seed", None) == 13
-
-
 def test_data_parallel_worker_signature_accepts_seed():
     """The subprocess worker must accept a seed kwarg so the parent can pass it."""
     import inspect
@@ -330,17 +423,14 @@ def test_data_parallel_worker_signature_accepts_seed():
     assert "seed" in sig.parameters
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [ ] **Step 2: Run test to verify it fails**
 
 Run: `pytest tests/test_seed_wiring.py::test_data_parallel_worker_signature_accepts_seed -v`
 Expected: FAIL (seed not in worker signature).
 
-Run: `pytest tests/test_seed_wiring.py::test_passk_callback_reads_seed_from_config -v`
-Expected: PASS (Task 2 already added `seed` to `PassAtKConfig`), but kept as a guard against regression.
-
 - [ ] **Step 3: Add `seed` kwarg to `_data_parallel_worker`**
 
-In `tuning/training/passk_callback.py`, change the function signature at line 45-48 to add `seed=None`:
+In `tuning/training/passk_callback.py`, change the function signature at lines 45-48 to add `seed=None`:
 
 ```python
 def _data_parallel_worker(worker_id, cuda_device, messages_chunk, base_model_hf, adapter_path,
@@ -349,7 +439,7 @@ def _data_parallel_worker(worker_id, cuda_device, messages_chunk, base_model_hf,
                           stop_tokens=None, seed=None):
 ```
 
-And in the body (currently lines 75-82), change the `VLLMSamplingParamsConfig` construction to include `seed`:
+And in the body (lines 74-82), pass `seed` and `stop` to `VLLMSamplingParamsConfig` explicitly (overriding the global resolvers, which won't work in the subprocess — same reason `stop_tokens` is already passed explicitly today):
 
 ```python
         from tuning.inference.config_inference import VLLMSamplingParamsConfig
@@ -357,39 +447,21 @@ And in the body (currently lines 75-82), change the `VLLMSamplingParamsConfig` c
             n=n_samples,
             temperature=temperature,
             max_tokens=max_tokens,
+            stop=stop_tokens or [],
             seed=seed,
         )
 ```
 
-- [ ] **Step 4: Store `self.seed` in callback `__init__`**
+- [ ] **Step 4: Pass eval seed to the data-parallel worker**
 
-Still in `passk_callback.py`, in `PassAtKStoppingCallback.__init__`, add a line near the other `getattr(config, ...)` reads (around line 153, after `self.max_checkpoint_gap = getattr(config, "max_checkpoint_gap", None)`):
-
-```python
-        self.seed = getattr(config, "seed", None)
-```
-
-- [ ] **Step 5: Pass `self.seed` in `_run_vllm_inference`**
-
-In `passk_callback.py` `_run_vllm_inference` (currently lines 279-286), change:
+In `_run_data_parallel_inference` (lines 386-406), add `import tuning.config` to the file-level imports (changing the existing `from tuning.config import MODELS_METADATA_DIR` to also import the module), then read the eval seed alongside stop_tokens and pass it to the worker:
 
 ```python
-    def _run_vllm_inference(self, llm, eval_strategy: EvalStrategy, adapter_path: str = None) -> List[Dict]:
-        """Run inference on a vLLM engine, optionally with a LoRA adapter."""
-        inference_config = VLLMSamplingParamsConfig(
-            n=eval_strategy.n_samples,
-            temperature=self.temperature,
-            max_tokens=self.max_tokens,
-            seed=self.seed,
-        )
-        sampling_params = SamplingParams(**inference_config.model_dump())
-```
+        # Compute stop tokens and eval seed here since subprocess won't have the globals set
+        from tuning.utils.utils import get_stop_tokens
+        stop_tokens = get_stop_tokens()
+        eval_seed = tuning.config.get_eval_seed()
 
-- [ ] **Step 6: Pass `self.seed` to the data-parallel worker**
-
-In `passk_callback.py` `_run_data_parallel_inference` (currently lines 394-406), pass `self.seed` as a keyword at the end of the args tuple. The worker signature was updated in Step 3 to accept `seed=None`; the parent should use the existing `args=(...)` tuple style. Change:
-
-```python
         for i in range(actual_num_workers):
             p = ctx.Process(
                 target=_data_parallel_worker,
@@ -399,23 +471,23 @@ In `passk_callback.py` `_run_data_parallel_inference` (currently lines 394-406),
                     self._chat_template, self.lora_max_rank,
                     self.vllm_gpu_memory_utilization, result_queue,
                     stop_tokens,
-                    self.seed,  # added: passed as positional since ctx.Process uses args tuple
+                    eval_seed,
                 ),
             )
             p.start()
             processes.append(p)
 ```
 
-- [ ] **Step 7: Run tests to verify everything passes**
+- [ ] **Step 5: Run tests to verify everything passes**
 
 Run: `pytest tests/test_seed_wiring.py tests/test_vllm_sampling_params_global.py -v`
 Expected: all tests PASS.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add tuning/training/passk_callback.py tests/test_seed_wiring.py
-git commit -m "Thread seed through PassAtKStoppingCallback into vLLM SamplingParams"
+git commit -m "Thread eval seed through subprocess data-parallel worker (like stop_tokens)"
 ```
 
 ---
@@ -423,10 +495,12 @@ git commit -m "Thread seed through PassAtKStoppingCallback into vLLM SamplingPar
 ### Task 5: Remove module-level `random.seed(42)` from data files
 
 **Files:**
-- Modify: `tuning/data/utils.py:1-4`
-- Modify: `tuning/data/hf_dataset.py:10-12`
-- Modify: `tuning/data/test_dataset.py:4-7`
+- Modify: `tuning/data/utils.py:4`
+- Modify: `tuning/data/hf_dataset.py:12`
+- Modify: `tuning/data/test_dataset.py:7`
 - Test: `tests/test_seed_wiring.py`
+
+After removal, data modules no longer seed global random on import. The pipeline's `_init_seeds(args)` (Task 6) calls `random.seed(args.seed)` once before any data loading, so all `random.sample()` / `random.shuffle()` calls in data modules use the CLI-provided seed.
 
 - [ ] **Step 1: Write failing test**
 
@@ -436,9 +510,9 @@ Append to `tests/test_seed_wiring.py`:
 def test_data_modules_do_not_reseed_on_import():
     """Importing data modules must not mutate the global random state.
 
-    The pipeline is the authoritative place to call random.seed(args.seed).
-    Any module-level random.seed(42) would overwrite that if imports happened
-    after the pipeline seeded.
+    The pipeline calls random.seed(args.seed) once via _init_seeds() before
+    any data loading. Module-level random.seed(42) would overwrite that if
+    imports happened after the pipeline seeded.
     """
     import random
     import importlib
@@ -469,66 +543,11 @@ Expected: FAIL (module-level `random.seed(42)` overrides the stream).
 
 - [ ] **Step 3: Remove the three module-level `random.seed(42)` calls**
 
-Edit `tuning/data/utils.py` — delete line 4:
+Edit `tuning/data/utils.py` — delete line 4 (`random.seed(42)`).
 
-Before:
-```python
-from datasets import DatasetDict
-import random
+Edit `tuning/data/hf_dataset.py` — delete line 12 (`random.seed(42)`).
 
-random.seed(42)
-
-
-def get_random_train_subset(dataset: DatasetDict, train_size: int,
-```
-
-After:
-```python
-from datasets import DatasetDict
-import random
-
-
-def get_random_train_subset(dataset: DatasetDict, train_size: int,
-```
-
-Edit `tuning/data/hf_dataset.py` — delete line 12 and the blank line above it:
-
-Before:
-```python
-from tuning.config import DATASETS_DIR
-
-
-random.seed(42)
-
-logger = logging.getLogger(__name__)
-```
-
-After:
-```python
-from tuning.config import DATASETS_DIR
-
-
-logger = logging.getLogger(__name__)
-```
-
-Edit `tuning/data/test_dataset.py` — delete line 7:
-
-Before:
-```python
-import random
-import json
-
-random.seed(42)
-RESAMPLE = False
-```
-
-After:
-```python
-import random
-import json
-
-RESAMPLE = False
-```
+Edit `tuning/data/test_dataset.py` — delete line 7 (`random.seed(42)`).
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -549,17 +568,31 @@ git commit -m "Remove module-level random.seed(42) from data modules"
 
 ---
 
-### Task 6: Add `--eval_seed` CLI arg and wire seeds in `unified_early_pipeline.py`
+### Task 6: Add `--eval_seed` CLI arg, `_init_seeds()` helper, and wire in pipeline
 
 **Files:**
-- Modify: `tuning/training/unified_early_pipeline.py:72-221` (arg parser), `343-415` (run_sft), `494-608` (run_dpo), `624-743` (run_grpo)
+- Modify: `tuning/training/unified_early_pipeline.py`
 - Test: `tests/test_unified_early_pipeline.py`
+
+This is the integration task. A single `_init_seeds(args)` helper sets all global seed state. Each `run_*` function calls `_init_seeds(args)` at the top — no per-object seed wiring needed. `LoraConfig`, `TrainingArgumentsConfig.to_hf_args()`, and `VLLMSamplingParamsConfig` all resolve from the globals automatically via their model_validators.
 
 - [ ] **Step 1: Write failing tests**
 
 Append to `tests/test_unified_early_pipeline.py`:
 
 ```python
+import tuning.config
+
+
+@pytest.fixture(autouse=True)
+def restore_seed_globals():
+    orig_seed = tuning.config.DEFAULT_SEED
+    orig_eval = tuning.config.DEFAULT_EVAL_SEED
+    yield
+    tuning.config.DEFAULT_SEED = orig_seed
+    tuning.config.DEFAULT_EVAL_SEED = orig_eval
+
+
 class TestSeedArgs:
     def test_seed_default(self):
         args = _parse_args(["--model", "llama3-1B", "--wandb-project", "test"])
@@ -592,326 +625,135 @@ class TestEffectiveEvalSeed:
     def test_effective_eval_seed_override_wins(self):
         from tuning.training.unified_early_pipeline import effective_eval_seed
         assert effective_eval_seed(seed=42, eval_seed=7) == 7
+
+
+class TestInitSeeds:
+    def test_init_seeds_sets_globals(self):
+        from tuning.training.unified_early_pipeline import _init_seeds
+        args = _parse_args([
+            "--model", "llama3-1B", "--wandb-project", "test",
+            "--seed", "7", "--eval_seed", "99",
+        ])
+        _init_seeds(args)
+        assert tuning.config.DEFAULT_SEED == 7
+        assert tuning.config.DEFAULT_EVAL_SEED == 99
+        assert tuning.config.get_eval_seed() == 99
+
+    def test_init_seeds_eval_seed_falls_back(self):
+        from tuning.training.unified_early_pipeline import _init_seeds
+        args = _parse_args([
+            "--model", "llama3-1B", "--wandb-project", "test",
+            "--seed", "7",
+        ])
+        _init_seeds(args)
+        assert tuning.config.DEFAULT_SEED == 7
+        assert tuning.config.get_eval_seed() == 7
+
+    def test_init_seeds_seeds_random(self):
+        import random
+        from tuning.training.unified_early_pipeline import _init_seeds
+        args = _parse_args([
+            "--model", "llama3-1B", "--wandb-project", "test",
+            "--seed", "123",
+        ])
+        _init_seeds(args)
+        val1 = random.random()
+        # Re-seed and verify same stream
+        random.seed(123)
+        assert random.random() == val1
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `pytest tests/test_unified_early_pipeline.py -v`
-Expected: the four new tests FAIL — `--eval_seed` not parsed; `effective_eval_seed` not defined.
+Run: `pytest tests/test_unified_early_pipeline.py::TestSeedArgs -v`
+Expected: `--eval_seed` tests FAIL (arg not defined). `--seed` tests pass.
+
+Run: `pytest tests/test_unified_early_pipeline.py::TestEffectiveEvalSeed -v`
+Expected: FAIL (`effective_eval_seed` not defined).
+
+Run: `pytest tests/test_unified_early_pipeline.py::TestInitSeeds -v`
+Expected: FAIL (`_init_seeds` not defined).
 
 - [ ] **Step 3: Add `--eval_seed` argument**
 
-In `tuning/training/unified_early_pipeline.py`, in `_parse_args` right below the existing `--seed` line (currently line 110), add:
+In `tuning/training/unified_early_pipeline.py`, right below the existing `--seed` line (line 110), add:
 
 ```python
-    parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--eval_seed", type=int, default=None,
                         help="Override seed for pass@k eval generation. When None, uses --seed.")
 ```
 
-- [ ] **Step 4: Add `effective_eval_seed` helper**
+- [ ] **Step 4: Add `effective_eval_seed` and `_init_seeds` helpers**
 
-In `tuning/training/unified_early_pipeline.py`, add this helper function near the top-level helpers (e.g., right after `parse_early_tuple`, around line 69):
+In `tuning/training/unified_early_pipeline.py`, add `import random` and `import tuning.config` to the file-level imports (lines 3-8). Then near the top-level helpers (after `parse_early_tuple`, around line 69), add:
 
 ```python
 def effective_eval_seed(seed: int, eval_seed: int | None) -> int:
     """Return eval_seed when set, else the master seed."""
     return eval_seed if eval_seed is not None else seed
+
+
+def _init_seeds(args):
+    """Set global seed state from CLI args. Call once per stage, like set_chat_template().
+
+    Sets tuning.config.DEFAULT_SEED, tuning.config.DEFAULT_EVAL_SEED,
+    and seeds the Python random module for data loading.
+
+    Note: after this call DEFAULT_EVAL_SEED is always an int (either
+    args.eval_seed or args.seed), so get_eval_seed()'s None-fallback
+    path is only exercised before init or in tests.
+    """
+    from tuning.config import set_seed, set_eval_seed
+    set_seed(args.seed)
+    set_eval_seed(effective_eval_seed(args.seed, args.eval_seed))
+    random.seed(args.seed)
 ```
 
-- [ ] **Step 5: Wire `args.seed` and effective eval seed into `run_sft`**
+- [ ] **Step 5: Wire seeds in `run_sft`**
 
-In `tuning/training/unified_early_pipeline.py`, update `run_sft` (currently starting at line 343). Right after `set_chat_template(...)` at line 354, seed the global random and log the seeds. Then on the existing `lora_config` and `training_args` constructor calls, set their seeds. On the `passk_config` returned by `_build_eval_components`, set `seed`. Finally add the seed fields into the `wandb.init(config=...)` dict.
+In `run_sft` (line 343), add `_init_seeds(args)` right before `set_chat_template(...)`:
 
 ```python
-def run_sft(args):
-    """Run SFT stage, returning a list of metadata file paths written by callbacks."""
-    import random
-    import wandb
-    from tuning.config import HF_MODEL_MAP, set_chat_template
-    from tuning.training.config_training import (
-        DatasetConfig, SFTRunConfig, ModelLoadConfig, LoraConfig,
-        TrainingArgumentsConfig,
-    )
-    from tuning.training.sft_training import train_model_sft
-    from tuning.utils.gpu import cleanup_gpu
-
-    random.seed(args.seed)
+    _init_seeds(args)
     set_chat_template(args.model, simple=args.simple_template)
-    gpu_util = MODEL_TO_GPU_1[args.model]
-
-    sft_size = args.sft_data_size if args.sft_data_size is not None else args.train_size
-    dataset_config = DatasetConfig(
-        dataset=args.dataset,
-        dataset_type="sft",
-        train_size=sft_size,
-    )
-    run_config = SFTRunConfig(
-        dataset_config=dataset_config,
-        model_name_hf=HF_MODEL_MAP[args.model],
-        model_name=args.model,
-        do_training=True,
-        do_inference=False,
-        do_evaluation=False,
-        task_name=args.task_name,
-    )
-    lora_config = LoraConfig()
-    lora_config.random_state = args.seed
-    model_load_config = ModelLoadConfig()
-    model_load_config.max_seq_length = args.max_seq_length
-    training_args = TrainingArgumentsConfig()
-    training_args.num_train_epochs = args.sft_num_epochs
-    training_args.eval_steps = args.sft_eval_steps
-    training_args.per_device_train_batch_size = args.sft_batch_size
-    training_args.gradient_accumulation_steps = args.sft_grad_accum
-    training_args.warmup_ratio = args.sft_warmup_ratio
-    training_args.learning_rate = args.sft_learning_rate
-    training_args.seed = args.seed
-
-    eval_seed = effective_eval_seed(args.seed, args.eval_seed)
-    passk_config, primary_eval, monitor_evals = _build_eval_components(args, "sft", gpu_util)
-    if passk_config is not None:
-        passk_config.seed = eval_seed
-    ppl_config = _sft_ppl_config(args)
-    tags = _sft_tags(passk_config, ppl_config, primary_eval)
-
-    with wandb.init(
-        name=run_config.model_name,
-        project=args.wandb_project,
-        job_type="sft",
-        tags=tags,
-        config={"stage": "sft", "seed": args.seed, "eval_seed": eval_seed},
-    ):
-        model, tokenizer, trainer, callbacks = train_model_sft(
-            run_config=run_config,
-            lora_config=lora_config,
-            model_load_config=model_load_config,
-            training_args=training_args,
-            passk_config=passk_config,
-            perplexity_config=ppl_config,
-            primary_eval=primary_eval,
-            monitor_evals=monitor_evals,
-        )
-
-    metadata_paths = [
-        cb.metadata_path
-        for cb in callbacks
-        if getattr(cb, "metadata_path", None)
-    ]
-
-    del model, tokenizer, trainer, callbacks
-    cleanup_gpu()
-    print(subprocess.check_output("nvidia-smi").decode())
-    print_metadata_paths(metadata_paths)
-    return metadata_paths
 ```
 
-- [ ] **Step 6: Wire `args.seed` and effective eval seed into `run_dpo`**
-
-In `run_dpo` (currently starting at line 494), apply the same pattern. After `import wandb` and the other config imports (around line 516), add `import random` and `random.seed(args.seed)` right after `set_chat_template(...)` at line 524. After constructing `lora_config` and `training_args`, set their seeds. On the `passk_config`, set its `seed`. Include seeds in the `wandb.init(config=...)` dict.
-
-Concretely, replace the block from `set_chat_template(...)` through the end of `wandb.init(...)` with:
+Update `wandb.init(config=...)`:
 
 ```python
-    import random
-    random.seed(args.seed)
-    set_chat_template(args.model, simple=args.simple_template)
-    gpu_util = MODEL_TO_GPU_2[args.model]
-    model_name = Path(checkpoint["checkpoint_path"]).name
-
-    dataset_config = DatasetConfig(
-        dataset=args.dataset,
-        dataset_type="pt",
-        train_size=dpo_size,
-    )
-    sft_run_config = SFTRunConfig(
-        dataset_config=DatasetConfig(
-            dataset=args.dataset,
-            dataset_type="sft",
-            train_size=checkpoint["data_points_seen"],
-            dynamic_path=model_name,
-        ),
-        model_name=args.model,
-        model_name_hf=HF_MODEL_MAP[args.model],
-        task_name=args.task_name,
-    )
-    run_config = PTRunConfig(
-        dataset_config=dataset_config,
-        model_name_hf=HF_MODEL_MAP[args.model],
-        model_name=args.model,
-        sft_run_config=sft_run_config,
-        task_name=args.task_name,
-        pft_method="dpo",
-        do_training=True,
-    )
-    lora_config = LoraConfig()
-    lora_config.random_state = args.seed
-    model_load_config = ModelLoadConfig()
-    model_load_config.max_seq_length = args.max_seq_length
-    training_args = DPOTrainingConfig()
-    training_args.num_train_epochs = args.dpo_num_epochs
-    training_args.eval_steps = args.dpo_eval_steps
-    training_args.per_device_train_batch_size = args.dpo_batch_size
-    training_args.gradient_accumulation_steps = args.dpo_grad_accum
-    training_args.learning_rate = args.dpo_learning_rate
-    training_args.seed = args.seed
-
-    eval_seed = effective_eval_seed(args.seed, args.eval_seed)
-    passk_config, primary_eval, monitor_evals = _build_eval_components(args, "dpo", gpu_util)
-    if passk_config is not None:
-        passk_config.seed = eval_seed
-    ppl_config = _dpo_ppl_config(args)
-
-    initial_step = checkpoint.get("global_step", 0)
-    if passk_config is not None:
-        passk_config.initial_global_step = initial_step
-    if ppl_config is not None:
-        ppl_config.initial_global_step = initial_step
-
-    perplexity_test_dataset = None
-    if ppl_config is not None:
-        from tuning.data.train_dataset import get_train_dataset
-        sft_dataset = get_train_dataset(sft_run_config)
-        perplexity_test_dataset = sft_dataset["test"]
-
-    tags = ["dpo", str(checkpoint["threshold_value"]), str(checkpoint["data_points_seen"])]
-    if primary_eval is not None:
-        tags.append(primary_eval.id)
-    if passk_config is not None:
-        k_val = primary_eval.stopping_k if primary_eval else 1
-        tags.append(f"p{k_val}")
-    if ppl_config is not None:
-        tags.append("ppl")
-
-    with wandb.init(
-        name=run_config.model_name,
-        project=args.wandb_project,
-        job_type="dpo",
-        tags=tags,
-        config={"stage": "dpo", "seed": args.seed, "eval_seed": eval_seed},
-        settings=wandb.Settings(init_timeout=300)
-    ):
-        train_model_dpo(
-            run_config=run_config,
-            lora_config=lora_config,
-            model_load_config=model_load_config,
-            training_args=training_args,
-            passk_config=passk_config,
-            perplexity_config=ppl_config,
-            perplexity_test_dataset=perplexity_test_dataset,
-            primary_eval=primary_eval,
-            monitor_evals=monitor_evals,
-            initial_global_step=checkpoint.get("global_step")
-        )
-
-    mark_completed(metadata_file, checkpoint["checkpoint_path"])
+        config={"stage": "sft", "seed": args.seed, "eval_seed": tuning.config.get_eval_seed()},
 ```
 
-- [ ] **Step 7: Wire `args.seed` and effective eval seed into `run_grpo`**
+No per-object seed wiring needed — `LoraConfig()`, `TrainingArgumentsConfig().to_hf_args()`, and `VLLMSamplingParamsConfig()` all resolve from the globals set by `_init_seeds`.
 
-In `run_grpo` (currently starting at line 624), apply the same pattern. After `import wandb` and config imports (around line 646), add `import random` and `random.seed(args.seed)` right after `set_chat_template(...)` at line 654. After constructing `lora_config` and `training_args`, set their seeds. On `passk_config`, set `seed`. Include seeds in `wandb.init(config=...)` dict.
+- [ ] **Step 6: Wire seeds in `run_dpo`**
 
-Replace the block from `set_chat_template(...)` through `wandb.init(...)` with:
+Same pattern in `run_dpo` (line 494). Add `_init_seeds(args)` before `set_chat_template(...)`:
 
 ```python
-    import random
-    random.seed(args.seed)
+    _init_seeds(args)
     set_chat_template(args.model, simple=args.simple_template)
-    gpu_util = MODEL_TO_GPU_3[args.model]
-    model_name = Path(checkpoint["checkpoint_path"]).name
+```
 
-    dataset_config = DatasetConfig(
-        dataset=args.dataset,
-        dataset_type="rlvr",
-        train_size=grpo_size,
-    )
-    sft_run_config = SFTRunConfig(
-        dataset_config=DatasetConfig(
-            dataset=args.dataset,
-            dataset_type="sft",
-            train_size=checkpoint["data_points_seen"],
-            dynamic_path=model_name,
-        ),
-        model_name=args.model,
-        model_name_hf=HF_MODEL_MAP[args.model],
-        task_name=args.task_name,
-    )
-    run_config = PTRunConfig(
-        dataset_config=dataset_config,
-        model_name_hf=HF_MODEL_MAP[args.model],
-        model_name=args.model,
-        sft_run_config=sft_run_config,
-        task_name=args.task_name,
-        pft_method="grpo",
-        do_training=True,
-        simple_template=args.simple_template,
-    )
-    lora_config = LoraConfig()
-    if args.grpo_lora_target_modules is not None:
-        lora_config.target_modules = args.grpo_lora_target_modules
-    lora_config.random_state = args.seed
-    model_load_config = ModelLoadConfig()
-    model_load_config.max_seq_length = args.max_seq_length
-    training_args = GRPOTrainingConfig()
-    training_args.num_train_epochs = args.grpo_num_epochs
-    training_args.eval_steps = args.grpo_eval_steps
-    training_args.per_device_train_batch_size = args.grpo_batch_size
-    training_args.gradient_accumulation_steps = args.grpo_grad_accum
-    training_args.num_generations = args.grpo_num_generations
-    training_args.max_completion_length = args.grpo_max_completion_length
-    training_args.beta = args.grpo_beta
-    training_args.temperature = args.grpo_temperature
-    training_args.learning_rate = args.grpo_learning_rate
-    training_args.loss_type = args.grpo_loss_type
-    scale_rewards = args.grpo_scale_rewards
-    training_args.scale_rewards = False if scale_rewards == "false" else scale_rewards
-    training_args.vllm_gpu_memory_utilization = gpu_util
-    training_args.seed = args.seed
+Update `wandb.init(config=...)`:
 
-    eval_seed = effective_eval_seed(args.seed, args.eval_seed)
-    passk_config, primary_eval, monitor_evals = _build_eval_components(args, "grpo", gpu_util)
-    if passk_config is not None:
-        passk_config.seed = eval_seed
-    reward_funcs = _build_reward_funcs(args)
+```python
+        config={"stage": "dpo", "seed": args.seed, "eval_seed": tuning.config.get_eval_seed()},
+```
 
-    initial_step = checkpoint.get("global_step", 0)
-    if passk_config is not None:
-        passk_config.initial_global_step = initial_step
+- [ ] **Step 7: Wire seeds in `run_grpo`**
 
-    tags = ["grpo", str(checkpoint["threshold_value"]), str(checkpoint["data_points_seen"])]
-    if primary_eval is not None:
-        tags.append(primary_eval.id)
-    if passk_config is not None:
-        k_val = primary_eval.stopping_k if primary_eval else 1
-        tags.append(f"p{k_val}")
+Same pattern in `run_grpo` (line 624). Add `_init_seeds(args)` before `set_chat_template(...)`:
 
+```python
+    _init_seeds(args)
+    set_chat_template(args.model, simple=args.simple_template)
+```
 
-    with wandb.init(
-        name=run_config.model_name,
-        project=args.wandb_project,
-        job_type="grpo",
-        tags=tags,
-        config={
-            "stage": "grpo",
-            "seed": args.seed,
-            "eval_seed": eval_seed,
-        },
-        settings=wandb.Settings(init_timeout=300)
-    ):
-        train_model_grpo(
-            run_config=run_config,
-            lora_config=lora_config,
-            model_load_config=model_load_config,
-            training_args=training_args,
-            reward_funcs=reward_funcs,
-            passk_config=passk_config,
-            primary_eval=primary_eval,
-            monitor_evals=monitor_evals,
-            initial_global_step=checkpoint.get("global_step"),
-            lora_layers_fraction=args.grpo_lora_layers_fraction,
-        )
+Update `wandb.init(config=...)`:
 
-    mark_completed(metadata_file, checkpoint["checkpoint_path"])
+```python
+        config={"stage": "grpo", "seed": args.seed, "eval_seed": tuning.config.get_eval_seed()},
 ```
 
 - [ ] **Step 8: Run all tests**
@@ -921,14 +763,14 @@ Expected: all tests PASS.
 
 - [ ] **Step 9: Sanity check the pipeline can still be invoked with defaults**
 
-Run: `python -c "from tuning.training.unified_early_pipeline import _parse_args; a = _parse_args(['--model','llama3-1B','--wandb-project','x']); print('seed=', a.seed, 'eval_seed=', a.eval_seed)"`
-Expected output: `seed= 42 eval_seed= None`
+Run: `python -c "from tuning.training.unified_early_pipeline import _parse_args, _init_seeds; a = _parse_args(['--model','llama3-1B','--wandb-project','x']); _init_seeds(a); import tuning.config; print('seed=', a.seed, 'eval_seed=', a.eval_seed, 'global=', tuning.config.DEFAULT_SEED, 'eval_global=', tuning.config.get_eval_seed())"`
+Expected output: `seed= 42 eval_seed= None global= 42 eval_global= 42`
 
 - [ ] **Step 10: Commit**
 
 ```bash
 git add tuning/training/unified_early_pipeline.py tests/test_unified_early_pipeline.py
-git commit -m "Wire --seed and --eval_seed through unified early pipeline"
+git commit -m "Wire --seed and --eval_seed through unified early pipeline via _init_seeds helper"
 ```
 
 ---
