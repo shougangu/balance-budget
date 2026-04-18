@@ -225,6 +225,16 @@ class TestParseArgs:
             _parse_args(["--model", "nonexistent", "--wandb-project", "tuning"])
 
 
+class TestParallelArg:
+    def test_default_parallel_is_1(self):
+        args = _parse_args(REQUIRED)
+        assert args.parallel == 1
+
+    def test_parallel_accepts_integer(self):
+        args = _parse_args(REQUIRED + ["--parallel", "3"])
+        assert args.parallel == 3
+
+
 # ---------------------------------------------------------------------------
 # next_checkpoint / mark_completed
 # ---------------------------------------------------------------------------

@@ -92,6 +92,10 @@ def _parse_args(argv=None):
     stage.add_argument("--post-training-method", default="dpo",
                        choices=["dpo", "grpo", "kto"],
                        help="Post-training method to use after SFT")
+    stage.add_argument("--parallel", type=int, default=1,
+                       help="Number of concurrent post-training workers. "
+                            "When >1, the orchestrator submits --parallel-1 sbatch jobs "
+                            "and runs as the Nth worker itself.")
 
     # Core
     parser.add_argument("--dataset", default="gsm8k", choices=["tuluif", "gsm8k", "openmath"],)
