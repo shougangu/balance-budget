@@ -533,10 +533,10 @@ def run_dpo(args):
     Process exit frees all GPU memory.
     """
     metadata_file = args.metadata_file[0]
-    checkpoint = next_checkpoint(metadata_file)
+    checkpoint = claim_next_checkpoint(metadata_file)
     if checkpoint is None:
-        print("All checkpoints completed, nothing to do.")
-        return
+        print("No checkpoints available to claim, nothing to do.")
+        sys.exit(42)
 
     fixed_split = args.sft_data_size is not None and args.dpo_data_size is not None
     if fixed_split:
@@ -663,10 +663,10 @@ def run_grpo(args):
     Process exit frees all GPU memory.
     """
     metadata_file = args.metadata_file[0]
-    checkpoint = next_checkpoint(metadata_file)
+    checkpoint = claim_next_checkpoint(metadata_file)
     if checkpoint is None:
-        print("All checkpoints completed, nothing to do.")
-        return
+        print("No checkpoints available to claim, nothing to do.")
+        sys.exit(42)
 
     fixed_split = args.sft_data_size is not None and args.grpo_data_size is not None
     if fixed_split:
