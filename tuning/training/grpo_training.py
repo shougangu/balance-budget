@@ -7,6 +7,7 @@ import wandb
 from tuning.config import MODELS_DIR
 from tuning.data.train_dataset import get_train_dataset
 from tuning.training.config_training import PTRunConfig, LoraConfig, ModelLoadConfig, GRPOTrainingConfig
+from tuning.training.callback_utils import CompletionsIntervalCallback
 from tuning.training.passk_callback import PassAtKStoppingCallback
 from tuning.training.model_utils import load_model_with_lora, save_trained_model, top_layer_indices
 
@@ -79,6 +80,9 @@ def train_model_grpo(
             **training_args.to_hf_args(output_dir=run_config.output_dir),
         ),
     )
+
+    if trainer.log_completions:
+        trainer.add_callback(CompletionsIntervalCallback(trainer, interval=32))
 
     for cb in callbacks or []:
         if isinstance(cb, PassAtKStoppingCallback) and hasattr(trainer, 'vllm_generation'):

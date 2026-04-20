@@ -1,6 +1,6 @@
 import os
 import json
-from transformers import TrainerState
+from transformers import TrainerCallback, TrainerState
 from transformers.integrations import WandbCallback
 from transformers.training_args import TrainingArguments
 from tuning.config import MODELS_DIR
@@ -29,6 +29,17 @@ class OffsetAwareWandbCallback(WandbCallback):
         if self._offset and logs is not None:
             logs["train/total_global_step"] = state.global_step + self._offset
         return super().on_log(args, state, control, model=model, logs=logs, **kwargs)
+
+
+class CompletionsIntervalCallback(TrainerCallback):
+    """Gates trainer.log_completions to fire only every N training steps."""
+
+    def __init__(self, trainer, interval):
+        self.trainer = trainer
+        self.interval = interval
+
+    def on_log(self, args, state, control, **kwargs):
+        self.trainer.log_completions = (state.global_step % self.interval == 0)
 
 
 def compute_data_points_seen(state: TrainerState, args: TrainingArguments) -> int:
