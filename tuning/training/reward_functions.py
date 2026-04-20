@@ -1,5 +1,8 @@
 # ABOUTME: Reward functions for GRPO/RLVR training matching TRL's GRPOTrainer interface.
-# ABOUTME: GSM8K and MATH-500 use binary correctness; IFEval uses fractional instruction compliance.
+# ABOUTME: GSM8K and MATH-500 use binary correctness; IFEval and IF-RLVR use fractional instruction compliance.
+
+import ast
+import re
 
 from tuning.evaluation.gsm8k_scoring import is_correct as gsm8k_is_correct
 from tuning.evaluation.math500_scoring import is_correct as math500_is_correct
@@ -61,4 +64,54 @@ def ifeval_reward_func(prompts, completions, **kwargs):
         result = evaluation_lib.test_instruction_following_loose(inp, {inp.prompt: text})
         score = sum(result.follow_instruction_list) / len(result.follow_instruction_list)
         rewards.append(score)
+    return rewards
+
+
+def _remove_thinking_section(text):
+    """Strip chain-of-thought markup before constraint checking."""
+    text = text.replace("<|assistant|>", "")
+    text = re.sub(r"^.*?</think>", "", text, flags=re.DOTALL)
+    text = text.replace("<answer>", "").replace("</answer>", "")
+    return text.strip()
+
+
+def ifrlvr_reward_func(prompts, completions, ground_truth, **kwargs):
+    """Fractional reward: fraction of IF-RLVR constraints satisfied per completion."""
+    if not hasattr(ifrlvr_reward_func, "_instruction_dict"):
+        from ifrlvr.instructions_registry import INSTRUCTION_DICT
+        ifrlvr_reward_func._instruction_dict = INSTRUCTION_DICT
+
+    instruction_dict = ifrlvr_reward_func._instruction_dict
+
+    rewards = []
+    for completion, gt_str in zip(completions, ground_truth):
+        text = _extract_text(completion)
+        answer = _remove_thinking_section(text)
+
+        if not answer.strip():
+            rewards.append(0.0)
+            continue
+
+        constraint_list = ast.literal_eval(gt_str)
+        constraint_dict = constraint_list[0]
+        if isinstance(constraint_dict, str):
+            import json
+            constraint_dict = json.loads(constraint_dict)
+
+        instruction_keys = constraint_dict["instruction_id"]
+        args_list = constraint_dict["kwargs"]
+
+        passed = []
+        for inst_key, inst_args in zip(instruction_keys, args_list):
+            args = {} if inst_args is None else {k: v for k, v in inst_args.items() if v is not None}
+            instruction_cls = instruction_dict[inst_key]
+            instruction = instruction_cls(inst_key)
+            instruction.build_description(**args)
+            if instruction.check_following(answer):
+                passed.append(1.0)
+            else:
+                passed.append(0.0)
+
+        rewards.append(sum(passed) / len(passed) if passed else 0.0)
+
     return rewards
