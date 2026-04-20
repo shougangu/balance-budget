@@ -1,5 +1,5 @@
 # ABOUTME: ABC for eval strategies injected into the generation eval callback.
-# ABOUTME: Includes IFEval, GSM8K, and MATH-500 pass@k implementations.
+# ABOUTME: Includes IFEval, GSM8K, MATH-500, and IFBench pass@k implementations.
 
 import numpy as np
 from abc import ABC, abstractmethod
@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import List, Dict
 
 from instruction_following_eval import evaluation_lib
-from tuning.data.test_dataset import get_ifeval_test_dataset, get_gsm8k_test_dataset, get_math500_test_dataset
+from tuning.data.test_dataset import get_ifeval_test_dataset, get_gsm8k_test_dataset, get_math500_test_dataset, get_ifbench_test_dataset
 from tuning.evaluation.gsm8k_scoring import is_correct as gsm8k_is_correct
 from tuning.evaluation.math500_scoring import is_correct as math500_is_correct
 
@@ -366,4 +366,109 @@ class MATH500EvalStrategy(EvalStrategy):
             if key in scores:
                 metrics[f"eval/math500_{key}"] = scores[key]
         metrics["eval/math500_avg_response_length_tokens"] = scores.get("avg_response_length_tokens", 0.0)
+        return metrics
+
+
+class IFBenchStrategy(EvalStrategy):
+    """IFBench OOD instruction-following evaluation using pass@k scoring."""
+
+    def __init__(self, k_values=None, n_samples=1, num_prompts=None, strict=True):
+        k_values = k_values or [1]
+        self.k_values = k_values
+        self.stopping_k = k_values[0]
+        self._n_samples = n_samples
+        self.strict = strict
+
+        self.test_dataset = get_ifbench_test_dataset(num_prompts=num_prompts)
+
+        self.inputs_map = {}
+        for i in range(len(self.test_dataset)):
+            row = self.test_dataset[i]
+            self.inputs_map[row["prompt"]] = evaluation_lib.InputExample(
+                key=i,
+                instruction_id_list=row["instruction_id_list"],
+                prompt=row["prompt"],
+                kwargs=row["kwargs"],
+            )
+
+        print(f"[IFBenchStrategy] k_values={k_values}, n_samples={n_samples}, "
+              f"strict={strict}, num_prompts={len(self.test_dataset)}")
+
+    @property
+    def n_samples(self) -> int:
+        return self._n_samples
+
+    @property
+    def id(self) -> str:
+        return "ifbench"
+
+    def get_test_messages(self) -> List[List[dict]]:
+        return list(self.test_dataset["messages"])
+
+    def get_test_prompts(self) -> List[str]:
+        return list(self.test_dataset["prompt"])
+
+    def score_responses(self, results: List[Dict], tokenizer) -> Dict[str, float]:
+        from ifbench_eval.instructions_registry import INSTRUCTION_DICT as IFBENCH_DICT
+
+        all_prompt_results = []
+        all_instruction_scores = {k: [] for k in self.k_values}
+        response_token_lengths = []
+
+        for item in results:
+            prompt = item["prompt"]
+            responses = item["responses"]
+
+            encoded_batch = tokenizer(
+                responses, add_special_tokens=False, padding=False, truncation=False,
+            )
+            response_token_lengths.extend(len(ids) for ids in encoded_batch["input_ids"])
+
+            eval_input = self.inputs_map[prompt]
+
+            eval_fn = evaluation_lib.test_instruction_following_strict if self.strict else evaluation_lib.test_instruction_following_loose
+            eval_results = [eval_fn(eval_input, {prompt: r}, instruction_dict=IFBENCH_DICT) for r in responses]
+            prompt_results = [er.follow_all_instructions for er in eval_results]
+            all_prompt_results.append(prompt_results)
+
+            for k in self.k_values:
+                n = len(responses)
+                num_instructions = len(eval_results[0].follow_instruction_list)
+                pk_list = []
+                for c_idx in range(num_instructions):
+                    correct_count = sum(eval_results[r_idx].follow_instruction_list[c_idx] for r_idx in range(n))
+                    pk_list.append(pass_at_k(n, correct_count, k))
+                all_instruction_scores[k].append(sum(pk_list) / len(pk_list))
+
+            item["per_response_correct"] = prompt_results
+            item["per_response_instructions"] = [list(er.follow_instruction_list) for er in eval_results]
+
+        scores = {}
+
+        for k in self.k_values:
+            scores[f"pass_at_{k}"] = np.mean(all_instruction_scores[k])
+
+        for k in self.k_values:
+            prompt_scores = [pass_at_k(len(r), sum(r), k) for r in all_prompt_results]
+            scores[f"pass_at_{k}_prompt"] = np.mean(prompt_scores)
+
+        scores["num_prompts_evaluated"] = len(results)
+        scores["avg_response_length_tokens"] = (
+            float(np.mean(response_token_lengths)) if response_token_lengths else 0.0
+        )
+        return scores
+
+    def stopping_metric(self) -> str:
+        return f"pass_at_{self.stopping_k}"
+
+    @property
+    def label_prefix(self) -> str:
+        return f"ifbench-p@{self.stopping_k}"
+
+    def wandb_metrics(self, scores: Dict[str, float]) -> Dict[str, float]:
+        metrics = {}
+        for k in self.k_values:
+            metrics[f"eval/ifbench_pass_at_{k}"] = scores[f"pass_at_{k}"]
+            metrics[f"eval/ifbench_pass_at_{k}_prompt"] = scores[f"pass_at_{k}_prompt"]
+        metrics["eval/ifbench_avg_response_length_tokens"] = scores.get("avg_response_length_tokens", 0.0)
         return metrics
