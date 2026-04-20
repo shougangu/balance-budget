@@ -127,7 +127,7 @@ def _parse_args(argv=None):
                        help="Run the parallel sbatch with shorter time limit for better queue times.")
 
     # Core
-    parser.add_argument("--dataset", default="gsm8k", choices=["tuluif", "gsm8k", "openmath"],)
+    parser.add_argument("--dataset", default="gsm8k", choices=["tuluif", "gsm8k", "openmath", "ifrlvr"],)
     parser.add_argument("--train-size", type=int, default=10000)
     parser.add_argument("--sft-data-size", type=int, default=None,
                         help="Fixed SFT data size. When both --sft-data-size and --dpo-data-size are set, "
@@ -135,9 +135,9 @@ def _parse_args(argv=None):
     parser.add_argument("--dpo-data-size", type=int, default=None,
                         help="Fixed DPO data size. When both --sft-data-size and --dpo-data-size are set, "
                              "DPO uses a fixed dataset instead of remaining budget.")
-    parser.add_argument("--task-name", default="gsm8k", choices=["ifeval", "gsm8k", "math500"])
+    parser.add_argument("--task-name", default="gsm8k", choices=["ifeval", "gsm8k", "math500", "ifbench"])
     parser.add_argument("--monitor-evals", nargs="*", default=[],
-                        choices=["ifeval", "gsm8k", "math500"],
+                        choices=["ifeval", "gsm8k", "math500", "ifbench"],
                         help="Additional eval benchmarks to monitor (logged to W&B, no stopping)")
     parser.add_argument("--max-seq-length", type=int, default=1024)
     parser.add_argument("--seed", type=int, default=42)
@@ -331,6 +331,13 @@ def _build_eval_components(args, stage, gpu_util):
             k_values=k_values, n_samples=n_samples,
             num_prompts=num_prompts,
         )
+    elif args.task_name == "ifbench":
+        from tuning.training.eval_strategy import IFBenchStrategy
+        strict = getattr(args, f"{prefix}_passk_strict", True)
+        primary_eval = IFBenchStrategy(
+            k_values=k_values, n_samples=n_samples,
+            num_prompts=num_prompts, strict=strict,
+        )
     else:
         raise ValueError(f"Unknown task name: {args.task_name}")
 
@@ -354,6 +361,9 @@ def _build_monitor_evals(args, k_values, n_samples):
         elif name == "ifeval":
             from tuning.training.eval_strategy import IFEvalStrategy
             monitor_evals.append(IFEvalStrategy(k_values=k_values, n_samples=n_samples))
+        elif name == "ifbench":
+            from tuning.training.eval_strategy import IFBenchStrategy
+            monitor_evals.append(IFBenchStrategy(k_values=k_values, n_samples=n_samples))
     return monitor_evals
 
 
@@ -688,6 +698,9 @@ def _build_reward_funcs(args):
         return [math500_reward_func]
     elif args.dataset == "ifeval":
         return [ifeval_reward_func]
+    elif args.dataset == "ifrlvr":
+        from tuning.training.reward_functions import ifrlvr_reward_func
+        return [ifrlvr_reward_func]
     else:
         raise ValueError(f"No reward function for task: {args.dataset}")
 
