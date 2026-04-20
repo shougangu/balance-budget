@@ -102,7 +102,7 @@ class GRPOTrainingConfig(TrainingArgumentsConfig):
     beta: float = 0.0
     temperature: float = 1.0
     epsilon: float = 0.2
-    epsilon_high: float = 0.2
+    epsilon_high: float = 0.28
     loss_type: str = "dapo"
     scale_rewards: Union[str, bool] = "group"
     use_vllm: bool = True
