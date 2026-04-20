@@ -470,6 +470,39 @@ def test_math500_score_responses_hash_fallback():
         assert scores["pass_at_1"] == 1.0
 
 
+def test_math500_score_responses_survives_timeout():
+    """score_responses must not crash when math_verify raises TimeoutException (stale SIGALRM)."""
+    from tuning.training.eval_strategy import MATH500EvalStrategy
+    from math_verify.errors import TimeoutException
+    with patch("tuning.training.eval_strategy.get_math500_test_dataset") as mock_dataset:
+        mock_dataset.return_value = Dataset.from_dict({
+            "messages": [[{"role": "user", "content": "Q1"}], [{"role": "user", "content": "Q2"}]],
+            "prompt": ["Q1", "Q2"],
+            "reference_answer": ["42", "7"],
+        })
+        tokenizer = MagicMock()
+        tokenizer.side_effect = lambda texts, **kw: {"input_ids": [[0] * 10] * len(texts)}
+        strategy = MATH500EvalStrategy(k_values=[1], n_samples=1, num_prompts=2)
+
+        call_count = 0
+        def timeout_on_second_call(response, ref):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 2:
+                raise TimeoutException("Operation timed out!")
+            return True
+
+        with patch("tuning.training.eval_strategy.math500_is_correct", side_effect=timeout_on_second_call):
+            results = [
+                {"prompt": "Q1", "responses": [r"$\boxed{42}$"]},
+                {"prompt": "Q2", "responses": [r"$\boxed{7}$"]},
+            ]
+            scores = strategy.score_responses(results, tokenizer)
+
+        assert scores["pass_at_1"] == 0.5
+        assert scores["num_prompts_evaluated"] == 2
+
+
 def test_math500_wandb_metrics():
     """wandb_metrics should prefix scores with eval/math500_."""
     from tuning.training.eval_strategy import MATH500EvalStrategy

@@ -9,6 +9,7 @@ from typing import List, Dict
 
 from instruction_following_eval import evaluation_lib
 from tuning.data.test_dataset import get_ifeval_test_dataset, get_gsm8k_test_dataset, get_math500_test_dataset, get_ifbench_test_dataset
+from math_verify.errors import TimeoutException
 from tuning.evaluation.gsm8k_scoring import is_correct as gsm8k_is_correct
 from tuning.evaluation.math500_scoring import is_correct as math500_is_correct
 
@@ -336,7 +337,13 @@ class MATH500EvalStrategy(EvalStrategy):
             )
             response_token_lengths.extend(len(ids) for ids in encoded_batch["input_ids"])
 
-            eval_results = [math500_is_correct(r, ref) for r in responses]
+            eval_results = []
+            for r in responses:
+                try:
+                    eval_results.append(math500_is_correct(r, ref))
+                except TimeoutException:
+                    print(f"[MATH500EvalStrategy] Stale TimeoutException absorbed: ref={ref!r}")
+                    eval_results.append(False)
             all_results.append(eval_results)
 
             item["per_response_correct"] = eval_results
