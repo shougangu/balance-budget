@@ -67,6 +67,39 @@ def get_gsm8k_test_dataset(num_prompts=None):
     return dataset
 
 
+def get_ifbench_test_dataset(num_prompts=None):
+    """Load IFBench test set with messages, prompt, instruction_id_list, and kwargs columns."""
+    from datasets import load_dataset
+    ifbench = load_dataset("allenai/IFBench_test", split="train")
+
+    messages_list = []
+    prompts = []
+    instruction_id_lists = []
+    kwargs_lists = []
+
+    for row in ifbench:
+        prompt_text = row["prompt"]
+        messages_list.append([
+            {"role": "system", "content": SYSTEM_MESSAGE_INSTRUCTION_FOLLOWING},
+            {"role": "user", "content": prompt_text},
+        ])
+        prompts.append(prompt_text)
+        instruction_id_lists.append(row["instruction_id_list"])
+        kwargs_lists.append(row["kwargs"])
+
+    dataset = Dataset.from_dict({
+        "messages": messages_list,
+        "prompt": prompts,
+        "instruction_id_list": instruction_id_lists,
+        "kwargs": kwargs_lists,
+    })
+
+    if num_prompts is not None:
+        dataset = dataset.select(range(min(num_prompts, len(dataset))))
+
+    return dataset
+
+
 def get_math500_test_dataset(num_prompts=None):
     """Load MATH-500 test set with messages, prompt, and reference_answer columns.
 
