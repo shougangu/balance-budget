@@ -56,11 +56,20 @@ MODEL_TO_GPU_2 = {
 
 MODEL_TO_GPU_3 = {
     "llama3-1B": 0.7, # good
-    "llama3-3B": 0.65,
+    "llama3-3B": 0.60,
     "llama3-8B": 0.5,
     "qwen2-2B": 0.65,
     "qwen2-3B": 0.6, #good
     "qwen2-7B": 0.53,
+}
+
+MODEL_TO_SIMPLERL_TIER = {
+    "llama3-1B": "medium",
+    "llama3-3B": "medium",
+    "llama3-8B": "medium",
+    "qwen2-2B":  "medium",
+    "qwen2-3B":  "medium",
+    "qwen2-7B":  "medium",
 }
 
 
@@ -78,6 +87,14 @@ def parse_early_tuple(s):
 def effective_eval_seed(seed: int, eval_seed: int | None) -> int:
     """Return eval_seed when set, else the master seed."""
     return eval_seed if eval_seed is not None else seed
+
+
+def _resolve_simplerl_dataset(args):
+    """Rewrite args.dataset='simplerl' to a concrete tier based on model strength."""
+    if args.dataset == "simplerl":
+        tier = MODEL_TO_SIMPLERL_TIER[args.model]
+        print(f"[simplerl] {args.model} -> simplerl-{tier}")
+        args.dataset = f"simplerl-{tier}"
 
 
 def _init_seeds(args):
@@ -127,7 +144,9 @@ def _parse_args(argv=None):
                        help="Run the parallel sbatch with shorter time limit for better queue times.")
 
     # Core
-    parser.add_argument("--dataset", default="gsm8k", choices=["tuluif", "gsm8k", "openmath", "ifrlvr"],)
+    parser.add_argument("--dataset", default="gsm8k",
+                        choices=["tuluif", "gsm8k", "openmath", "ifrlvr",
+                                 "simplerl", "simplerl-easy", "simplerl-medium", "simplerl-hard"],)
     parser.add_argument("--train-size", type=int, default=10000)
     parser.add_argument("--sft-data-size", type=int, default=None,
                         help="Fixed SFT data size. When both --sft-data-size and --dpo-data-size are set, "
@@ -701,6 +720,8 @@ def _build_reward_funcs(args):
     elif args.dataset == "ifrlvr":
         from tuning.training.reward_functions import ifrlvr_reward_func
         return [ifrlvr_reward_func]
+    elif args.dataset in {"simplerl", "simplerl-easy", "simplerl-medium", "simplerl-hard"}:
+        return [math500_reward_func]
     else:
         raise ValueError(f"No reward function for task: {args.dataset}")
 
@@ -882,6 +903,7 @@ def _dispatch_parallel_workers(parallel, base_cmd, pt_flag, metadata_files):
 
 def main():
     args = _parse_args()
+    _resolve_simplerl_dataset(args)
     print(args)
 
     if not any([args.run_sft, args.run_dpo, args.run_grpo, args.run_all]):
