@@ -36,6 +36,11 @@ class TestResolveSimplerlDataset:
                            "qwen2-2B", "qwen2-3B", "qwen2-7B"}
         assert set(MODEL_TO_SIMPLERL_TIER.keys()) == expected_models
 
+    def test_all_tier_values_are_valid(self):
+        valid_tiers = {"easy", "medium", "hard"}
+        for model, tier in MODEL_TO_SIMPLERL_TIER.items():
+            assert tier in valid_tiers, f"{model} maps to invalid tier {tier!r}"
+
 
 class TestParseArgsSimplerl:
     def test_simplerl_accepted(self):
