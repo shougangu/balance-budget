@@ -310,12 +310,12 @@ git commit -m "feat: add _is_rank_zero helper to PassAtKStoppingCallback"
 
 ---
 
-## Task 4: `set_accelerator()` setter on `PassAtKStoppingCallback`
+## Task 4: `_accelerator` attribute on `PassAtKStoppingCallback`
 
-Plumbing for the sweetspot save path. The setter is a no-op for SFT/DPO (they never call it).
+Initialize the attribute to `None` in `__init__` so `train_model_grpo` can assign `trainer.accelerator` to it directly. No setter method — direct attribute access is enough since the callback is module-internal.
 
 **Files:**
-- Modify: `tuning/training/passk_callback.py` (alongside `set_trainer_vllm` near line 260)
+- Modify: `tuning/training/passk_callback.py:182` (inside `__init__`)
 - Modify: `tests/test_grpo_ddp_eval.py`
 
 - [ ] **Step 1: Write the failing test**
@@ -323,38 +323,31 @@ Plumbing for the sweetspot save path. The setter is a no-op for SFT/DPO (they ne
 Append to `tests/test_grpo_ddp_eval.py`:
 
 ```python
-def test_set_accelerator_stores_reference(monkeypatch):
-    cb = _make_callback(monkeypatch)
-    fake_accelerator = SimpleNamespace(unwrap_model=lambda m: m)
-    cb.set_accelerator(fake_accelerator)
-    assert cb._accelerator is fake_accelerator
-
-
 def test_default_accelerator_is_none(monkeypatch):
     cb = _make_callback(monkeypatch)
     assert cb._accelerator is None
+
+
+def test_accelerator_can_be_assigned_directly(monkeypatch):
+    """train_model_grpo assigns trainer.accelerator to cb._accelerator directly."""
+    cb = _make_callback(monkeypatch)
+    fake_accelerator = SimpleNamespace(unwrap_model=lambda m: m)
+    cb._accelerator = fake_accelerator
+    assert cb._accelerator is fake_accelerator
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `pytest tests/test_grpo_ddp_eval.py::test_default_accelerator_is_none -v`
 
-Expected: FAIL — attribute error.
+Expected: FAIL — `AttributeError: ... no attribute '_accelerator'`.
 
-- [ ] **Step 3: Add the setter and default attribute**
+- [ ] **Step 3: Add the default attribute**
 
-In `tuning/training/passk_callback.py`, add to `__init__` next to `self._external_vllm = None` (around line 182):
+In `tuning/training/passk_callback.py` `__init__`, next to `self._external_vllm = None` (around line 182):
 
 ```python
         self._accelerator = None
-```
-
-Add the setter method next to the existing `set_trainer_vllm` (around line 260):
-
-```python
-    def set_accelerator(self, accelerator):
-        """Plumb accelerate.Accelerator for DDP-aware adapter saves."""
-        self._accelerator = accelerator
 ```
 
 - [ ] **Step 4: Run tests to verify they pass**
@@ -367,7 +360,7 @@ Expected: 4 passed.
 
 ```bash
 git add tuning/training/passk_callback.py tests/test_grpo_ddp_eval.py
-git commit -m "feat: add set_accelerator hook on PassAtKStoppingCallback"
+git commit -m "feat: add _accelerator attribute to PassAtKStoppingCallback"
 ```
 
 ---
@@ -489,9 +482,9 @@ git commit -m "feat: save_sweetspot_checkpoint unwraps DDP model when accelerato
 
 ---
 
-## Task 6: Wire `set_accelerator` in `train_model_grpo`
+## Task 6: Assign `trainer.accelerator` directly in `train_model_grpo`
 
-Plumb `trainer.accelerator` into the callback after trainer construction, in the same loop as the existing `set_trainer_vllm` hook.
+Direct attribute assignment in the same loop as the existing `set_trainer_vllm` hook. No setter ceremony — the callback is module-internal and `_accelerator` was initialized in Task 4.
 
 **Files:**
 - Modify: `tuning/training/grpo_training.py:87-90`
@@ -502,7 +495,7 @@ Run: `sed -n '85,95p' /project/6105902/shougan/balance-budget/tuning/training/gr
 
 Confirm the loop that calls `cb.set_trainer_vllm(trainer.vllm_generation.llm)`.
 
-- [ ] **Step 2: Add the accelerator plumbing**
+- [ ] **Step 2: Add the accelerator assignment**
 
 Edit `tuning/training/grpo_training.py:87-90`. Replace the existing loop:
 
@@ -521,7 +514,7 @@ with:
             if hasattr(trainer, 'vllm_generation'):
                 cb.set_trainer_vllm(trainer.vllm_generation.llm)
                 print(f"[GRPO] PassAtK callback will reuse GRPOTrainer's vLLM engine")
-            cb.set_accelerator(trainer.accelerator)
+            cb._accelerator = trainer.accelerator
 ```
 
 - [ ] **Step 3: Verify imports**
@@ -538,7 +531,7 @@ Expected: all green.
 
 ```bash
 git add tuning/training/grpo_training.py
-git commit -m "feat: plumb trainer.accelerator into PassAtKStoppingCallback"
+git commit -m "feat: assign trainer.accelerator on PassAtKStoppingCallback"
 ```
 
 ---
@@ -1014,17 +1007,17 @@ git commit -m "feat: dispatch GRPO worker via torchrun for DDP"
 
 ## Task 11: Orchestrator submits GRPO sbatch with `--gres=gpu:N`
 
-When the user passes `--grpo-num-gpus N` (N > 1), orchestrator-mode sbatch submission must request N GPUs instead of the default 1.
+When `pt_method == "grpo"`, inject `--gres=gpu:{args.grpo_num_gpus}` directly at the sbatch dispatch site. No threading through helper functions — compute the flag once in `_dispatch_parallel_workers` from the `args` namespace.
 
 **Files:**
-- Modify: `tuning/training/unified_early_pipeline.py` (the `_submit_sbatch_worker` and/or sbatch call site)
+- Modify: `tuning/training/unified_early_pipeline.py` (`_dispatch_parallel_workers` and `_submit_sbatch_worker`)
 - Modify: `tests/test_unified_pipeline_ddp.py`
 
 - [ ] **Step 1: Read current sbatch submission code**
 
-Run: `grep -n "_submit_sbatch_worker\|sbatch" /project/6105902/shougan/balance-budget/tuning/training/unified_early_pipeline.py | head -20`
+Run: `grep -n "_submit_sbatch_worker\|_dispatch_parallel_workers" /project/6105902/shougan/balance-budget/tuning/training/unified_early_pipeline.py | head -10`
 
-Identify where `cmd = ["sbatch", sbatch_script, *worker_args]` is built (around line 864).
+Identify the `cmd = ["sbatch", sbatch_script, *worker_args]` line in `_submit_sbatch_worker` (around line 864) and the call site in `_dispatch_parallel_workers` (around line 900).
 
 - [ ] **Step 2: Write the failing test**
 
@@ -1032,66 +1025,85 @@ Append to `tests/test_unified_pipeline_ddp.py`:
 
 ```python
 from unittest.mock import patch, MagicMock
+from types import SimpleNamespace
+from pathlib import Path
 
 
-def test_sbatch_command_includes_gres_for_ddp(monkeypatch):
-    """When grpo_num_gpus > 1, sbatch is invoked with --gres=gpu:N."""
-    from tuning.training.unified_early_pipeline import _submit_sbatch_worker
+def test_dispatch_grpo_passes_gres_to_sbatch(tmp_path, monkeypatch):
+    """When pt_method='grpo' and grpo_num_gpus=4, dispatch injects --gres=gpu:4."""
+    from tuning.training.unified_early_pipeline import _dispatch_parallel_workers
+
+    metadata_file = tmp_path / "meta.jsonl"
+    metadata_file.write_text("")
+
+    args = SimpleNamespace(
+        post_training_method="grpo",
+        grpo_num_gpus=4,
+        parallel=2,
+    )
 
     fake_result = MagicMock(returncode=0,
                             stdout="Submitted batch job 12345\n",
                             stderr="")
     with patch("subprocess.run", return_value=fake_result) as mock_run:
-        job_id = _submit_sbatch_worker(
-            "tuning/slurm/unified_early_pipeline.sh",
-            ["--run-grpo", "--run-all"],
-            num_gpus=4,
+        _dispatch_parallel_workers(
+            parallel=args.parallel,
+            base_cmd=["python", "tuning/training/unified_early_pipeline.py", "--model", "qwen2-2B"],
+            pt_flag="--run-grpo",
+            metadata_files=[str(metadata_file)],
+            args=args,
         )
-    assert job_id == "12345"
+
     cmd = mock_run.call_args[0][0]
     assert "--gres=gpu:4" in cmd
     assert cmd[0] == "sbatch"
 
 
-def test_sbatch_command_no_gres_when_default(monkeypatch):
-    """When grpo_num_gpus == 1 (default), no --gres flag is added (sbatch script default applies)."""
-    from tuning.training.unified_early_pipeline import _submit_sbatch_worker
+def test_dispatch_dpo_does_not_pass_gres(tmp_path, monkeypatch):
+    """For DPO (or grpo_num_gpus=1), no --gres flag is injected (sbatch script default applies)."""
+    from tuning.training.unified_early_pipeline import _dispatch_parallel_workers
+
+    metadata_file = tmp_path / "meta.jsonl"
+    metadata_file.write_text("")
+
+    args = SimpleNamespace(
+        post_training_method="dpo",
+        grpo_num_gpus=1,
+        parallel=2,
+    )
 
     fake_result = MagicMock(returncode=0,
                             stdout="Submitted batch job 12345\n",
                             stderr="")
     with patch("subprocess.run", return_value=fake_result) as mock_run:
-        _submit_sbatch_worker(
-            "tuning/slurm/unified_early_pipeline.sh",
-            ["--run-grpo", "--run-all"],
-            num_gpus=1,
+        _dispatch_parallel_workers(
+            parallel=args.parallel,
+            base_cmd=["python", "tuning/training/unified_early_pipeline.py", "--model", "qwen2-2B"],
+            pt_flag="--run-dpo",
+            metadata_files=[str(metadata_file)],
+            args=args,
         )
+
     cmd = mock_run.call_args[0][0]
     assert not any(a.startswith("--gres") for a in cmd)
 ```
 
 - [ ] **Step 3: Run tests to verify they fail**
 
-Run: `pytest tests/test_unified_pipeline_ddp.py::test_sbatch_command_includes_gres_for_ddp -v`
+Run: `pytest tests/test_unified_pipeline_ddp.py::test_dispatch_grpo_passes_gres_to_sbatch -v`
 
-Expected: FAIL — `_submit_sbatch_worker` doesn't accept `num_gpus`.
+Expected: FAIL — `_dispatch_parallel_workers` doesn't accept `args` kwarg.
 
-- [ ] **Step 4: Add the `num_gpus` arg and threading**
+- [ ] **Step 4: Plumb `args` and inject `--gres` inline**
 
 In `tuning/training/unified_early_pipeline.py`:
 
-a. Modify `_submit_sbatch_worker` (around line 859):
+a. Modify `_submit_sbatch_worker` (around line 859) to accept extra pre-script flags:
 
 ```python
-def _submit_sbatch_worker(sbatch_script, worker_args, num_gpus=1):
-    """Submit an sbatch worker job, return the Slurm job ID as a string.
-
-    When num_gpus > 1, prepend --gres=gpu:N to override the script default.
-    """
-    cmd = ["sbatch"]
-    if num_gpus > 1:
-        cmd.append(f"--gres=gpu:{num_gpus}")
-    cmd.extend([sbatch_script, *worker_args])
+def _submit_sbatch_worker(sbatch_script, worker_args, sbatch_flags=()):
+    """Submit an sbatch worker job. sbatch_flags go between 'sbatch' and the script path."""
+    cmd = ["sbatch", *sbatch_flags, sbatch_script, *worker_args]
     print(f"[orchestrator] Submitting sbatch worker: {' '.join(cmd)}")
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
@@ -1102,30 +1114,50 @@ def _submit_sbatch_worker(sbatch_script, worker_args, num_gpus=1):
     return tokens[-1]
 ```
 
-b. Update `_dispatch_parallel_workers` to thread the value through (around line 875):
+b. Modify `_dispatch_parallel_workers` (around line 875) to accept `args` and compute the gres flag inline:
 
 ```python
-def _dispatch_parallel_workers(parallel, base_cmd, pt_flag, metadata_files, num_gpus=1):
+def _dispatch_parallel_workers(parallel, base_cmd, pt_flag, metadata_files, args):
+    """Submit parallel-1 sbatch workers for post-training.
+
+    Injects --gres=gpu:N when pt_method=='grpo' and grpo_num_gpus>1.
+    """
     if parallel <= 1:
         return
-    # ... existing worker_argv construction ...
+
+    sbatch_flags = []
+    if args.post_training_method == "grpo" and args.grpo_num_gpus > 1:
+        sbatch_flags.append(f"--gres=gpu:{args.grpo_num_gpus}")
+
+    worker_argv = []
+    skip_next = False
+    for tok in base_cmd[1:]:
+        if skip_next:
+            skip_next = False
+            continue
+        if tok == "--parallel":
+            skip_next = True
+            continue
+        worker_argv.append(tok)
+    worker_argv += [pt_flag, "--run-all"]
+    for mf in metadata_files:
+        if Path(mf).is_file():
+            worker_argv += ["--metadata-file", mf]
+
     for i in range(parallel - 1):
-        job_id = _submit_sbatch_worker(SBATCH_WORKER_SCRIPT, worker_argv, num_gpus=num_gpus)
+        job_id = _submit_sbatch_worker(SBATCH_WORKER_SCRIPT, worker_argv, sbatch_flags=sbatch_flags)
         print(f"[orchestrator] Submitted worker {i+1}/{parallel-1}: job {job_id}")
 ```
 
-c. Update the call site in `main()` (around line 947):
+c. Update the single call site in `main()` (around line 947) to pass `args`:
 
 ```python
-    pt_method = args.post_training_method
-    pt_flag = f"--run-{pt_method}" if pt_method != "dpo" else "--run-dpo"
-    pt_num_gpus = args.grpo_num_gpus if pt_method == "grpo" else 1
     _dispatch_parallel_workers(
         parallel=args.parallel,
         base_cmd=base_cmd,
         pt_flag=pt_flag,
         metadata_files=all_files,
-        num_gpus=pt_num_gpus,
+        args=args,
     )
 ```
 
@@ -1139,7 +1171,7 @@ Expected: 6 passed.
 
 ```bash
 git add tuning/training/unified_early_pipeline.py tests/test_unified_pipeline_ddp.py
-git commit -m "feat: orchestrator submits GRPO sbatch with --gres=gpu:N when grpo_num_gpus>1"
+git commit -m "feat: inject --gres=gpu:N for GRPO sbatch when grpo_num_gpus>1"
 ```
 
 ---
