@@ -24,6 +24,7 @@ from tuning.utils.gpu import cleanup_gpu
 from tuning.training.callback_utils import save_sweetspot_checkpoint
 from tuning.training.eval_strategy import EvalStrategy
 from tuning.training.passk.data_parallel import partition_prompts, _data_parallel_worker
+from tuning.training.passk.decisions import CheckpointDecisionEngine
 
 
 class PassAtKStoppingCallback(TrainerCallback):
@@ -50,10 +51,13 @@ class PassAtKStoppingCallback(TrainerCallback):
         primary_eval: EvalStrategy,
         monitor_evals: list[EvalStrategy] = None,
     ):
-        # Sort thresholds in descending order (hardest to easiest: 0.7, 0.5, 0.3)
-        # Higher pass@k = harder to reach, so we process from largest to smallest
-        self.target_pass_at_k_thresholds = sorted(config.target_pass_at_k, reverse=True)
-        self.early_tuples = list(config.early_tuples) if config.early_tuples else None
+        self._decision_engine = CheckpointDecisionEngine(
+            target_thresholds=config.target_pass_at_k,
+            early_tuples=config.early_tuples,
+            max_checkpoint_gap=getattr(config, "max_checkpoint_gap", None),
+        )
+        self.target_pass_at_k_thresholds = self._decision_engine.target_thresholds
+        self.early_tuples = self._decision_engine.early_tuples
         self._step_offset = int(getattr(config, "initial_global_step", 0) or 0)
         self.tokenizer = tokenizer
         self.temperature = config.temperature
@@ -62,7 +66,6 @@ class PassAtKStoppingCallback(TrainerCallback):
         self.metadata_path = None
         self.prevResults = []
         self._last_eval_step = -1
-        self.max_checkpoint_gap = getattr(config, "max_checkpoint_gap", None)
         self._last_checkpoint_data_points = 0
 
         # Eval strategies
@@ -570,66 +573,17 @@ class PassAtKStoppingCallback(TrainerCallback):
             monitor_str = ", ".join([f"{k}={v:.4f}" for k, v in monitor_scores.items() if isinstance(v, float)])
             print(f"[PassAtKCallback] Monitor ({monitor_eval.__class__.__name__}): {monitor_str}")
 
-        # Check each threshold and save checkpoint if crossed (Fork Strategy)
-        # Thresholds are sorted descending (hardest to easiest: 0.7, 0.5, 0.3)
-        # We iterate to find the hardest threshold that current metric has reached
-        checkpoint_saved = False
-        if not self.early_tuples:
-            reached_threshold = None
-            reached_index = None
-
-            for i, threshold in enumerate(self.target_pass_at_k_thresholds):
-                if stopping_value >= threshold:
-                    reached_threshold = threshold
-                    reached_index = i
-                    break
-
-            if reached_threshold is not None:
-                print(f"[PassAtKCallback] Sweetspot threshold {reached_threshold} reached!")
-                checkpoint_path = self._save_sweetspot_checkpoint(model, reached_threshold, state, args)
-                checkpoint_saved = True
-
-                # Trim thresholds to only include harder ones (before current index)
-                self.target_pass_at_k_thresholds = self.target_pass_at_k_thresholds[:reached_index]
-                print(f"[PassAtKCallback] Remaining thresholds: {self.target_pass_at_k_thresholds}")
-
-                if len(self.target_pass_at_k_thresholds) == 0:
-                    print(f"[PassAtKCallback] All thresholds reached! Stopping training.")
-                    # control.should_training_stop = True
-                else:
-                    print(f"[PassAtKCallback] Continuing training to next threshold: {self.target_pass_at_k_thresholds[0]}")
-
-        if self.early_tuples is not None:
-            triggered = []
-            for idx, (patience, min_increase) in enumerate(self.early_tuples):
-                if len(self.prevResults) > patience:
-                    early_stopping = True
-                    for old, new in zip(self.prevResults[-patience-1:], self.prevResults[-patience:]):
-                        if new - old >= min_increase:
-                            early_stopping = False
-                            break
-                    if early_stopping:
-                        label = f"{patience}@{min_increase}"
-                        checkpoint_path = self._save_sweetspot_checkpoint(model, label, state, args)
-                        checkpoint_saved = True
-                        print(f"[PassAtKCallback] Early tuple ({patience}, {min_increase}) triggered. Checkpoint: {checkpoint_path}")
-                        triggered.append(idx)
-            for idx in reversed(triggered):
-                self.early_tuples.pop(idx)
-            if len(self.early_tuples) == 0:
-                print(f"[PassAtKCallback] All early_tuples triggered! Stopping training.")
-                # control.should_training_stop = True
-
-        # Gap checkpoint: ensure at least one checkpoint every max_checkpoint_gap data points
-        if self.max_checkpoint_gap is not None and data_points_seen > 0 and not checkpoint_saved:
-            gap = data_points_seen - self._last_checkpoint_data_points
-            if gap >= self.max_checkpoint_gap:
-                print(f"[PassAtKCallback] Gap checkpoint: {gap} data points since last checkpoint (max gap: {self.max_checkpoint_gap})")
-                self._save_sweetspot_checkpoint(model, f"gap-{data_points_seen}-{stopping_value}", state, args)
-                checkpoint_saved = True
-
-        if checkpoint_saved:
-            self._last_checkpoint_data_points = data_points_seen
+        decisions = self._decision_engine.decide(
+            primary_metric=stopping_value,
+            history=self.prevResults,
+            data_points_seen=data_points_seen,
+            last_checkpoint_data_points=self._last_checkpoint_data_points,
+        )
+        for decision in decisions:
+            self._save_sweetspot_checkpoint(model, decision.label, state, args)
+            if decision.advances_state:
+                self._last_checkpoint_data_points = data_points_seen
+            print(f"[PassAtKCallback] Saved checkpoint: {decision.label}")
 
         self._last_eval_step = state.global_step
         return control

@@ -326,4 +326,4 @@ def test_gap_resets_after_threshold_checkpoint():
     # Only the threshold checkpoint, no gap checkpoint
     assert mock_save.call_count == 1
     # The call should be the threshold one (0.05), not a gap
-    assert mock_save.call_args[0][1] == 0.05  # threshold arg
+    assert mock_save.call_args[0][1] == "0.05"  # threshold arg (string label from decision engine)
