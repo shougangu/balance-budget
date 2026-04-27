@@ -12,7 +12,7 @@ sys.modules.setdefault("instruction_following_eval.evaluation_lib", MagicMock())
 sys.modules.setdefault("unsloth", MagicMock())
 
 from tuning.training.config_training import PassAtKConfig
-from tuning.training.passk_callback import partition_prompts
+from tuning.training.passk.data_parallel import partition_prompts
 
 
 # --- PassAtKConfig tests ---

@@ -57,7 +57,7 @@ def test_get_eval_seed_falls_back_to_default_seed():
 def test_data_parallel_worker_signature_accepts_seed():
     """The subprocess worker must accept a seed kwarg so the parent can pass it."""
     import inspect
-    from tuning.training.passk_callback import _data_parallel_worker
+    from tuning.training.passk.data_parallel import _data_parallel_worker
     sig = inspect.signature(_data_parallel_worker)
     assert "seed" in sig.parameters
 
