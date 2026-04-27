@@ -1,0 +1,76 @@
+# ABOUTME: Pure-logic engine that decides when to save sweetspot checkpoints.
+# ABOUTME: Owns threshold list, early-tuple list, max-gap counter — no W&B / model deps.
+
+from dataclasses import dataclass
+from typing import List, Optional, Tuple
+
+
+@dataclass
+class CheckpointDecision:
+    label: str
+    advances_state: bool
+
+
+class CheckpointDecisionEngine:
+    def __init__(
+        self,
+        target_thresholds: List[float],
+        early_tuples: Optional[List[Tuple[int, float]]],
+        max_checkpoint_gap: Optional[int],
+    ):
+        self.target_thresholds = sorted(target_thresholds, reverse=True)
+        self.early_tuples = list(early_tuples) if early_tuples else None
+        self.max_checkpoint_gap = max_checkpoint_gap
+
+    def decide(
+        self,
+        primary_metric: float,
+        history: List[float],
+        data_points_seen: int,
+        last_checkpoint_data_points: int,
+    ) -> List[CheckpointDecision]:
+        decisions: List[CheckpointDecision] = []
+
+        if self.target_thresholds:
+            reached_index = None
+            reached_threshold = None
+            for i, threshold in enumerate(self.target_thresholds):
+                if primary_metric >= threshold:
+                    reached_index = i
+                    reached_threshold = threshold
+                    break
+            if reached_threshold is not None:
+                decisions.append(CheckpointDecision(
+                    label=str(reached_threshold), advances_state=True
+                ))
+                self.target_thresholds = self.target_thresholds[:reached_index]
+
+        if self.early_tuples is not None:
+            triggered_idx = []
+            for idx, (patience, min_increase) in enumerate(self.early_tuples):
+                if len(history) > patience:
+                    early_stopping = True
+                    for old, new in zip(history[-patience-1:], history[-patience:]):
+                        if new - old >= min_increase:
+                            early_stopping = False
+                            break
+                    if early_stopping:
+                        decisions.append(CheckpointDecision(
+                            label=f"{patience}@{min_increase}",
+                            advances_state=True,
+                        ))
+                        triggered_idx.append(idx)
+            for idx in reversed(triggered_idx):
+                self.early_tuples.pop(idx)
+
+        if (self.max_checkpoint_gap is not None
+                and data_points_seen > 0
+                and not decisions):
+            gap = data_points_seen - last_checkpoint_data_points
+            if gap >= self.max_checkpoint_gap:
+                decisions.append(CheckpointDecision(
+                    label=f"gap-{data_points_seen}-{primary_metric}",
+                    advances_state=True,
+                ))
+
+        return decisions
