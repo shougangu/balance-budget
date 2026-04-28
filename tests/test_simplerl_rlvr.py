@@ -2,14 +2,21 @@
 # ABOUTME: Covers alias resolution, CLI parsing, reward function dispatch, and dataset loading.
 
 import argparse
+import sys
+from unittest.mock import MagicMock
+
 import pytest
+
+sys.modules.setdefault("instruction_following_eval", MagicMock())
+sys.modules.setdefault("instruction_following_eval.evaluation_lib", MagicMock())
+sys.modules.setdefault("unsloth", MagicMock())
 
 from tuning.training.pipeline.cli import (
     _parse_args,
     _resolve_simplerl_dataset,
     MODEL_TO_SIMPLERL_TIER,
 )
-from tuning.training.unified_early_pipeline import _build_reward_funcs
+from tuning.training.pipeline.stages import _build_reward_funcs
 
 
 REQUIRED = ["--model", "llama3-3B", "--wandb-project", "tuning"]

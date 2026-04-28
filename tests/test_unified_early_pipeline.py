@@ -340,21 +340,21 @@ class TestClaimNextCheckpoint:
 
 class TestWorkerExitCode:
     def test_run_dpo_exits_42_when_nothing_to_claim(self, tmp_path):
-        from tuning.training import unified_early_pipeline as uep
+        from tuning.training.pipeline import stages
         f = tmp_path / "meta.jsonl"
         _write_jsonl(f, [{**PASSK_ROW, "completed": True}])
         args = argparse.Namespace(metadata_file=[str(f)])
         with pytest.raises(SystemExit) as exc:
-            uep.run_dpo(args)
+            stages.run_dpo(args)
         assert exc.value.code == 42
 
     def test_run_grpo_exits_42_when_nothing_to_claim(self, tmp_path):
-        from tuning.training import unified_early_pipeline as uep
+        from tuning.training.pipeline import stages
         f = tmp_path / "meta.jsonl"
         _write_jsonl(f, [{**PASSK_ROW, "claimed": True}])
         args = argparse.Namespace(metadata_file=[str(f)])
         with pytest.raises(SystemExit) as exc:
-            uep.run_grpo(args)
+            stages.run_grpo(args)
         assert exc.value.code == 42
 
 
