@@ -28,3 +28,20 @@ def test_init_cuda_env_pins_gpu0_without_local_rank(monkeypatch):
 
     assert os.environ["CUDA_VISIBLE_DEVICES"] == "0"
     assert os.environ["CUDA_VISIBLE_DEVICES_ALL"] == "0,1,2,3"
+
+
+from tuning.training.pipeline.cli import _parse_args
+
+
+def test_grpo_num_gpus_default():
+    args = _parse_args(["--model", "qwen2-2B", "--wandb-project", "test"])
+    assert args.grpo_num_gpus == 1
+
+
+def test_grpo_num_gpus_override():
+    args = _parse_args([
+        "--model", "qwen2-2B",
+        "--wandb-project", "test",
+        "--grpo-num-gpus", "4",
+    ])
+    assert args.grpo_num_gpus == 4
