@@ -84,17 +84,22 @@ def _mock_vllm_engine():
 
 
 def test_set_trainer_vllm_stores_reference():
+    from tuning.training.passk.runners import ExternalVLLMRunner
+
     callback = _make_callback()
     mock_llm = _mock_vllm_engine()
 
     callback.set_trainer_vllm(mock_llm)
 
-    assert callback._external_vllm is mock_llm
+    assert isinstance(callback._runner, ExternalVLLMRunner)
+    assert callback._runner._llm is mock_llm
 
 
 def test_external_vllm_defaults_to_none():
+    from tuning.training.passk.runners import ExternalVLLMRunner
+
     callback = _make_callback()
-    assert callback._external_vllm is None
+    assert not isinstance(callback._runner, ExternalVLLMRunner)
 
 
 def test_external_vllm_skips_lora_save_and_uses_engine():

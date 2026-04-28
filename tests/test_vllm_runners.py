@@ -149,3 +149,56 @@ def test_data_parallel_runner_offloads_and_dispatches(monkeypatch):
     assert captured["num_gpus"] == 2
     model.cpu.assert_called_once()
     model.to.assert_called_once()
+
+
+def test_callback_falls_back_from_persistent_to_ephemeral(monkeypatch):
+    """If the persistent runner raises on its first run, the callback should swap
+    in an EphemeralVLLMRunner and retry — without re-running inference twice."""
+    sys.modules.setdefault("torch", MagicMock())
+
+    from tuning.training import passk_callback as cb_mod
+    from tuning.training.passk import runners as runners_mod
+    from tuning.training.config_training import PassAtKConfig
+
+    persistent_run_calls = []
+    ephemeral_run_calls = []
+
+    class FakePersistent(runners_mod.PersistentVLLMRunner):
+        def run(self, model, eval_strategy, adapter_path):
+            persistent_run_calls.append(adapter_path)
+            raise RuntimeError("persistent failed")
+
+    class FakeEphemeral(runners_mod.EphemeralVLLMRunner):
+        def run(self, model, eval_strategy, adapter_path):
+            ephemeral_run_calls.append(adapter_path)
+            return [{"prompt": "hi", "responses": ["ok"]}]
+
+    monkeypatch.setattr(cb_mod, "PersistentVLLMRunner", FakePersistent)
+    monkeypatch.setattr(cb_mod, "EphemeralVLLMRunner", FakeEphemeral)
+
+    eval_strategy = _make_eval_strategy()
+    eval_strategy.score_responses.return_value = {"pass_at_1": 0.5}
+
+    tokenizer = MagicMock()
+    tokenizer.chat_template = "t"
+
+    config = PassAtKConfig(
+        target_pass_at_k=[0.95],
+        use_persistent_vllm=True,
+        num_inference_gpus=1,
+        enabled=True,
+    )
+
+    callback = cb_mod.PassAtKStoppingCallback(
+        config=config, tokenizer=tokenizer, model_name="m",
+        base_model_hf="m", primary_eval=eval_strategy, monitor_evals=[],
+    )
+    monkeypatch.setattr(callback, "_save_adapter_if_needed",
+                        lambda model, adapter_dir: "/tmp/a")
+
+    scores, results = callback._run_eval_with_results(MagicMock(), eval_strategy)
+
+    assert scores == {"pass_at_1": 0.5}
+    assert len(persistent_run_calls) == 1
+    assert len(ephemeral_run_calls) == 1
+    assert isinstance(callback._runner, FakeEphemeral)
