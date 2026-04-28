@@ -156,7 +156,7 @@ def test_callback_falls_back_from_persistent_to_ephemeral(monkeypatch):
     in an EphemeralVLLMRunner and retry — without re-running inference twice."""
     sys.modules.setdefault("torch", MagicMock())
 
-    from tuning.training import passk_callback as cb_mod
+    from tuning.training.passk import callback as cb_mod
     from tuning.training.passk import runners as runners_mod
     from tuning.training.config_training import PassAtKConfig
 
