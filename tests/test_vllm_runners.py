@@ -117,3 +117,35 @@ def test_persistent_runner_keeps_llm_alive(monkeypatch):
                adapter_path="/tmp/a")
 
     assert len(make_calls) == 1
+
+
+def test_data_parallel_runner_offloads_and_dispatches(monkeypatch):
+    from tuning.training.passk import runners as runners_mod
+
+    captured = {}
+
+    def fake_dp(eval_strategy, adapter_path, config):
+        captured["eval"] = eval_strategy
+        captured["adapter"] = adapter_path
+        captured["num_gpus"] = config.num_inference_gpus
+        return [{"prompt": "hi", "responses": ["ok"]}]
+
+    monkeypatch.setattr(runners_mod, "_run_data_parallel", fake_dp)
+
+    cfg = RunnerConfig(
+        base_model_hf="m", vllm_gpu_memory_utilization=0.6, lora_max_rank=32,
+        chat_template="t", temperature=0.5, max_tokens=256,
+        available_gpus=["0", "1"], num_inference_gpus=2,
+    )
+    model = MagicMock()
+    model.parameters.return_value = iter([MagicMock(device="cuda:0")])
+
+    runner = runners_mod.DataParallelVLLMRunner(cfg)
+    out = runner.run(model=model, eval_strategy=_make_eval_strategy(),
+                     adapter_path="/tmp/a")
+
+    assert out == [{"prompt": "hi", "responses": ["ok"]}]
+    assert captured["adapter"] == "/tmp/a"
+    assert captured["num_gpus"] == 2
+    model.cpu.assert_called_once()
+    model.to.assert_called_once()

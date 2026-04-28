@@ -173,3 +173,94 @@ class PersistentVLLMRunner(VLLMRunner):
             from tuning.utils.gpu import cleanup_gpu
             cleanup_dist_env_and_memory(shutdown_ray=False)
             cleanup_gpu()
+
+
+def _run_data_parallel(eval_strategy, adapter_path: str, config: RunnerConfig) -> List[Dict]:
+    """Spawn N subprocess workers, partition prompts, merge results.
+
+    Lives at module level so closures over `self` aren't accidentally captured.
+    """
+    import multiprocessing as mp
+
+    from tuning.training.passk.data_parallel import (
+        partition_prompts, _data_parallel_worker,
+    )
+    from tuning.utils.utils import get_stop_tokens
+    import tuning.config as tuning_config
+
+    all_messages = eval_strategy.get_test_messages()
+    all_prompts = eval_strategy.get_test_prompts()
+
+    available_gpus = config.available_gpus
+    num_gpus = config.num_inference_gpus
+    if len(available_gpus) < num_gpus:
+        print(f"[VLLMRunner] WARNING: requested {num_gpus} inference GPUs but only "
+              f"{len(available_gpus)} available ({available_gpus}). "
+              f"Using {len(available_gpus)}.")
+        num_gpus = len(available_gpus)
+
+    message_chunks = partition_prompts(all_messages, num_gpus)
+    prompt_chunks = partition_prompts(all_prompts, num_gpus)
+    actual_num_workers = len(message_chunks)
+
+    print(f"[VLLMRunner] Data-parallel: {len(all_messages)} prompts across "
+          f"{actual_num_workers} GPUs")
+    for i, chunk in enumerate(message_chunks):
+        print(f"[VLLMRunner]   Worker {i} → CUDA device {available_gpus[i]}: "
+              f"{len(chunk)} prompts")
+
+    ctx = mp.get_context("spawn")
+    result_queue = ctx.Queue()
+    stop_tokens = get_stop_tokens()
+    eval_seed = tuning_config.get_eval_seed()
+
+    processes = []
+    for i in range(actual_num_workers):
+        p = ctx.Process(
+            target=_data_parallel_worker,
+            args=(
+                i, available_gpus[i], message_chunks[i], config.base_model_hf,
+                adapter_path, eval_strategy.n_samples, config.temperature,
+                config.max_tokens, config.chat_template, config.lora_max_rank,
+                config.vllm_gpu_memory_utilization, result_queue,
+                stop_tokens, eval_seed,
+            ),
+        )
+        p.start()
+        processes.append(p)
+
+    results_by_worker = {}
+    for _ in range(actual_num_workers):
+        worker_id, serialized, error = result_queue.get()
+        if error is not None:
+            for p in processes:
+                if p.is_alive():
+                    p.terminate()
+            raise RuntimeError(f"[VLLMRunner] Worker {worker_id} failed:\n{error}")
+        results_by_worker[worker_id] = serialized
+
+    for p in processes:
+        p.join(timeout=30)
+
+    merged = []
+    for worker_id in range(actual_num_workers):
+        chunk_texts = results_by_worker[worker_id]
+        chunk_prompts = prompt_chunks[worker_id]
+        for prompt, response_texts in zip(chunk_prompts, chunk_texts):
+            merged.append({"prompt": prompt, "responses": response_texts})
+
+    grouped = defaultdict(list)
+    for item in merged:
+        grouped[item["prompt"]].extend(item["responses"])
+    return [{"prompt": p, "responses": resps} for p, resps in grouped.items()]
+
+
+class DataParallelVLLMRunner(VLLMRunner):
+    """Spawns N subprocess vLLM workers; offloads training model to CPU."""
+
+    def run(self, model, eval_strategy, adapter_path):
+        if adapter_path is None:
+            raise ValueError("DataParallelVLLMRunner requires an adapter_path "
+                             "(no External-mode equivalent).")
+        with self._with_model_offloaded(model):
+            return _run_data_parallel(eval_strategy, adapter_path, self.config)
