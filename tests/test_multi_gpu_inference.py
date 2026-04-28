@@ -1,15 +1,6 @@
 """Unit tests for multi-GPU data-parallel inference (no GPU required)."""
 
-import sys
-import pytest
-from unittest.mock import patch, MagicMock
-
-# Mock heavy imports before importing the module under test
-sys.modules.setdefault("vllm", MagicMock())
-sys.modules.setdefault("vllm.lora.request", MagicMock())
-sys.modules.setdefault("instruction_following_eval", MagicMock())
-sys.modules.setdefault("instruction_following_eval.evaluation_lib", MagicMock())
-sys.modules.setdefault("unsloth", MagicMock())
+from unittest.mock import MagicMock
 
 from tuning.training.config_training import PassAtKConfig
 from tuning.training.passk.data_parallel import partition_prompts
@@ -34,61 +25,36 @@ class TestPassAtKConfigNumInferenceGpus:
 # --- Persistent mode override tests ---
 
 class TestPersistentModeOverride:
-    @patch("tuning.training.passk_callback.get_ifeval_test_dataset")
-    @patch("tuning.training.passk_callback.evaluation_lib")
-    def test_persistent_forced_off_multi_gpu(self, mock_eval_lib, mock_get_dataset):
-        """num_inference_gpus > 1 should force use_persistent_vllm to False."""
-        mock_get_dataset.return_value = MagicMock()
-        mock_get_dataset.return_value.select.return_value = mock_get_dataset.return_value
-        mock_get_dataset.return_value.__len__ = lambda self: 10
-        mock_eval_lib.read_prompt_list.return_value = []
-
-        mock_tokenizer = MagicMock()
-        mock_tokenizer.chat_template = "test_template"
-
+    @staticmethod
+    def _make_callback(num_gpus, persistent):
+        from tuning.training.passk.callback import PassAtKStoppingCallback
         config = PassAtKConfig(
-            num_inference_gpus=2,
-            use_persistent_vllm=True,
+            num_inference_gpus=num_gpus,
+            use_persistent_vllm=persistent,
             enabled=True,
         )
-
-        from tuning.training.passk_callback import PassAtKStoppingCallback
-        callback = PassAtKStoppingCallback(
+        mock_tokenizer = MagicMock()
+        mock_tokenizer.chat_template = "test_template"
+        mock_eval = MagicMock()
+        mock_eval.n_samples = 1
+        mock_eval.get_test_messages.return_value = [[{"role": "user", "content": "x"}]]
+        return PassAtKStoppingCallback(
             config=config,
             tokenizer=mock_tokenizer,
             model_name="test-model",
             base_model_hf="test/model",
+            primary_eval=mock_eval,
         )
 
+    def test_persistent_forced_off_multi_gpu(self):
+        """num_inference_gpus > 1 should force use_persistent_vllm to False."""
+        callback = self._make_callback(num_gpus=2, persistent=True)
         assert callback.use_persistent_vllm is False
         assert callback.num_inference_gpus == 2
 
-    @patch("tuning.training.passk_callback.get_ifeval_test_dataset")
-    @patch("tuning.training.passk_callback.evaluation_lib")
-    def test_persistent_unchanged_single_gpu(self, mock_eval_lib, mock_get_dataset):
+    def test_persistent_unchanged_single_gpu(self):
         """num_inference_gpus=1 should not override use_persistent_vllm."""
-        mock_get_dataset.return_value = MagicMock()
-        mock_get_dataset.return_value.select.return_value = mock_get_dataset.return_value
-        mock_get_dataset.return_value.__len__ = lambda self: 10
-        mock_eval_lib.read_prompt_list.return_value = []
-
-        mock_tokenizer = MagicMock()
-        mock_tokenizer.chat_template = "test_template"
-
-        config = PassAtKConfig(
-            num_inference_gpus=1,
-            use_persistent_vllm=True,
-            enabled=True,
-        )
-
-        from tuning.training.passk_callback import PassAtKStoppingCallback
-        callback = PassAtKStoppingCallback(
-            config=config,
-            tokenizer=mock_tokenizer,
-            model_name="test-model",
-            base_model_hf="test/model",
-        )
-
+        callback = self._make_callback(num_gpus=1, persistent=True)
         assert callback.use_persistent_vllm is True
 
 

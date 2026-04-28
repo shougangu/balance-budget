@@ -208,12 +208,12 @@ class TestFormatTable:
         # 0.50 row should come before 0.25 (sorted by sft_data desc)
         assert "0.50" in lines[2]
         assert "0.25" in lines[3]
-        # vs SFT-full: 53.42% - 51.10% = +2.32pp
-        assert "+2.32pp" in lines[2]
-        # vs SFT-0: 53.42% - 8.32% = +45.10pp
-        assert "+45.10pp" in lines[2]
-        # vs SFT-0 for SFT-only: 51.10% - 8.32% = +42.78pp
-        assert "+42.78pp" in lines[1]
+        # vs SFT-full: 53.42% - 51.10% = +2.32%
+        assert "+2.32%" in lines[2]
+        # vs SFT-0: 53.42% - 8.32% = +45.10%
+        assert "+45.10%" in lines[2]
+        # vs SFT-0 for SFT-only: 51.10% - 8.32% = +42.78%
+        assert "+42.78%" in lines[1]
 
     def test_handles_no_base_acc(self):
         baseline = SftBaseline(

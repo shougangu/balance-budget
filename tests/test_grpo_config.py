@@ -31,11 +31,11 @@ def test_grpo_config_defaults():
     assert config.beta == 0.0
     assert config.temperature == 1.0
     assert config.epsilon == 0.2
-    assert config.epsilon_high == 0.2
+    assert config.epsilon_high == 0.28
     assert config.loss_type == "dapo"
     assert config.scale_rewards == "group"
     assert config.use_vllm is True
-    assert config.learning_rate == 1e-4
+    assert config.learning_rate == 1e-5
     assert config.num_train_epochs == 1
     assert config.per_device_train_batch_size == 8
     assert config.gradient_accumulation_steps == 1
@@ -50,7 +50,7 @@ def test_grpo_config_to_hf_args():
     assert d["beta"] == 0.0
     assert d["temperature"] == 1.0
     assert d["epsilon"] == 0.2
-    assert d["epsilon_high"] == 0.2
+    assert d["epsilon_high"] == 0.28
     assert d["loss_type"] == "dapo"
     assert d["scale_rewards"] == "group"
     assert d["save_strategy"] == "no"

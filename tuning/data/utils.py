@@ -22,8 +22,13 @@ def get_random_train_subset(dataset: DatasetDict, train_size: int,
         duplicate_indices = []
         for i in range(len(train_split)):
             val = train_split[i][unique_column]
-            if val not in seen:
-                seen.add(val)
+            try:
+                key = val
+                hash(key)
+            except TypeError:
+                key = repr(val)  # chat-format prompts (list of dicts) etc.
+            if key not in seen:
+                seen.add(key)
                 unique_indices.append(i)
             else:
                 duplicate_indices.append(i)

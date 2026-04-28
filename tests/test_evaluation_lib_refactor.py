@@ -1,9 +1,16 @@
 # ABOUTME: Tests for evaluation_lib refactoring (injectable registry + null-filtering).
 # ABOUTME: Ensures backward compatibility and new IFBench support.
 
+import sys
+
+# Other test files mock instruction_following_eval via sys.modules.setdefault at
+# import time, which leaks into this module. Pop those entries so we get the real one.
+sys.modules.pop("instruction_following_eval.evaluation_lib", None)
+sys.modules.pop("instruction_following_eval", None)
+
 from instruction_following_eval.evaluation_lib import (
-    test_instruction_following_strict,
-    test_instruction_following_loose,
+    test_instruction_following_strict as _eval_strict,
+    test_instruction_following_loose as _eval_loose,
     InputExample,
 )
 
@@ -37,7 +44,7 @@ def test_strict_accepts_custom_instruction_dict():
         prompt="Say hello with the keyword 'banana'.",
         kwargs=[{"keyword": "banana"}],
     )
-    result = test_instruction_following_strict(
+    result = _eval_strict(
         inp,
         {inp.prompt: "Hello banana world!"},
         instruction_dict=FAKE_REGISTRY,
@@ -53,7 +60,7 @@ def test_loose_accepts_custom_instruction_dict():
         prompt="Say hello with the keyword 'banana'.",
         kwargs=[{"keyword": "banana"}],
     )
-    result = test_instruction_following_loose(
+    result = _eval_loose(
         inp,
         {inp.prompt: "Hello banana world!"},
         instruction_dict=FAKE_REGISTRY,
@@ -70,7 +77,7 @@ def test_strict_defaults_to_builtin_registry():
         prompt="Include the word 'hello' in your response.",
         kwargs=[{"keywords": ["hello"]}],
     )
-    result = test_instruction_following_strict(
+    result = _eval_strict(
         inp,
         {inp.prompt: "hello world"},
     )
@@ -85,7 +92,7 @@ def test_strict_filters_none_kwargs():
         prompt="test",
         kwargs=[{"keyword": "banana", "irrelevant_param": None}],
     )
-    result = test_instruction_following_strict(
+    result = _eval_strict(
         inp,
         {inp.prompt: "banana"},
         instruction_dict=FAKE_REGISTRY,
@@ -101,7 +108,7 @@ def test_loose_filters_none_kwargs():
         prompt="test",
         kwargs=[{"keyword": "banana", "extra": None, "another": None}],
     )
-    result = test_instruction_following_loose(
+    result = _eval_loose(
         inp,
         {inp.prompt: "banana"},
         instruction_dict=FAKE_REGISTRY,

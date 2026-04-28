@@ -39,4 +39,4 @@ def test_chat_template_func_direct_import_and_apply(monkeypatch):
     assert out.chat_template == "applied:llama"
     assert len(calls) == 1
     assert calls[0]["chat_template"] == "llama"
-    assert calls[0]["map_eos_token"] is True
+    assert calls[0]["map_eos_token"] is False

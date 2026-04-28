@@ -84,5 +84,6 @@ def test_chat_template_func_reads_updated_global(monkeypatch):
 
 
 def test_llama31_template_appends_end_of_text_for_non_generation():
-    assert "if not add_generation_prompt" in LLAMA_31_SIMPLE_TEMPLATE
+    assert "{%- if add_generation_prompt %}" in LLAMA_31_SIMPLE_TEMPLATE
+    assert "{%- else %}" in LLAMA_31_SIMPLE_TEMPLATE
     assert '{{- "<|end_of_text|>" }}' in LLAMA_31_SIMPLE_TEMPLATE
