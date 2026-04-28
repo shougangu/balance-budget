@@ -103,3 +103,73 @@ class ExternalVLLMRunner(VLLMRunner):
 
     def run(self, model, eval_strategy, adapter_path):
         return self._run_inference(self._llm, eval_strategy, adapter_path=None)
+
+
+def _make_llm(config: RunnerConfig):
+    """Construct a vLLM LLM with our standard LoRA settings.
+
+    enforce_eager=True is required: CUDA-graph capture is incompatible with dynamic
+    LoRA adapter swapping.
+    """
+    from vllm import LLM
+    return LLM(
+        model=config.base_model_hf,
+        enable_lora=True,
+        max_lora_rank=config.lora_max_rank,
+        max_loras=1,
+        gpu_memory_utilization=config.vllm_gpu_memory_utilization,
+        trust_remote_code=True,
+        enforce_eager=True,
+    )
+
+
+def _cleanup_llm(llm):
+    """Tear down an ephemeral LLM and free GPU memory."""
+    from vllm.distributed.parallel_state import destroy_model_parallel
+    from tuning.utils.gpu import cleanup_gpu
+
+    llm.llm_engine.engine_core.shutdown()
+    destroy_model_parallel()
+    del llm
+    cleanup_gpu()
+
+
+class EphemeralVLLMRunner(VLLMRunner):
+    """Creates a fresh vLLM engine per call; offloads training model to CPU."""
+
+    def run(self, model, eval_strategy, adapter_path):
+        with self._with_model_offloaded(model):
+            llm = _make_llm(self.config)
+            try:
+                return self._run_inference(llm, eval_strategy, adapter_path)
+            finally:
+                _cleanup_llm(llm)
+
+
+class PersistentVLLMRunner(VLLMRunner):
+    """Keeps a persistent vLLM engine across calls; swaps LoRA adapters."""
+
+    def __init__(self, config: RunnerConfig):
+        super().__init__(config)
+        self._llm = None
+
+    def run(self, model, eval_strategy, adapter_path):
+        if self._llm is None:
+            self._llm = _make_llm(self.config)
+        return self._run_inference(self._llm, eval_strategy, adapter_path)
+
+    def cleanup(self):
+        if self._llm is None:
+            return
+        try:
+            llm_engine = getattr(self._llm, "llm_engine", None)
+            if llm_engine is not None:
+                executor = getattr(llm_engine, "model_executor", None)
+                if executor is not None:
+                    executor.shutdown()
+        finally:
+            self._llm = None
+            from vllm.distributed.parallel_state import cleanup_dist_env_and_memory
+            from tuning.utils.gpu import cleanup_gpu
+            cleanup_dist_env_and_memory(shutdown_ray=False)
+            cleanup_gpu()

@@ -69,3 +69,51 @@ def test_external_runner_uses_provided_llm_and_skips_lora():
     assert out == [{"prompt": "hi", "responses": ["ok"]}]
     args, kwargs = llm.chat.call_args
     assert kwargs["lora_request"] is None
+
+
+def test_ephemeral_runner_creates_and_destroys_llm(monkeypatch):
+    from tuning.training.passk import runners as runners_mod
+
+    fake_llm = MagicMock()
+    fake_output = MagicMock()
+    fake_output.outputs = [MagicMock(text="ok")]
+    fake_llm.chat.return_value = [fake_output]
+
+    monkeypatch.setattr(runners_mod, "_make_llm", lambda cfg: fake_llm)
+    cleanup_calls = []
+    monkeypatch.setattr(runners_mod, "_cleanup_llm",
+                        lambda llm: cleanup_calls.append(llm))
+
+    model = MagicMock()
+    model.parameters.return_value = iter([MagicMock(device="cuda:0")])
+
+    runner = runners_mod.EphemeralVLLMRunner(_make_config())
+    out = runner.run(model=model, eval_strategy=_make_eval_strategy(),
+                     adapter_path="/tmp/adapter")
+
+    assert out == [{"prompt": "hi", "responses": ["ok"]}]
+    assert cleanup_calls == [fake_llm]
+    model.cpu.assert_called_once()
+    model.to.assert_called_once()
+    model.train.assert_called_once()
+
+
+def test_persistent_runner_keeps_llm_alive(monkeypatch):
+    from tuning.training.passk import runners as runners_mod
+
+    fake_llm = MagicMock()
+    fake_output = MagicMock()
+    fake_output.outputs = [MagicMock(text="ok")]
+    fake_llm.chat.return_value = [fake_output]
+
+    make_calls = []
+    monkeypatch.setattr(runners_mod, "_make_llm",
+                        lambda cfg: (make_calls.append(cfg), fake_llm)[1])
+
+    runner = runners_mod.PersistentVLLMRunner(_make_config())
+    runner.run(model=MagicMock(), eval_strategy=_make_eval_strategy(),
+               adapter_path="/tmp/a")
+    runner.run(model=MagicMock(), eval_strategy=_make_eval_strategy(),
+               adapter_path="/tmp/a")
+
+    assert len(make_calls) == 1
