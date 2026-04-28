@@ -92,3 +92,14 @@ class VLLMRunner:
         finally:
             model.to(original_device)
             model.train()
+
+
+class ExternalVLLMRunner(VLLMRunner):
+    """Uses an externally-provided LLM (e.g. the trainer's own vLLM). No adapter save."""
+
+    def __init__(self, config: RunnerConfig, llm):
+        super().__init__(config)
+        self._llm = llm
+
+    def run(self, model, eval_strategy, adapter_path):
+        return self._run_inference(self._llm, eval_strategy, adapter_path=None)
