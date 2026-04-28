@@ -129,8 +129,8 @@ class TestPassAtKStepBridging:
         state.global_step = 5
         control = TrainerControl()
 
-        with patch("tuning.training.passk_callback.wandb.Table", side_effect=_FakeTable), \
-             patch("tuning.training.passk_callback.wandb.log") as mock_log:
+        with patch("tuning.training.passk.logging.wandb.Table", side_effect=_FakeTable), \
+             patch("tuning.training.passk.logging.wandb.log") as mock_log:
             callback.on_evaluate(args, state, control, model=MagicMock())
 
         payloads = [call.args[0] for call in mock_log.call_args_list]
@@ -152,8 +152,8 @@ class TestPassAtKStepBridging:
         state.global_step = 5
         control = TrainerControl()
 
-        with patch("tuning.training.passk_callback.wandb.Table", side_effect=_FakeTable), \
-             patch("tuning.training.passk_callback.wandb.log") as mock_log:
+        with patch("tuning.training.passk.logging.wandb.Table", side_effect=_FakeTable), \
+             patch("tuning.training.passk.logging.wandb.log") as mock_log:
             callback.on_evaluate(args, state, control, model=MagicMock())
 
         payloads = [call.args[0] for call in mock_log.call_args_list]
@@ -172,8 +172,8 @@ class TestPassAtKStepBridging:
         state.global_step = 5
         control = TrainerControl()
 
-        with patch("tuning.training.passk_callback.wandb.Table", side_effect=_FakeTable), \
-             patch("tuning.training.passk_callback.wandb.log") as mock_log:
+        with patch("tuning.training.passk.logging.wandb.Table", side_effect=_FakeTable), \
+             patch("tuning.training.passk.logging.wandb.log") as mock_log:
             callback.on_evaluate(args, state, control, model=MagicMock())
 
         table_payloads = [

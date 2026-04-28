@@ -1,11 +1,9 @@
 # ABOUTME: HuggingFace TrainerCallback that runs vLLM inference during training.
 # ABOUTME: Saves checkpoints at metric sweetspots using pluggable EvalStrategy objects.
 
-import wandb
 import tempfile
 import os
 import datetime
-import json
 from typing import List, Dict
 from transformers import TrainerCallback, TrainerControl, TrainerState
 from transformers.training_args import TrainingArguments
@@ -14,6 +12,7 @@ from tuning.config import MODELS_METADATA_DIR
 from tuning.training.callback_utils import save_sweetspot_checkpoint
 from tuning.training.eval_strategy import EvalStrategy
 from tuning.training.passk.decisions import CheckpointDecisionEngine
+from tuning.training.passk.logging import log_eval_metrics
 from tuning.training.passk.runners import (
     RunnerConfig,
     VLLMRunner,
@@ -194,77 +193,6 @@ class PassAtKStoppingCallback(TrainerCallback):
             },
         )
 
-    def _log_raw_generation_table(
-        self,
-        eval_strategy: EvalStrategy,
-        model_results: List[Dict],
-        global_step: int,
-        stopping_metric_name: str,
-        stopping_metric_value: float | None,
-    ) -> None:
-        """Best-effort logging of raw generations as a per-step W&B table."""
-        eval_slug = eval_strategy.id
-        table_key = f"raw_generations/{eval_slug}/step_{global_step}"
-
-        try:
-            table = wandb.Table(columns=[
-                "global_step",
-                "eval_name",
-                "prompt_index",
-                "prompt",
-                "responses",
-                "num_responses",
-                "per_response_correct",
-                "per_response_instructions",
-                "prompt_accuracy",
-                "stopping_metric_name",
-                "stopping_metric_value",
-                "thresholds_remaining",
-                "timestamp_utc",
-            ])
-
-            timestamp_utc = datetime.datetime.now(datetime.timezone.utc).isoformat()
-            thresholds_remaining = json.dumps(self.target_pass_at_k_thresholds)
-
-            for prompt_index, item in enumerate(model_results):
-                prompt = item.get("prompt", "")
-                responses = item.get("responses", [])
-                if not isinstance(responses, list):
-                    responses = [responses]
-
-                try:
-                    responses_json = json.dumps(responses)
-                except TypeError:
-                    responses_json = json.dumps([str(response) for response in responses])
-
-                correctness = item.get("per_response_correct", [])
-                prompt_accuracy = sum(correctness) / len(correctness) if correctness else None
-                instructions = item.get("per_response_instructions", [])
-
-                table.add_data(
-                    global_step,
-                    eval_slug,
-                    prompt_index,
-                    prompt,
-                    responses_json,
-                    len(responses),
-                    json.dumps(correctness) if correctness else None,
-                    json.dumps(instructions) if instructions else None,
-                    prompt_accuracy,
-                    stopping_metric_name,
-                    stopping_metric_value,
-                    thresholds_remaining,
-                    timestamp_utc,
-                )
-
-            wandb.log({
-                "train/global_step": global_step,
-                "train/total_global_step": global_step + self._step_offset,
-                table_key: table,
-            })
-        except Exception as exc:
-            print(f"[PassAtKCallback] Warning: failed to log raw generation table ({table_key}): {exc}")
-
     def _save_adapter_if_needed(self, model, adapter_dir: str):
         if isinstance(self._runner, ExternalVLLMRunner):
             return None
@@ -314,42 +242,31 @@ class PassAtKStoppingCallback(TrainerCallback):
         # Run primary eval
         scores, raw_results = self._run_eval_with_results(model, self.primary_eval)
 
-        # Log primary eval metrics to wandb
-        log_dict = {"train/global_step": state.global_step, "train/total_global_step": state.global_step + self._step_offset}
-        log_dict.update(self.primary_eval.wandb_metrics(scores))
-        wandb.log(log_dict)
+        log_eval_metrics(
+            eval_strategy=self.primary_eval,
+            scores=scores,
+            raw_results=raw_results,
+            global_step=state.global_step,
+            step_offset=self._step_offset,
+            thresholds_remaining=self._decision_engine.target_thresholds,
+            is_primary=True,
+        )
 
         stopping_key = self.primary_eval.stopping_metric()
         stopping_value = scores[stopping_key]
         self.prevResults.append(stopping_value)
-        self._log_raw_generation_table(
-            eval_strategy=self.primary_eval,
-            model_results=raw_results,
-            global_step=state.global_step,
-            stopping_metric_name=stopping_key,
-            stopping_metric_value=stopping_value,
-        )
 
-        scores_str = ", ".join([f"{k}={v:.4f}" for k, v in scores.items() if isinstance(v, float)])
-        print(f"\n[PassAtKCallback] Step {state.global_step}, Data Points {data_points_seen}: "
-              f"{scores_str} ({scores.get('num_prompts_evaluated', '?')} prompts)")
-
-        # Run monitor evals (wandb logging only, no stopping)
         for monitor_eval in self.monitor_evals:
             monitor_scores, monitor_raw_results = self._run_eval_with_results(model, monitor_eval)
-            monitor_log = {"train/global_step": state.global_step, "train/total_global_step": state.global_step + self._step_offset}
-            monitor_log.update(monitor_eval.wandb_metrics(monitor_scores))
-            wandb.log(monitor_log)
-            monitor_stopping_key = monitor_eval.stopping_metric()
-            self._log_raw_generation_table(
+            log_eval_metrics(
                 eval_strategy=monitor_eval,
-                model_results=monitor_raw_results,
+                scores=monitor_scores,
+                raw_results=monitor_raw_results,
                 global_step=state.global_step,
-                stopping_metric_name=monitor_stopping_key,
-                stopping_metric_value=monitor_scores.get(monitor_stopping_key),
+                step_offset=self._step_offset,
+                thresholds_remaining=self._decision_engine.target_thresholds,
+                is_primary=False,
             )
-            monitor_str = ", ".join([f"{k}={v:.4f}" for k, v in monitor_scores.items() if isinstance(v, float)])
-            print(f"[PassAtKCallback] Monitor ({monitor_eval.__class__.__name__}): {monitor_str}")
 
         decisions = self._decision_engine.decide(
             primary_metric=stopping_value,

@@ -124,8 +124,8 @@ def test_on_evaluate_logs_primary_raw_generation_table():
     state.global_step = 5
     control = TrainerControl()
 
-    with patch("tuning.training.passk_callback.wandb.Table", side_effect=FakeTable), \
-         patch("tuning.training.passk_callback.wandb.log") as mock_log:
+    with patch("tuning.training.passk.logging.wandb.Table", side_effect=FakeTable), \
+         patch("tuning.training.passk.logging.wandb.log") as mock_log:
         callback.on_evaluate(args, state, control, model=MagicMock())
 
     payloads = [call.args[0] for call in mock_log.call_args_list]
@@ -179,8 +179,8 @@ def test_on_evaluate_logs_monitor_raw_generation_table():
     state.global_step = 7
     control = TrainerControl()
 
-    with patch("tuning.training.passk_callback.wandb.Table", side_effect=FakeTable), \
-         patch("tuning.training.passk_callback.wandb.log") as mock_log:
+    with patch("tuning.training.passk.logging.wandb.Table", side_effect=FakeTable), \
+         patch("tuning.training.passk.logging.wandb.log") as mock_log:
         callback.on_evaluate(args, state, control, model=MagicMock())
 
     payloads = [call.args[0] for call in mock_log.call_args_list]
@@ -203,8 +203,8 @@ def test_table_logging_failure_is_non_fatal():
     state.global_step = 9
     control = TrainerControl()
 
-    with patch("tuning.training.passk_callback.wandb.Table", side_effect=RuntimeError("table boom")) as mock_table, \
-         patch("tuning.training.passk_callback.wandb.log") as mock_log:
+    with patch("tuning.training.passk.logging.wandb.Table", side_effect=RuntimeError("table boom")) as mock_table, \
+         patch("tuning.training.passk.logging.wandb.log") as mock_log:
         callback.on_evaluate(args, state, control, model=MagicMock())
 
     assert mock_table.called
@@ -250,8 +250,8 @@ def test_gap_checkpoint_saved_when_gap_exceeds_limit():
     args = SimpleNamespace(per_device_train_batch_size=16, gradient_accumulation_steps=1, world_size=1)
     control = TrainerControl()
 
-    with patch("tuning.training.passk_callback.wandb.Table", side_effect=FakeTable), \
-         patch("tuning.training.passk_callback.wandb.log"), \
+    with patch("tuning.training.passk.logging.wandb.Table", side_effect=FakeTable), \
+         patch("tuning.training.passk.logging.wandb.log"), \
          patch.object(callback, "_save_sweetspot_checkpoint") as mock_save:
         # Step 64 -> 1024 data points -> should trigger gap checkpoint
         state = TrainerState()
@@ -273,8 +273,8 @@ def test_no_gap_checkpoint_when_below_limit():
     args = SimpleNamespace(per_device_train_batch_size=16, gradient_accumulation_steps=1, world_size=1)
     control = TrainerControl()
 
-    with patch("tuning.training.passk_callback.wandb.Table", side_effect=FakeTable), \
-         patch("tuning.training.passk_callback.wandb.log"), \
+    with patch("tuning.training.passk.logging.wandb.Table", side_effect=FakeTable), \
+         patch("tuning.training.passk.logging.wandb.log"), \
          patch.object(callback, "_save_sweetspot_checkpoint") as mock_save:
         # Step 32 -> 512 data points -> below 1024 gap limit
         state = TrainerState()
@@ -293,8 +293,8 @@ def test_no_gap_checkpoint_when_disabled():
     args = SimpleNamespace(per_device_train_batch_size=16, gradient_accumulation_steps=1, world_size=1)
     control = TrainerControl()
 
-    with patch("tuning.training.passk_callback.wandb.Table", side_effect=FakeTable), \
-         patch("tuning.training.passk_callback.wandb.log"), \
+    with patch("tuning.training.passk.logging.wandb.Table", side_effect=FakeTable), \
+         patch("tuning.training.passk.logging.wandb.log"), \
          patch.object(callback, "_save_sweetspot_checkpoint") as mock_save:
         state = TrainerState()
         state.global_step = 128  # 2048 data points, way past any gap
@@ -314,8 +314,8 @@ def test_gap_resets_after_threshold_checkpoint():
     args = SimpleNamespace(per_device_train_batch_size=16, gradient_accumulation_steps=1, world_size=1)
     control = TrainerControl()
 
-    with patch("tuning.training.passk_callback.wandb.Table", side_effect=FakeTable), \
-         patch("tuning.training.passk_callback.wandb.log"), \
+    with patch("tuning.training.passk.logging.wandb.Table", side_effect=FakeTable), \
+         patch("tuning.training.passk.logging.wandb.log"), \
          patch.object(callback, "_save_sweetspot_checkpoint", return_value="/fake/path") as mock_save:
         # Step 64 -> 1024 data points. Threshold 0.05 is crossed,
         # so a threshold checkpoint is saved. No gap checkpoint needed.
