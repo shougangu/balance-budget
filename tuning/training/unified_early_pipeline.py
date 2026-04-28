@@ -19,141 +19,16 @@ from tuning.training.pipeline.checkpoint_metadata import (
     load_checkpoints, next_checkpoint, claim_next_checkpoint, mark_completed,
     print_metadata_paths, parse_metadata_from_output,
 )
+from tuning.training.pipeline.eval_components import (
+    _build_eval_components, _sft_ppl_config, _dpo_ppl_config,
+    _sft_tags, post_training_tags,
+)
 
 
 if is_worker_mode():
     init_cuda_env()
     if "--run-grpo" not in sys.argv:
         import unsloth  # noqa: F401 - must be imported before trl/transformers/peft
-
-
-
-def _sft_ppl_config(args):
-    """Return PerplexityConfig for SFT, or None if disabled."""
-    if not args.sft_enable_ppl:
-        return None
-    from tuning.training.config_training import PerplexityConfig
-    return PerplexityConfig(
-        perplexity_thresholds=args.sft_ppl_thresholds,
-        num_samples=args.sft_ppl_num_samples,
-        early_tuples=args.sft_ppl_early or None,
-        enabled=True,
-    )
-
-
-
-def _dpo_ppl_config(args):
-    """Return PerplexityConfig for DPO, or None if disabled."""
-    if not args.dpo_enable_ppl:
-        return None
-    from tuning.training.config_training import PerplexityConfig
-    return PerplexityConfig(
-        perplexity_thresholds=args.dpo_ppl_thresholds,
-        num_samples=args.dpo_ppl_num_samples,
-        early_tuples=args.dpo_ppl_early or None,
-        enabled=True,
-    )
-
-
-def _build_eval_components(args, stage, gpu_util):
-    """Build PassAtKConfig + eval strategies for the given task and stage.
-
-    Returns (passk_config, primary_eval, monitor_evals).
-    All three are None/[] if pass@k is disabled for this stage.
-    """
-    prefix = stage  # "sft" or "dpo"
-    if not getattr(args, f"{prefix}_enable_passk", False):
-        return None, None, []
-
-    from tuning.training.config_training import PassAtKConfig
-    passk_config = PassAtKConfig(
-        target_pass_at_k=getattr(args, f"{prefix}_passk_targets"),
-        early_tuples=getattr(args, f"{prefix}_passk_early") or None,
-        temperature=getattr(args, f"{prefix}_passk_temperature"),
-        enabled=True,
-        num_inference_gpus=getattr(args, f"{prefix}_passk_num_inference_gpus"),
-        use_persistent_vllm=getattr(args, f"{prefix}_passk_persistent_vllm"),
-        vllm_gpu_memory_utilization=gpu_util,
-        max_checkpoint_gap=getattr(args, f"{prefix}_passk_max_checkpoint_gap", None),
-    )
-
-    k_values = getattr(args, f"{prefix}_passk_k_values", [1])
-    n_samples = getattr(args, f"{prefix}_passk_n_samples", 1)
-    num_prompts = getattr(args, f"{prefix}_passk_num_prompts", None)
-
-    if args.task_name == "ifeval":
-        from tuning.training.eval_strategy import IFEvalStrategy
-        strict = getattr(args, f"{prefix}_passk_strict", True)
-        primary_eval = IFEvalStrategy(
-            k_values=k_values, n_samples=n_samples,
-            num_prompts=num_prompts or 541, strict=strict,
-        )
-    elif args.task_name == "gsm8k":
-        from tuning.training.eval_strategy import GSM8KEvalStrategy
-        primary_eval = GSM8KEvalStrategy(
-            k_values=k_values, n_samples=n_samples,
-            num_prompts=num_prompts,
-        )
-    elif args.task_name == "math500":
-        from tuning.training.eval_strategy import MATH500EvalStrategy
-        primary_eval = MATH500EvalStrategy(
-            k_values=k_values, n_samples=n_samples,
-            num_prompts=num_prompts,
-        )
-    elif args.task_name == "ifbench":
-        from tuning.training.eval_strategy import IFBenchStrategy
-        strict = getattr(args, f"{prefix}_passk_strict", True)
-        primary_eval = IFBenchStrategy(
-            k_values=k_values, n_samples=n_samples,
-            num_prompts=num_prompts, strict=strict,
-        )
-    else:
-        raise ValueError(f"Unknown task name: {args.task_name}")
-
-    monitor_evals = _build_monitor_evals(args, k_values, n_samples)
-
-    return passk_config, primary_eval, monitor_evals
-
-
-def _build_monitor_evals(args, k_values, n_samples):
-    """Build monitor eval strategies from --monitor-evals arg."""
-    monitor_evals = []
-    for name in getattr(args, "monitor_evals", []):
-        if name == args.task_name:
-            continue  # skip if same as primary
-        if name == "math500":
-            from tuning.training.eval_strategy import MATH500EvalStrategy
-            monitor_evals.append(MATH500EvalStrategy(k_values=k_values, n_samples=n_samples))
-        elif name == "gsm8k":
-            from tuning.training.eval_strategy import GSM8KEvalStrategy
-            monitor_evals.append(GSM8KEvalStrategy(k_values=k_values, n_samples=n_samples))
-        elif name == "ifeval":
-            from tuning.training.eval_strategy import IFEvalStrategy
-            monitor_evals.append(IFEvalStrategy(k_values=k_values, n_samples=n_samples))
-        elif name == "ifbench":
-            from tuning.training.eval_strategy import IFBenchStrategy
-            monitor_evals.append(IFBenchStrategy(k_values=k_values, n_samples=n_samples))
-    return monitor_evals
-
-
-def _sft_tags(passk_config, ppl_config, primary_eval=None):
-    """Build W&B tags for an SFT run."""
-    from tuning.training.wandb_utils import get_early_pairs, early_pair_tag, get_early_abs, early_abs_tag
-    tags = ["sft"]
-    if primary_eval is not None:
-        tags.append(primary_eval.id)
-    if passk_config is not None:
-        k_val = primary_eval.stopping_k if primary_eval else 1
-        tags.append(f"p{k_val}")
-        tags.append(early_pair_tag(get_early_pairs(passk_config)))
-        # tags.append(early_abs_tag(get_early_abs(passk_config)))
-    if ppl_config is not None:
-        tags.append("ppl")
-        tags.append(early_pair_tag(get_early_pairs(ppl_config)))
-        tags.append(early_abs_tag(get_early_abs(ppl_config)))
-    if passk_config is None and ppl_config is None:
-        tags.append("no_callbacks")
-    return tags
 
 
 def run_sft(args):
@@ -318,14 +193,7 @@ def run_dpo(args):
         sft_dataset = get_train_dataset(sft_run_config)
         perplexity_test_dataset = sft_dataset["test"]
 
-    tags = ["dpo", str(checkpoint["threshold_value"]), str(checkpoint["data_points_seen"])]
-    if primary_eval is not None:
-        tags.append(primary_eval.id)
-    if passk_config is not None:
-        k_val = primary_eval.stopping_k if primary_eval else 1
-        tags.append(f"p{k_val}")
-    if ppl_config is not None:
-        tags.append("ppl")
+    tags = post_training_tags("dpo", checkpoint, primary_eval, passk_config, ppl_config)
 
     with wandb.init(
         name=run_config.model_name,
@@ -458,13 +326,7 @@ def run_grpo(args):
     if passk_config is not None:
         passk_config.initial_global_step = initial_step
 
-    tags = ["grpo", str(checkpoint["threshold_value"]), str(checkpoint["data_points_seen"])]
-    if primary_eval is not None:
-        tags.append(primary_eval.id)
-    if passk_config is not None:
-        k_val = primary_eval.stopping_k if primary_eval else 1
-        tags.append(f"p{k_val}")
-
+    tags = post_training_tags("grpo", checkpoint, primary_eval, passk_config, ppl_config=None)
 
     with wandb.init(
         name=run_config.model_name,
