@@ -7,10 +7,9 @@ import sys
 import pytest
 from pathlib import Path
 
+from tuning.training.pipeline.cli import parse_early_tuple, _parse_args
 from tuning.training.unified_early_pipeline import (
-    parse_early_tuple,
     load_checkpoints,
-    _parse_args,
     next_checkpoint,
     claim_next_checkpoint,
     mark_completed,
@@ -830,17 +829,17 @@ class TestSeedArgs:
 
 class TestEffectiveEvalSeed:
     def test_effective_eval_seed_falls_back_to_seed(self):
-        from tuning.training.unified_early_pipeline import effective_eval_seed
+        from tuning.training.pipeline.cli import effective_eval_seed
         assert effective_eval_seed(seed=42, eval_seed=None) == 42
 
     def test_effective_eval_seed_override_wins(self):
-        from tuning.training.unified_early_pipeline import effective_eval_seed
+        from tuning.training.pipeline.cli import effective_eval_seed
         assert effective_eval_seed(seed=42, eval_seed=7) == 7
 
 
 class TestInitSeeds:
     def test_init_seeds_sets_globals(self):
-        from tuning.training.unified_early_pipeline import _init_seeds
+        from tuning.training.pipeline.cli import _init_seeds
         args = _parse_args([
             "--model", "llama3-1B", "--wandb-project", "test",
             "--seed", "7", "--eval_seed", "99",
@@ -851,7 +850,7 @@ class TestInitSeeds:
         assert tuning.config.get_eval_seed() == 99
 
     def test_init_seeds_eval_seed_falls_back(self):
-        from tuning.training.unified_early_pipeline import _init_seeds
+        from tuning.training.pipeline.cli import _init_seeds
         args = _parse_args([
             "--model", "llama3-1B", "--wandb-project", "test",
             "--seed", "7",
@@ -862,7 +861,7 @@ class TestInitSeeds:
 
     def test_init_seeds_seeds_random(self):
         import random
-        from tuning.training.unified_early_pipeline import _init_seeds
+        from tuning.training.pipeline.cli import _init_seeds
         args = _parse_args([
             "--model", "llama3-1B", "--wandb-project", "test",
             "--seed", "123",

@@ -4,12 +4,12 @@
 import argparse
 import pytest
 
-from tuning.training.unified_early_pipeline import (
+from tuning.training.pipeline.cli import (
     _parse_args,
     _resolve_simplerl_dataset,
-    _build_reward_funcs,
     MODEL_TO_SIMPLERL_TIER,
 )
+from tuning.training.unified_early_pipeline import _build_reward_funcs
 
 
 REQUIRED = ["--model", "llama3-3B", "--wandb-project", "tuning"]

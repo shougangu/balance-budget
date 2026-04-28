@@ -14,7 +14,7 @@ if "unsloth" not in sys.modules:
 import pytest
 import tuning.config
 from tuning.training.config_training import GRPOTrainingConfig, PTRunConfig, SFTRunConfig, DatasetConfig
-from tuning.training.unified_early_pipeline import _parse_args
+from tuning.training.pipeline.cli import _parse_args
 
 
 @pytest.fixture(autouse=True)
