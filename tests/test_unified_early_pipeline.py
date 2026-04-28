@@ -12,10 +12,8 @@ from tuning.training.pipeline.checkpoint_metadata import (
     load_checkpoints, next_checkpoint, claim_next_checkpoint, mark_completed,
     print_metadata_paths, parse_metadata_from_output,
 )
-from tuning.training.unified_early_pipeline import (
-    _build_base_cmd,
-    _submit_sbatch_worker,
-    _dispatch_parallel_workers,
+from tuning.training.pipeline.orchestrator import (
+    _build_base_cmd, _submit_sbatch_worker, _dispatch_parallel_workers,
 )
 
 
@@ -360,16 +358,17 @@ class TestWorkerExitCode:
 
 class TestSubmitSbatchWorker:
     def test_parses_job_id_from_stdout(self, monkeypatch):
-        from tuning.training import unified_early_pipeline as uep
-        fake = type("R", (), {"stdout": "Submitted batch job 12345\n", "stderr": "", "returncode": 0})()
+        from tuning.training.pipeline import orchestrator as orch
+        fake = type("R", (), {"stdout": "Submitted batch job 12345\n", "stderr": "",
+                              "returncode": 0})()
         calls = []
 
         def fake_run(cmd, capture_output, text):
             calls.append(cmd)
             return fake
 
-        monkeypatch.setattr(uep.subprocess, "run", fake_run)
-        job_id = uep._submit_sbatch_worker(
+        monkeypatch.setattr(orch.subprocess, "run", fake_run)
+        job_id = orch._submit_sbatch_worker(
             "tuning/slurm/unified_early_pipeline.sh",
             ["--model", "llama3-3B"],
         )
@@ -380,63 +379,65 @@ class TestSubmitSbatchWorker:
         assert "llama3-3B" in calls[0]
 
     def test_nonzero_return_code_exits(self, monkeypatch):
-        from tuning.training import unified_early_pipeline as uep
-        fake = type("R", (), {"stdout": "", "stderr": "sbatch: error: boom\n", "returncode": 1})()
-
-        monkeypatch.setattr(uep.subprocess, "run", lambda *a, **k: fake)
+        from tuning.training.pipeline import orchestrator as orch
+        fake = type("R", (), {"stdout": "", "stderr": "sbatch: error: boom\n",
+                              "returncode": 1})()
+        monkeypatch.setattr(orch.subprocess, "run", lambda *a, **k: fake)
         with pytest.raises(SystemExit):
-            uep._submit_sbatch_worker("script.sh", [])
+            orch._submit_sbatch_worker("script.sh", [])
 
     def test_unparseable_stdout_exits(self, monkeypatch):
-        from tuning.training import unified_early_pipeline as uep
+        from tuning.training.pipeline import orchestrator as orch
         fake = type("R", (), {"stdout": "weird output\n", "stderr": "", "returncode": 0})()
-
-        monkeypatch.setattr(uep.subprocess, "run", lambda *a, **k: fake)
+        monkeypatch.setattr(orch.subprocess, "run", lambda *a, **k: fake)
         with pytest.raises(SystemExit):
-            uep._submit_sbatch_worker("script.sh", [])
+            orch._submit_sbatch_worker("script.sh", [])
 
 
 class TestDispatchParallelWorkers:
     def test_parallel_1_does_nothing(self, monkeypatch):
-        from tuning.training import unified_early_pipeline as uep
+        from tuning.training.pipeline import orchestrator as orch
         calls = []
-        monkeypatch.setattr(uep, "_submit_sbatch_worker",
+        monkeypatch.setattr(orch, "_submit_sbatch_worker",
                             lambda *a, **k: (calls.append(a), "999")[1])
-        uep._dispatch_parallel_workers(
+        orch._dispatch_parallel_workers(
             parallel=1,
             base_cmd=["pipeline.py", "--model", "llama3-3B"],
             pt_flag="--run-dpo",
             metadata_files=["/tmp/a.jsonl"],
+            sbatch_script="tuning/slurm/unified_early_pipeline.sh",
         )
         assert calls == []
 
     def test_parallel_3_submits_2_workers(self, monkeypatch, tmp_path):
-        from tuning.training import unified_early_pipeline as uep
+        from tuning.training.pipeline import orchestrator as orch
         calls = []
-        monkeypatch.setattr(uep, "_submit_sbatch_worker",
+        monkeypatch.setattr(orch, "_submit_sbatch_worker",
                             lambda *a, **k: (calls.append(a), "999")[1])
         mf = tmp_path / "meta.jsonl"
         mf.write_text("{}\n")
-        uep._dispatch_parallel_workers(
+        orch._dispatch_parallel_workers(
             parallel=3,
             base_cmd=["pipeline.py", "--model", "llama3-3B"],
             pt_flag="--run-dpo",
             metadata_files=[str(mf)],
+            sbatch_script="tuning/slurm/unified_early_pipeline.sh",
         )
         assert len(calls) == 2
 
     def test_worker_argv_includes_pt_flag_and_metadata(self, monkeypatch, tmp_path):
-        from tuning.training import unified_early_pipeline as uep
+        from tuning.training.pipeline import orchestrator as orch
         calls = []
-        monkeypatch.setattr(uep, "_submit_sbatch_worker",
+        monkeypatch.setattr(orch, "_submit_sbatch_worker",
                             lambda script, argv: (calls.append(argv), "999")[1])
         mf = tmp_path / "meta.jsonl"
         mf.write_text("{}\n")
-        uep._dispatch_parallel_workers(
+        orch._dispatch_parallel_workers(
             parallel=2,
             base_cmd=["pipeline.py", "--model", "llama3-3B"],
             pt_flag="--run-grpo",
             metadata_files=[str(mf)],
+            sbatch_script="tuning/slurm/unified_early_pipeline.sh",
         )
         worker_argv = calls[0]
         assert "--run-grpo" in worker_argv
@@ -447,17 +448,18 @@ class TestDispatchParallelWorkers:
         assert "llama3-3B" in worker_argv
 
     def test_strips_parallel_from_worker_argv(self, monkeypatch, tmp_path):
-        from tuning.training import unified_early_pipeline as uep
+        from tuning.training.pipeline import orchestrator as orch
         calls = []
-        monkeypatch.setattr(uep, "_submit_sbatch_worker",
+        monkeypatch.setattr(orch, "_submit_sbatch_worker",
                             lambda script, argv: (calls.append(argv), "999")[1])
         mf = tmp_path / "meta.jsonl"
         mf.write_text("{}\n")
-        uep._dispatch_parallel_workers(
+        orch._dispatch_parallel_workers(
             parallel=2,
             base_cmd=["pipeline.py", "--model", "llama3-3B", "--parallel", "3"],
             pt_flag="--run-dpo",
             metadata_files=[str(mf)],
+            sbatch_script="tuning/slurm/unified_early_pipeline.sh",
         )
         worker_argv = calls[0]
         assert "--parallel" not in worker_argv
@@ -465,18 +467,19 @@ class TestDispatchParallelWorkers:
         assert "--model" in worker_argv
 
     def test_skips_missing_metadata_files(self, monkeypatch, tmp_path):
-        from tuning.training import unified_early_pipeline as uep
+        from tuning.training.pipeline import orchestrator as orch
         calls = []
-        monkeypatch.setattr(uep, "_submit_sbatch_worker",
+        monkeypatch.setattr(orch, "_submit_sbatch_worker",
                             lambda script, argv: (calls.append(argv), "999")[1])
         real_mf = tmp_path / "real.jsonl"
         real_mf.write_text("{}\n")
         missing_mf = str(tmp_path / "missing.jsonl")
-        uep._dispatch_parallel_workers(
+        orch._dispatch_parallel_workers(
             parallel=2,
             base_cmd=["pipeline.py"],
             pt_flag="--run-dpo",
             metadata_files=[str(real_mf), missing_mf],
+            sbatch_script="tuning/slurm/unified_early_pipeline.sh",
         )
         worker_argv = calls[0]
         assert str(real_mf) in worker_argv
@@ -869,3 +872,13 @@ class TestInitSeeds:
         # Re-seed and verify same stream
         random.seed(123)
         assert random.random() == val1
+
+
+class TestSbatchScriptResolution:
+    def test_default_uses_long_script(self):
+        args = _parse_args(["--model", "llama3-3B", "--wandb-project", "p"])
+        assert args.sbatch_script == "tuning/slurm/unified_early_pipeline.sh"
+
+    def test_short_flag_uses_short_script(self):
+        args = _parse_args(["--model", "llama3-3B", "--wandb-project", "p", "--short"])
+        assert args.sbatch_script == "tuning/slurm/unified_early_pipeline_short.sh"
