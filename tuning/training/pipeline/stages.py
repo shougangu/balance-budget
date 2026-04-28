@@ -10,14 +10,10 @@ import wandb
 
 import tuning.config
 from tuning.config import HF_MODEL_MAP, set_chat_template
-from tuning.training.callback_utils import save_sweetspot_checkpoint  # noqa: F401
 from tuning.training.config_training import (
     DatasetConfig, SFTRunConfig, PTRunConfig, ModelLoadConfig,
     LoraConfig, TrainingArgumentsConfig, DPOTrainingConfig, GRPOTrainingConfig,
 )
-from tuning.training.dpo_training import train_model_dpo
-from tuning.training.grpo_training import train_model_grpo
-from tuning.training.sft_training import train_model_sft
 from tuning.utils.gpu import cleanup_gpu
 
 from tuning.training.pipeline.checkpoint_metadata import (
@@ -35,6 +31,8 @@ from tuning.training.pipeline.eval_components import (
 def run_sft(args):
     """Run SFT stage, returning a list of metadata file paths written by callbacks."""
     import subprocess
+    from tuning.training.sft_training import train_model_sft
+
     _init_seeds(args)
     set_chat_template(args.model, simple=args.simple_template)
     gpu_util = MODEL_TO_GPU_1[args.model]
@@ -221,6 +219,8 @@ def _train_dispatch(method, configs, passk_config, primary_eval,
         ppl_config.initial_global_step = initial_step
 
     if method == "dpo":
+        from tuning.training.dpo_training import train_model_dpo
+
         perplexity_test_dataset = None
         if ppl_config is not None:
             from tuning.data.train_dataset import get_train_dataset
@@ -239,6 +239,8 @@ def _train_dispatch(method, configs, passk_config, primary_eval,
             initial_global_step=initial_step,
         )
     else:
+        from tuning.training.grpo_training import train_model_grpo
+
         train_model_grpo(
             run_config=configs.run_config,
             lora_config=configs.lora_config,
