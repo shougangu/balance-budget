@@ -51,7 +51,13 @@ MODEL_TO_SIMPLERL_TIER = {
 
 
 def init_cuda_env():
-    """Restrict training to GPU 0 and save full GPU list for inference workers."""
+    """Restrict training to GPU 0 and save full GPU list for inference workers.
+
+    No-op under torchrun (LOCAL_RANK is set) because each rank's CUDA_VISIBLE_DEVICES
+    is already pinned per-rank by the launcher.
+    """
+    if "LOCAL_RANK" in os.environ:
+        return
     all_gpus = os.environ.get("CUDA_VISIBLE_DEVICES", "")
     if all_gpus:
         os.environ["CUDA_VISIBLE_DEVICES_ALL"] = all_gpus
