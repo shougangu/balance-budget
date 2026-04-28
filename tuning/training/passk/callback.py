@@ -5,6 +5,7 @@ import tempfile
 import os
 import datetime
 from typing import List, Dict
+import torch.distributed as dist
 from transformers import TrainerCallback, TrainerControl, TrainerState
 from transformers.training_args import TrainingArguments
 
@@ -129,6 +130,10 @@ class PassAtKStoppingCallback(TrainerCallback):
         print(f"[DEBUG] Sample prompt (index 0):")
         print(sample_formatted)
         print(f"{'='*60}\n")
+
+    def _is_rank_zero(self) -> bool:
+        """True when not under DDP, or when this is rank 0 under DDP."""
+        return not dist.is_initialized() or dist.get_rank() == 0
 
     def on_train_begin(self, args, state, control, **kwargs):
         if not self.model_name:
