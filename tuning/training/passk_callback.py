@@ -52,15 +52,13 @@ class PassAtKStoppingCallback(TrainerCallback):
             early_tuples=config.early_tuples,
             max_checkpoint_gap=getattr(config, "max_checkpoint_gap", None),
         )
-        self.target_pass_at_k_thresholds = self._decision_engine.target_thresholds
-        self.early_tuples = self._decision_engine.early_tuples
         self._step_offset = int(getattr(config, "initial_global_step", 0) or 0)
         self.tokenizer = tokenizer
         self.temperature = config.temperature
         self.max_tokens = config.max_tokens
         self.model_name = model_name
         self.metadata_path = None
-        self.prevResults = []
+        self._primary_metric_history = []
         self._last_eval_step = -1
         self._last_checkpoint_data_points = 0
 
@@ -102,12 +100,16 @@ class PassAtKStoppingCallback(TrainerCallback):
         self.n_samples = primary_eval.n_samples
 
         mode_str = "persistent" if self.use_persistent_vllm else "non-persistent"
-        if not self.early_tuples:
-            print(f"[PassAtKCallback] Initialized with {primary_eval.label_prefix} thresholds={self.target_pass_at_k_thresholds}")
-            print(f"[PassAtKCallback] Training will stop when hardest threshold is reached: {self.target_pass_at_k_thresholds[0]}")
+        if not self._decision_engine.early_tuples:
+            print(f"[PassAtKCallback] Initialized with {primary_eval.label_prefix} "
+                  f"thresholds={self._decision_engine.target_thresholds}")
+            print(f"[PassAtKCallback] Training will stop when hardest threshold is "
+                  f"reached: {self._decision_engine.target_thresholds[0]}")
         else:
-            print(f"[PassAtKCallback] Initialized with early_tuples={self.early_tuples}")
-            print(f"[PassAtKCallback] Training will stop when all early_tuples have triggered")
+            print(f"[PassAtKCallback] Initialized with "
+                  f"early_tuples={self._decision_engine.early_tuples}")
+            print(f"[PassAtKCallback] Training will stop when all early_tuples have "
+                  f"triggered")
 
         print(f"[PassAtKCallback] primary_eval={primary_eval.__class__.__name__}, "
               f"monitor_evals={[e.__class__.__name__ for e in self.monitor_evals]}")
@@ -225,52 +227,47 @@ class PassAtKStoppingCallback(TrainerCallback):
         scores, _ = self._run_eval_with_results(model, eval_strategy)
         return scores
 
-    def on_evaluate(self, args: TrainingArguments, state: TrainerState,
-                    control: TrainerControl, model=None, **kwargs):
-        """Called after evaluation, run evals and stop if target reached."""
+    def _compute_data_points_seen(self, args, state) -> int:
         train_batch_size = args.per_device_train_batch_size
         grad_accum = args.gradient_accumulation_steps
         world_size = getattr(args, "world_size", 1)
-        data_points_seen = state.global_step * train_batch_size * grad_accum * world_size
+        return state.global_step * train_batch_size * grad_accum * world_size
 
+    def _eval_and_log(self, model, eval_strategy, state, *, is_primary: bool):
+        scores, raw_results = self._run_eval_with_results(model, eval_strategy)
+        log_eval_metrics(
+            eval_strategy=eval_strategy,
+            scores=scores,
+            raw_results=raw_results,
+            global_step=state.global_step,
+            step_offset=self._step_offset,
+            thresholds_remaining=self._decision_engine.target_thresholds,
+            is_primary=is_primary,
+        )
+        return scores
+
+    def on_evaluate(self, args: TrainingArguments, state: TrainerState,
+                    control: TrainerControl, model=None, **kwargs):
+        """Called after evaluation, run evals and stop if target reached."""
         if model is None:
             model = kwargs.get("model")
         if model is None:
             print("[PassAtKCallback] Warning: model is None, skipping eval")
             return control
 
-        # Run primary eval
-        scores, raw_results = self._run_eval_with_results(model, self.primary_eval)
+        data_points_seen = self._compute_data_points_seen(args, state)
 
-        log_eval_metrics(
-            eval_strategy=self.primary_eval,
-            scores=scores,
-            raw_results=raw_results,
-            global_step=state.global_step,
-            step_offset=self._step_offset,
-            thresholds_remaining=self._decision_engine.target_thresholds,
-            is_primary=True,
-        )
-
-        stopping_key = self.primary_eval.stopping_metric()
-        stopping_value = scores[stopping_key]
-        self.prevResults.append(stopping_value)
+        primary_scores = self._eval_and_log(model, self.primary_eval, state,
+                                            is_primary=True)
+        primary_metric = primary_scores[self.primary_eval.stopping_metric()]
+        self._primary_metric_history.append(primary_metric)
 
         for monitor_eval in self.monitor_evals:
-            monitor_scores, monitor_raw_results = self._run_eval_with_results(model, monitor_eval)
-            log_eval_metrics(
-                eval_strategy=monitor_eval,
-                scores=monitor_scores,
-                raw_results=monitor_raw_results,
-                global_step=state.global_step,
-                step_offset=self._step_offset,
-                thresholds_remaining=self._decision_engine.target_thresholds,
-                is_primary=False,
-            )
+            self._eval_and_log(model, monitor_eval, state, is_primary=False)
 
         decisions = self._decision_engine.decide(
-            primary_metric=stopping_value,
-            history=self.prevResults,
+            primary_metric=primary_metric,
+            history=self._primary_metric_history,
             data_points_seen=data_points_seen,
             last_checkpoint_data_points=self._last_checkpoint_data_points,
         )
