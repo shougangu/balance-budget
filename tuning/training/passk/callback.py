@@ -62,6 +62,7 @@ class PassAtKStoppingCallback(TrainerCallback):
         self._primary_metric_history = []
         self._last_eval_step = -1
         self._last_checkpoint_data_points = 0
+        self._accelerator = None
 
         # Eval strategies
         self.primary_eval = primary_eval

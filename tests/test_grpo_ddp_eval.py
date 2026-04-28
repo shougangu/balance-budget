@@ -78,3 +78,16 @@ def test_is_rank_zero_under_ddp(monkeypatch):
     with patch("torch.distributed.is_initialized", return_value=True), \
          patch("torch.distributed.get_rank", return_value=1):
         assert cb._is_rank_zero() is False
+
+
+def test_default_accelerator_is_none(monkeypatch):
+    cb = _make_callback(monkeypatch)
+    assert cb._accelerator is None
+
+
+def test_accelerator_can_be_assigned_directly(monkeypatch):
+    """train_model_grpo assigns trainer.accelerator to cb._accelerator directly."""
+    cb = _make_callback(monkeypatch)
+    fake_accelerator = SimpleNamespace(unwrap_model=lambda m: m)
+    cb._accelerator = fake_accelerator
+    assert cb._accelerator is fake_accelerator
