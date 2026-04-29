@@ -11,7 +11,7 @@ set -euo pipefail
 cd "$SLURM_SUBMIT_DIR"
 export PYTHONUNBUFFERED=1
 
-# Extract --wandb-project and --task-name from arguments
+# Extract --wandb-project, --task-name, and --grpo-num-gpus from arguments
 WANDB_PROJECT=""
 TASK_NAME="gsm8k"
 _args=("$@")
@@ -44,9 +44,15 @@ done
 
 NPROC="${SLURM_GPUS_ON_NODE:-1}"
 
+
+# Per-job rendezvous port so concurrent GRPO workers on the same node
+# don't collide on torchrun's default port 29500.
+MASTER_PORT="${MASTER_PORT:-$((20000 + SLURM_JOB_ID % 20000))}"
+
 if [[ "$IS_GRPO_WORKER" == "1" ]]; then
-    echo "[unified_early_pipeline.sh] GRPO worker mode: torchrun --nproc_per_node=${NPROC}"
-    torchrun --nproc_per_node="${NPROC}" -m tuning.training.unified_early_pipeline "$@"
+    echo "[unified_early_pipeline.sh] GRPO worker mode: torchrun --nproc_per_node=${NPROC} --master-port=${MASTER_PORT}"
+    torchrun --nproc_per_node="${NPROC}" --master-port="${MASTER_PORT}" \
+        -m tuning.training.unified_early_pipeline "$@"
 else
     python tuning/training/unified_early_pipeline.py "$@"
 fi

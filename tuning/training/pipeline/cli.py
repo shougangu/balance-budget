@@ -33,11 +33,11 @@ MODEL_TO_GPU_2 = {
 
 MODEL_TO_GPU_3 = {
     "llama3-1B": 0.7,
-    "llama3-3B": 0.60,
-    "llama3-8B": 0.5,
-    "qwen2-2B": 0.65,
-    "qwen2-3B": 0.6,
-    "qwen2-7B": 0.53,
+    "llama3-3B": 0.45, #0.6
+    "llama3-8B": 0.45,
+    "qwen2-2B": 0.45,
+    "qwen2-3B": 0.45,
+    "qwen2-7B": 0.45,
 }
 
 MODEL_TO_SIMPLERL_TIER = {
@@ -163,10 +163,10 @@ def _parse_args(argv=None):
     parser.add_argument("--grpo-num-gpus", type=int, default=1,
                         help="Number of GPUs for GRPO DDP training. >1 launches GRPO via torchrun.")
     parser.add_argument("--grpo-eval-steps", type=int, default=128)
-    parser.add_argument("--grpo-batch-size", type=int, default=8)
-    parser.add_argument("--grpo-grad-accum", type=int, default=4)
+    parser.add_argument("--grpo-batch-size", type=int, default=4)
+    parser.add_argument("--grpo-grad-accum", type=int, default=8)
     parser.add_argument("--grpo-num-generations", type=int, default=8)
-    parser.add_argument("--grpo-max-completion-length", type=int, default=1024)
+    parser.add_argument("--grpo-max-completion-length", type=int, default=2048)
     parser.add_argument("--grpo-max-prompt-length", type=int, default=512)
     parser.add_argument("--grpo-beta", type=float, default=0.0)
     parser.add_argument("--grpo-temperature", type=float, default=1.0)
