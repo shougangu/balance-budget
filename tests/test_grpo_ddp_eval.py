@@ -219,3 +219,34 @@ def test_run_eval_ddp_handles_empty_local_slice(monkeypatch):
         )
 
     assert len(model_results) == 1
+
+
+def test_dispatch_ddp_when_world_size_gt_1(monkeypatch):
+    """When dist is initialized with world_size > 1, _run_eval_with_results dispatches to DDP path."""
+    cb = _make_callback(monkeypatch)
+    cb.set_trainer_vllm(MagicMock())
+
+    with patch("torch.distributed.is_initialized", return_value=True), \
+         patch("torch.distributed.get_world_size", return_value=4), \
+         patch.object(cb, "_run_eval_with_results_ddp",
+                      return_value=({"pass_at_1": 0.42}, [{"prompt": "p", "responses": ["r"]}])) as ddp_mock:
+        scores, results = cb._run_eval_with_results(model=MagicMock(), eval_strategy=_FakeEval())
+
+    ddp_mock.assert_called_once()
+    assert scores == {"pass_at_1": 0.42}
+
+
+def test_dispatch_single_gpu_when_world_size_1(monkeypatch):
+    """When world_size == 1, falls through to runner.run path (DDP method NOT called)."""
+    cb = _make_callback(monkeypatch)
+    cb.set_trainer_vllm(MagicMock())
+    # Stub the runner so we don't hit real vLLM.
+    cb._runner.run = MagicMock(return_value=[{"prompt": "p", "responses": ["r"]}])
+
+    with patch("torch.distributed.is_initialized", return_value=True), \
+         patch("torch.distributed.get_world_size", return_value=1), \
+         patch.object(cb, "_run_eval_with_results_ddp") as ddp_mock:
+        cb._run_eval_with_results(model=MagicMock(), eval_strategy=_FakeEval())
+
+    ddp_mock.assert_not_called()
+    cb._runner.run.assert_called_once()

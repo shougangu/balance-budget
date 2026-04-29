@@ -209,6 +209,8 @@ class PassAtKStoppingCallback(TrainerCallback):
 
     def _run_eval_with_results(self, model, eval_strategy: EvalStrategy) -> tuple[Dict[str, float], List[Dict]]:
         """Run vLLM inference and score responses using the given eval strategy."""
+        if dist.is_initialized() and dist.get_world_size() > 1:
+            return self._run_eval_with_results_ddp(model, eval_strategy)
         with tempfile.TemporaryDirectory() as adapter_dir:
             adapter_path = self._save_adapter_if_needed(model, adapter_dir)
             try:
