@@ -228,6 +228,69 @@ class PassAtKStoppingCallback(TrainerCallback):
         scores = eval_strategy.score_responses(model_results, self.tokenizer)
         return scores, model_results
 
+    def _run_eval_with_results_ddp(self, model, eval_strategy: EvalStrategy) -> tuple[Dict[str, float], List[Dict]]:
+        """DDP eval path: each rank generates its slice via the colocated vLLM,
+        all ranks gather responses, all ranks score deterministically.
+
+        Returns (scores, model_results) on every rank. Requires the runner to be
+        ExternalVLLMRunner (set by set_trainer_vllm in train_model_grpo).
+        """
+        from collections import defaultdict
+        from vllm import SamplingParams
+        from tuning.inference.config_inference import VLLMSamplingParamsConfig
+
+        if not isinstance(self._runner, ExternalVLLMRunner):
+            raise RuntimeError(
+                "DDP eval path requires the colocated trainer vLLM "
+                "(set via set_trainer_vllm)."
+            )
+        llm = self._runner._llm
+
+        rank = dist.get_rank()
+        world_size = dist.get_world_size()
+
+        all_messages = eval_strategy.get_test_messages()
+        local_indices = list(range(rank, len(all_messages), world_size))
+        local_messages = [all_messages[i] for i in local_indices]
+
+        sampling_params = SamplingParams(**VLLMSamplingParamsConfig(
+            n=eval_strategy.n_samples,
+            temperature=self.temperature,
+            max_tokens=self.max_tokens,
+        ).model_dump())
+
+        if local_messages:
+            outputs = llm.chat(
+                local_messages,
+                sampling_params,
+                chat_template=self._runner.config.chat_template,
+            )
+            local_pairs = [
+                (idx, [r.text for r in out.outputs])
+                for idx, out in zip(local_indices, outputs)
+            ]
+        else:
+            local_pairs = []
+
+        gathered = [None] * world_size
+        dist.all_gather_object(gathered, local_pairs)
+
+        flat = sorted(
+            ((idx, texts) for chunk in gathered for idx, texts in chunk),
+            key=lambda t: t[0],
+        )
+        responses_per_index = [texts for _, texts in flat]
+        test_prompts = eval_strategy.get_test_prompts()
+        grouped = defaultdict(list)
+        for prompt, resp in zip(test_prompts, responses_per_index):
+            grouped[prompt].extend(resp)
+        model_results = [{"prompt": p, "responses": r} for p, r in grouped.items()]
+
+        print(f"[PassAtKCallback] DDP eval rank={rank}/{world_size}: "
+              f"local={len(local_messages)} prompts, gathered={len(model_results)} unique")
+        scores = eval_strategy.score_responses(model_results, self.tokenizer)
+        return scores, model_results
+
     def _run_eval(self, model, eval_strategy: EvalStrategy) -> Dict[str, float]:
         """Run vLLM inference and score responses using the given eval strategy."""
         scores, _ = self._run_eval_with_results(model, eval_strategy)
