@@ -14,12 +14,13 @@ def _build_base_cmd(argv):
     return [a for a in argv if a != "--run-all"]
 
 
-def _submit_sbatch_worker(sbatch_script, worker_args):
+def _submit_sbatch_worker(sbatch_script, worker_args, sbatch_flags=()):
     """Submit an sbatch worker job, return the Slurm job ID as a string.
 
-    Exits the orchestrator on sbatch error or unparseable output.
+    sbatch_flags go between 'sbatch' and the script path. Exits the
+    orchestrator on sbatch error or unparseable output.
     """
-    cmd = ["sbatch", sbatch_script, *worker_args]
+    cmd = ["sbatch", *sbatch_flags, sbatch_script, *worker_args]
     print(f"[orchestrator] Submitting sbatch worker: {' '.join(cmd)}")
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
@@ -30,14 +31,20 @@ def _submit_sbatch_worker(sbatch_script, worker_args):
     return tokens[-1]
 
 
-def _dispatch_parallel_workers(parallel, base_cmd, pt_flag, metadata_files, sbatch_script):
+def _dispatch_parallel_workers(parallel, base_cmd, pt_flag, metadata_files,
+                                sbatch_script, args):
     """Submit parallel-1 sbatch workers for post-training.
 
-    No-op when parallel <= 1. Strips --parallel from worker args so workers
-    don't recursively dispatch.
+    Injects --gres=gpu:N when pt_method=='grpo' and grpo_num_gpus>1. No-op when
+    parallel <= 1. Strips --parallel from worker args so workers don't recursively
+    dispatch.
     """
     if parallel <= 1:
         return
+
+    sbatch_flags = []
+    if args.post_training_method == "grpo" and args.grpo_num_gpus > 1:
+        sbatch_flags.append(f"--gres=gpu:{args.grpo_num_gpus}")
 
     worker_argv = []
     skip_next = False
@@ -55,7 +62,8 @@ def _dispatch_parallel_workers(parallel, base_cmd, pt_flag, metadata_files, sbat
             worker_argv += ["--metadata-file", mf]
 
     for i in range(parallel - 1):
-        job_id = _submit_sbatch_worker(sbatch_script, worker_argv)
+        job_id = _submit_sbatch_worker(sbatch_script, worker_argv,
+                                        sbatch_flags=sbatch_flags)
         print(f"[orchestrator] Submitted worker {i+1}/{parallel-1}: job {job_id}")
 
 
@@ -105,6 +113,7 @@ def main():
         pt_flag=pt_flag,
         metadata_files=all_files,
         sbatch_script=args.sbatch_script,
+        args=args,
     )
     for metadata_file in all_files:
         if not Path(metadata_file).is_file():
