@@ -199,6 +199,7 @@ class PassAtKStoppingCallback(TrainerCallback):
                 "threshold_type": self.primary_eval.stopping_metric(),
                 "threshold_value": threshold,
             },
+            accelerator=self._accelerator,
         )
 
     def _save_adapter_if_needed(self, model, adapter_dir: str):
@@ -306,15 +307,16 @@ class PassAtKStoppingCallback(TrainerCallback):
 
     def _eval_and_log(self, model, eval_strategy, state, *, is_primary: bool):
         scores, raw_results = self._run_eval_with_results(model, eval_strategy)
-        log_eval_metrics(
-            eval_strategy=eval_strategy,
-            scores=scores,
-            raw_results=raw_results,
-            global_step=state.global_step,
-            step_offset=self._step_offset,
-            thresholds_remaining=self._decision_engine.target_thresholds,
-            is_primary=is_primary,
-        )
+        if self._is_rank_zero():
+            log_eval_metrics(
+                eval_strategy=eval_strategy,
+                scores=scores,
+                raw_results=raw_results,
+                global_step=state.global_step,
+                step_offset=self._step_offset,
+                thresholds_remaining=self._decision_engine.target_thresholds,
+                is_primary=is_primary,
+            )
         return scores
 
     def on_evaluate(self, args: TrainingArguments, state: TrainerState,
@@ -343,10 +345,12 @@ class PassAtKStoppingCallback(TrainerCallback):
             last_checkpoint_data_points=self._last_checkpoint_data_points,
         )
         for decision in decisions:
-            self._save_sweetspot_checkpoint(model, decision.label, state, args)
+            if self._is_rank_zero():
+                self._save_sweetspot_checkpoint(model, decision.label, state, args)
             if decision.advances_state:
                 self._last_checkpoint_data_points = data_points_seen
-            print(f"[PassAtKCallback] Saved checkpoint: {decision.label}")
+            if self._is_rank_zero():
+                print(f"[PassAtKCallback] Saved checkpoint: {decision.label}")
 
         self._last_eval_step = state.global_step
         return control

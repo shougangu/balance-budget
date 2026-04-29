@@ -250,3 +250,72 @@ def test_dispatch_single_gpu_when_world_size_1(monkeypatch):
 
     ddp_mock.assert_not_called()
     cb._runner.run.assert_called_once()
+
+
+def test_on_evaluate_gates_wandb_on_rank_nonzero(monkeypatch):
+    """Under DDP rank 1, log_eval_metrics and _save_sweetspot_checkpoint must NOT fire."""
+    cb = _make_callback(monkeypatch)
+    fake_llm = MagicMock()
+    fake_llm.chat.return_value = [SimpleNamespace(outputs=[SimpleNamespace(text="r")])
+                                  for _ in range(4)]
+    cb.set_trainer_vllm(fake_llm)
+    cb.metadata_path = "/tmp/dummy_metadata.json"
+
+    state = SimpleNamespace(global_step=10, log_history=[])
+    args = SimpleNamespace(
+        per_device_train_batch_size=8,
+        gradient_accumulation_steps=1,
+        world_size=2,
+        output_dir="/tmp",
+    )
+    control = SimpleNamespace(should_training_stop=False)
+
+    with patch("torch.distributed.is_initialized", return_value=True), \
+         patch("torch.distributed.get_rank", return_value=1), \
+         patch("torch.distributed.get_world_size", return_value=2), \
+         patch("torch.distributed.all_gather_object") as mock_gather, \
+         patch("tuning.training.passk.callback.log_eval_metrics") as mock_log, \
+         patch.object(cb, "_save_sweetspot_checkpoint") as mock_save:
+        def fake_gather(out_list, local):
+            for i in range(len(out_list)):
+                out_list[i] = local if i == 1 else [(j, ["r"]) for j in range(0, 8, 2)]
+        mock_gather.side_effect = fake_gather
+
+        cb.on_evaluate(args, state, control, model=MagicMock())
+
+    mock_log.assert_not_called()
+    mock_save.assert_not_called()
+
+
+def test_on_evaluate_runs_wandb_on_rank0(monkeypatch):
+    """Under DDP rank 0, log_eval_metrics fires (existing behavior)."""
+    cb = _make_callback(monkeypatch)
+    fake_llm = MagicMock()
+    fake_llm.chat.return_value = [SimpleNamespace(outputs=[SimpleNamespace(text="r")])
+                                  for _ in range(4)]
+    cb.set_trainer_vllm(fake_llm)
+    cb.metadata_path = "/tmp/dummy_metadata.json"
+
+    state = SimpleNamespace(global_step=10, log_history=[])
+    args = SimpleNamespace(
+        per_device_train_batch_size=8,
+        gradient_accumulation_steps=1,
+        world_size=2,
+        output_dir="/tmp",
+    )
+    control = SimpleNamespace(should_training_stop=False)
+
+    with patch("torch.distributed.is_initialized", return_value=True), \
+         patch("torch.distributed.get_rank", return_value=0), \
+         patch("torch.distributed.get_world_size", return_value=2), \
+         patch("torch.distributed.all_gather_object") as mock_gather, \
+         patch("tuning.training.passk.callback.log_eval_metrics") as mock_log, \
+         patch.object(cb, "_save_sweetspot_checkpoint"):
+        def fake_gather(out_list, local):
+            for i in range(len(out_list)):
+                out_list[i] = local if i == 0 else [(j, ["r"]) for j in range(1, 8, 2)]
+        mock_gather.side_effect = fake_gather
+
+        cb.on_evaluate(args, state, control, model=MagicMock())
+
+    assert mock_log.called
