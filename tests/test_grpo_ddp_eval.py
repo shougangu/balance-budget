@@ -91,3 +91,70 @@ def test_accelerator_can_be_assigned_directly(monkeypatch):
     fake_accelerator = SimpleNamespace(unwrap_model=lambda m: m)
     cb._accelerator = fake_accelerator
     assert cb._accelerator is fake_accelerator
+
+
+def test_save_sweetspot_unwraps_when_accelerator_provided(tmp_path, monkeypatch):
+    """With accelerator, save_pretrained is called on the unwrapped PEFT model (no unsloth merge)."""
+    from tuning.training.callback_utils import save_sweetspot_checkpoint
+
+    underlying = MagicMock(name="peft_model")
+    wrapped = MagicMock(name="ddp_model")
+    accelerator = SimpleNamespace(unwrap_model=MagicMock(return_value=underlying))
+    tokenizer = MagicMock()
+
+    state = SimpleNamespace(global_step=42, log_history=[])
+    args = SimpleNamespace(
+        per_device_train_batch_size=8,
+        gradient_accumulation_steps=1,
+        world_size=4,
+        output_dir=str(tmp_path),
+        to_dict=lambda: {"per_device_train_batch_size": 8},
+    )
+
+    save_sweetspot_checkpoint(
+        model=wrapped,
+        tokenizer=tokenizer,
+        model_name="qwen2-2B",
+        threshold_label="p@1-0.5",
+        state=state,
+        args=args,
+        metadata_path=str(tmp_path / "meta.jsonl"),
+        extra_metadata={"threshold_type": "pass_at_1", "threshold_value": 0.5},
+        accelerator=accelerator,
+    )
+
+    accelerator.unwrap_model.assert_called_once_with(wrapped)
+    underlying.save_pretrained.assert_called_once()
+    underlying.save_pretrained_merged.assert_not_called()
+    wrapped.save_pretrained.assert_not_called()
+
+
+def test_save_sweetspot_no_unwrap_when_accelerator_none(tmp_path):
+    """Without accelerator (SFT/DPO callers), legacy merged save is used."""
+    from tuning.training.callback_utils import save_sweetspot_checkpoint
+
+    model = MagicMock(name="unsloth_model")
+    tokenizer = MagicMock()
+
+    state = SimpleNamespace(global_step=10, log_history=[])
+    args = SimpleNamespace(
+        per_device_train_batch_size=8,
+        gradient_accumulation_steps=1,
+        world_size=1,
+        output_dir=str(tmp_path),
+        to_dict=lambda: {"per_device_train_batch_size": 8},
+    )
+
+    save_sweetspot_checkpoint(
+        model=model,
+        tokenizer=tokenizer,
+        model_name="qwen2-2B",
+        threshold_label="p@1-0.5",
+        state=state,
+        args=args,
+        metadata_path=str(tmp_path / "meta.jsonl"),
+        extra_metadata={"threshold_type": "pass_at_1", "threshold_value": 0.5},
+    )
+
+    model.save_pretrained_merged.assert_called_once()
+    model.save_pretrained.assert_not_called()

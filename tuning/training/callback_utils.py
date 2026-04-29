@@ -59,6 +59,7 @@ def save_sweetspot_checkpoint(
     args: TrainingArguments,
     metadata_path: str,
     extra_metadata: dict = None,
+    accelerator=None,
 ) -> str:
     """Save a sweetspot checkpoint with metadata.
 
@@ -71,6 +72,7 @@ def save_sweetspot_checkpoint(
         args: Current TrainingArguments.
         metadata_path: Path to append JSONL metadata to.
         extra_metadata: Additional metadata keys to include.
+        accelerator: If provided, unwrap the model and use PEFT save_pretrained instead of unsloth's merged_16bit save.
 
     Returns:
         Path to the saved checkpoint directory.
@@ -81,7 +83,13 @@ def save_sweetspot_checkpoint(
     checkpoint_path = os.path.join(MODELS_DIR, checkpoint_name)
 
     print(f"[Callback] Saving sweetspot checkpoint to {checkpoint_path}")
-    model.save_pretrained_merged(checkpoint_path, tokenizer, save_method="merged_16bit")
+    os.makedirs(checkpoint_path, exist_ok=True)
+    if accelerator is not None:
+        target = accelerator.unwrap_model(model)
+        target.save_pretrained(checkpoint_path)
+        tokenizer.save_pretrained(checkpoint_path)
+    else:
+        model.save_pretrained_merged(checkpoint_path, tokenizer, save_method="merged_16bit")
 
     with open(f"{checkpoint_path}/training_config.json", "w") as f:
         json.dump(args.to_dict(), f, indent=4)
