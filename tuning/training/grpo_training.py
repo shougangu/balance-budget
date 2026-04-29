@@ -85,9 +85,11 @@ def train_model_grpo(
         trainer.add_callback(CompletionsIntervalCallback(trainer, interval=32))
 
     for cb in callbacks or []:
-        if isinstance(cb, PassAtKStoppingCallback) and hasattr(trainer, 'vllm_generation'):
-            cb.set_trainer_vllm(trainer.vllm_generation.llm)
-            print(f"[GRPO] PassAtK callback will reuse GRPOTrainer's vLLM engine")
+        if isinstance(cb, PassAtKStoppingCallback):
+            if hasattr(trainer, 'vllm_generation'):
+                cb.set_trainer_vllm(trainer.vllm_generation.llm)
+                print(f"[GRPO] PassAtK callback will reuse GRPOTrainer's vLLM engine")
+            cb._accelerator = trainer.accelerator
 
     # Swap the default WandbCallback for one that bridges train/global_step across runs.
     if initial_global_step:
