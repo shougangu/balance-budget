@@ -128,7 +128,7 @@ def _parse_args(argv=None):
                        help="Number of concurrent post-training workers.")
     stage.add_argument("--short", action="store_true", default=False,
                        help="Use the shorter sbatch script for better queue times.")
-
+    parser.add_argument("--sft-dataset", default="gsm8k", choices=["gsm8k", "tuluif", "openmath"])
     parser.add_argument("--dataset", default="gsm8k",
                         choices=["tuluif", "gsm8k", "openmath", "ifrlvr",
                                  "simplerl", "simplerl-easy", "simplerl-medium",

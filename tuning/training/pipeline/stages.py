@@ -39,7 +39,9 @@ def run_sft(args):
 
     sft_size = args.sft_data_size if args.sft_data_size is not None else args.train_size
     dataset_config = DatasetConfig(
-        dataset=args.dataset, dataset_type="sft", train_size=sft_size,
+        dataset= args.sft_dataset if args.sft_dataset else args.dataset, 
+        dataset_type="sft", 
+        train_size=sft_size,
     )
     run_config = SFTRunConfig(
         dataset_config=dataset_config,
