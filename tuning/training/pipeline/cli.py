@@ -136,6 +136,7 @@ def _parse_args(argv=None):
     parser.add_argument("--train-size", type=int, default=10000)
     parser.add_argument("--sft-data-size", type=int, default=None)
     parser.add_argument("--dpo-data-size", type=int, default=None)
+    parser.add_argument("--grpo-data-size", type=int, default=None)
     parser.add_argument("--task-name", default="gsm8k",
                         choices=["ifeval", "gsm8k", "math500", "ifbench"])
     parser.add_argument("--monitor-evals", nargs="*", default=[],
@@ -175,7 +176,6 @@ def _parse_args(argv=None):
                         choices=["grpo", "dr_grpo", "dapo", "bnpo"])
     parser.add_argument("--grpo-scale-rewards", default="group",
                         choices=["group", "batch", "false"])
-    parser.add_argument("--grpo-data-size", type=int, default=None)
     parser.add_argument("--simple-template", action=argparse.BooleanOptionalAction,
                         default=False)
 

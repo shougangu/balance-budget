@@ -179,8 +179,9 @@ cython_debug/
 tuning/analysis/gspread.json
 *.out
 unsloth_compiled_cache
-.claude/*
+.claude/
 CLAUDE.md
+Balance/
 .worktrees/
 
 .gemini/

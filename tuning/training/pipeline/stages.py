@@ -129,8 +129,7 @@ class _PostTrainingConfigs:
 def _resolve_remaining_budget(args, method: str, checkpoint) -> int:
     """Return the data budget for the post-training stage."""
     fixed_size = getattr(args, f"{method}_data_size")
-    fixed_split = args.sft_data_size is not None and fixed_size is not None
-    if fixed_split:
+    if fixed_size:
         return fixed_size
     return args.train_size - checkpoint["data_points_seen"]
 
