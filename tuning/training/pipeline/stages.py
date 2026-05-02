@@ -4,7 +4,7 @@
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal
+from typing import Literal
 
 import wandb
 
@@ -117,12 +117,12 @@ def _build_reward_funcs(args):
 
 @dataclass
 class _PostTrainingConfigs:
-    dataset_config: Any
-    sft_run_config: Any
-    run_config: Any
-    lora_config: Any
-    model_load_config: Any
-    training_args: Any
+    dataset_config: DatasetConfig
+    sft_run_config: SFTRunConfig
+    run_config: PTRunConfig
+    lora_config: LoraConfig
+    model_load_config: ModelLoadConfig
+    training_args: DPOTrainingConfig | GRPOTrainingConfig
     gpu_util: float
 
 
