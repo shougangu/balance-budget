@@ -1,12 +1,26 @@
 # ABOUTME: Orchestrator: parses args, dispatches sbatch workers, runs main worker loop.
 # ABOUTME: Imports stages lazily inside worker-mode branches to preserve the unsloth gate.
 
+import os
 import subprocess
 import sys
 from pathlib import Path
 
 from tuning.training.pipeline.checkpoint_metadata import parse_metadata_from_output
 from tuning.training.pipeline.cli import _parse_args, _resolve_simplerl_dataset
+
+# torchrun exports these into worker env; propagating them through sbatch
+# leaks the parent's rendezvous config to the child and defeats the per-job
+# MASTER_PORT default in unified_early_pipeline.sh.
+_TORCHRUN_ENV_VARS = (
+    "MASTER_ADDR", "MASTER_PORT",
+    "RANK", "LOCAL_RANK", "WORLD_SIZE", "LOCAL_WORLD_SIZE",
+    "GROUP_RANK", "GROUP_WORLD_SIZE",
+    "ROLE_RANK", "ROLE_WORLD_SIZE", "ROLE_NAME",
+    "TORCHELASTIC_USE_AGENT_STORE", "TORCHELASTIC_RUN_ID",
+    "TORCHELASTIC_RESTART_COUNT", "TORCHELASTIC_MAX_RESTARTS",
+    "TORCH_NCCL_ASYNC_ERROR_HANDLING",
+)
 
 
 def _build_base_cmd(argv):
@@ -22,7 +36,8 @@ def _submit_sbatch_worker(sbatch_script, worker_args, sbatch_flags=()):
     """
     cmd = ["sbatch", *sbatch_flags, sbatch_script, *worker_args]
     print(f"[orchestrator] Submitting sbatch worker: {' '.join(cmd)}")
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    child_env = {k: v for k, v in os.environ.items() if k not in _TORCHRUN_ENV_VARS}
+    result = subprocess.run(cmd, capture_output=True, text=True, env=child_env)
     if result.returncode != 0:
         sys.exit(f"sbatch failed (code {result.returncode}): {result.stderr.strip()}")
     tokens = result.stdout.strip().split()
@@ -120,9 +135,17 @@ def main():
             print(f"Warning: metadata file {metadata_file} does not exist, skipping")
             continue
         while True:
-            pt_cmd = [sys.executable] + base_cmd + [
-                pt_flag, "--metadata-file", metadata_file,
-            ]
+            if pt_method == "grpo" and args.grpo_num_gpus > 1:
+                master_port = 20000 + (os.getpid() % 20000)
+                pt_cmd = (
+                    ["torchrun", f"--nproc_per_node={args.grpo_num_gpus}",
+                     f"--master-port={master_port}"]
+                    + base_cmd + [pt_flag, "--metadata-file", metadata_file]
+                )
+            else:
+                pt_cmd = [sys.executable] + base_cmd + [
+                    pt_flag, "--metadata-file", metadata_file,
+                ]
             print(f"[orchestrator] Running {pt_method.upper()}: {' '.join(pt_cmd)}")
             result = subprocess.run(pt_cmd)
             if result.returncode == 42:
