@@ -1,5 +1,5 @@
-# ABOUTME: Tests that PassAtK and Perplexity callbacks inject train/total_global_step
-# ABOUTME: into their direct wandb.log dicts when initial_global_step is set.
+# ABOUTME: Tests that OffsetAwareWandbCallback, PassAtK, and Perplexity callbacks
+# ABOUTME: inject train/total_global_step into their wandb.log dicts when initial_global_step is set.
 
 import sys
 from types import SimpleNamespace
@@ -14,6 +14,7 @@ sys.modules.setdefault("unsloth", MagicMock())
 
 from transformers import TrainerControl, TrainerState
 
+from tuning.training.callback_utils import OffsetAwareWandbCallback
 from tuning.training.config_training import PassAtKConfig, PerplexityConfig
 from tuning.training.passk_callback import PassAtKStoppingCallback
 from tuning.training.perplexity_callback import PerplexityStoppingCallback
@@ -225,3 +226,47 @@ class TestPerplexityStepBridging:
         for call in mock_log.call_args_list:
             payload = call.args[0]
             assert payload["train/total_global_step"] == 5
+
+
+# ---------------------------------------------------------------------------
+# OffsetAwareWandbCallback step bridging
+# ---------------------------------------------------------------------------
+
+
+def _fire_on_log(cb, global_step, logs=None):
+    """Helper: invoke on_log with a given global_step and logs dict."""
+    state = TrainerState()
+    state.global_step = global_step
+    args = SimpleNamespace()
+    control = TrainerControl()
+    captured_logs = logs if logs is not None else {"train/loss": 0.5}
+    with patch.object(type(cb).__bases__[0], "on_log"):  # silence WandbCallback
+        cb.on_log(args, state, control, logs=captured_logs)
+    return captured_logs
+
+
+class TestOffsetAwareWandbCallback:
+    def test_injects_total_global_step_with_offset(self):
+        cb = OffsetAwareWandbCallback(initial_global_step=1000)
+        logs = _fire_on_log(cb, global_step=50)
+        assert logs["train/total_global_step"] == 1050
+
+    def test_total_global_step_tracks_changing_global_step(self):
+        cb = OffsetAwareWandbCallback(initial_global_step=500)
+        for step in [0, 10, 100, 200]:
+            logs = _fire_on_log(cb, global_step=step)
+            assert logs["train/total_global_step"] == step + 500
+
+    def test_no_injection_when_offset_is_zero(self):
+        cb = OffsetAwareWandbCallback(initial_global_step=0)
+        logs = _fire_on_log(cb, global_step=50)
+        assert "train/total_global_step" not in logs
+
+    def test_no_crash_when_logs_is_none(self):
+        cb = OffsetAwareWandbCallback(initial_global_step=100)
+        state = TrainerState()
+        state.global_step = 5
+        args = SimpleNamespace()
+        control = TrainerControl()
+        with patch.object(type(cb).__bases__[0], "on_log"):
+            cb.on_log(args, state, control, logs=None)  # must not raise

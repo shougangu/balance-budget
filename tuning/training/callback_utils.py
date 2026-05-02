@@ -9,21 +9,13 @@ from tuning.config import MODELS_DIR
 class OffsetAwareWandbCallback(WandbCallback):
     """WandbCallback that bridges train/global_step across chained runs.
 
-    Defines train/total_global_step as the W&B step metric *after* the parent
-    setup() runs, so wandb's last-write-wins resolution lands on our definition.
-    Injects train/total_global_step into every log dict before super().on_log
-    uploads it to wandb.
+    Injects train/total_global_step (= global_step + offset) into every log dict.
+    Use train/total_global_step as the x-axis in W&B to compare chained runs.
     """
 
     def __init__(self, initial_global_step=0):
         super().__init__()
         self._offset = int(initial_global_step or 0)
-
-    def setup(self, args, state, model, **kwargs):
-        super().setup(args, state, model, **kwargs)
-        if self._offset and self._wandb is not None and getattr(self._wandb, "define_metric", None):
-            self._wandb.define_metric("train/total_global_step")
-            self._wandb.define_metric("*", step_metric="train/total_global_step", step_sync=True)
 
     def on_log(self, args, state, control, model=None, logs=None, **kwargs):
         if self._offset and logs is not None:
@@ -32,11 +24,43 @@ class OffsetAwareWandbCallback(WandbCallback):
 
 
 class CompletionsIntervalCallback(TrainerCallback):
-    """Gates trainer.log_completions to fire only every N training steps."""
+    """Gates trainer.log_completions to fire only every N steps; accumulates all rows into one growing table."""
 
     def __init__(self, trainer, interval):
         self.trainer = trainer
         self.interval = interval
+        self._accumulated_df = None
+        self._original_wandb_log = None
+
+    def on_train_begin(self, args, state, control, **kwargs):
+        try:
+            import wandb
+            import pandas as pd
+        except ImportError:
+            return
+        if wandb.run is None:
+            return
+
+        self._original_wandb_log = wandb.log
+
+        def patched_log(data, *args, **kwargs):
+            if isinstance(data, dict) and "completions" in data:
+                current_table = data["completions"]
+                current_df = pd.DataFrame(current_table.data, columns=current_table.columns)
+                self._accumulated_df = (
+                    current_df if self._accumulated_df is None
+                    else pd.concat([self._accumulated_df, current_df], ignore_index=True)
+                )
+                data = {**data, "completions": wandb.Table(dataframe=self._accumulated_df)}
+            return self._original_wandb_log(data, *args, **kwargs)
+
+        wandb.log = patched_log
+
+    def on_train_end(self, args, state, control, **kwargs):
+        if self._original_wandb_log is not None:
+            import wandb
+            wandb.log = self._original_wandb_log
+            self._original_wandb_log = None
 
     def on_log(self, args, state, control, **kwargs):
         self.trainer.log_completions = (state.global_step % self.interval == 0)
