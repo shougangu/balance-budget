@@ -115,6 +115,8 @@ class GRPOTrainingConfig(TrainingArgumentsConfig):
     eval_steps: float = 640
     gradient_accumulation_steps: int = 1
     log_completions: bool = True
+    save_strategy: str = "steps"
+    save_steps: int = 100
 
     def to_hf_args(self, output_dir: str) -> dict:
         """Return kwargs for GRPOConfig constructor."""
@@ -133,7 +135,6 @@ class GRPOTrainingConfig(TrainingArgumentsConfig):
         d["vllm_gpu_memory_utilization"] = self.vllm_gpu_memory_utilization
         d["log_completions"] = self.log_completions
         d.pop("eval_accumulation_steps", None)
-        d["save_strategy"] = "no"
         return d
 
 
