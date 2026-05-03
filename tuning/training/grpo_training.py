@@ -99,7 +99,9 @@ def train_model_grpo(
         trainer.add_callback(OffsetAwareWandbCallback(initial_global_step))
 
     try:
-        trainer_stats = trainer.train()
+        trainer_stats = trainer.train(
+            resume_from_checkpoint=training_args.resume_from_checkpoint,
+        )
     except KeyboardInterrupt:
         if wandb.run:
             wandb.run.tags = list(wandb.run.tags) + ["interrupted"]

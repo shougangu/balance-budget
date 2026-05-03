@@ -335,6 +335,14 @@ class TestClaimNextCheckpoint:
         assert third["checkpoint_path"] == "/models/cp3"
         assert fourth is None
 
+    def test_continue_flag_does_not_override_claim_lock(self, tmp_path):
+        """A claimed row stays unclaimable even when continue=true: continue is a
+        worker-side resume hint, not a claim-bypass."""
+        f = tmp_path / "meta.jsonl"
+        _write_jsonl(f, [{**PASSK_ROW, "claimed": True, "continue": True}, PPL_ROW])
+        result = claim_next_checkpoint(str(f))
+        assert result["checkpoint_path"] == "/models/cp2"
+
 
 class TestWorkerExitCode:
     def test_run_dpo_exits_42_when_nothing_to_claim(self, tmp_path):

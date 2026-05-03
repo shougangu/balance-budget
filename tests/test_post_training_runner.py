@@ -114,3 +114,29 @@ class TestRunPostTrainingGrpo:
         assert captured["checkpoint_path"] == CHECKPOINT_ROW["checkpoint_path"]
         rows = [json.loads(line) for line in open(f)]
         assert rows[0]["completed"] is True
+
+
+class TestBuildPostTrainingConfigsContinueFlag:
+    """_build_post_training_configs reads checkpoint['continue'] and writes it to
+    training_args.resume_from_checkpoint for both DPO and GRPO. Absent ⇒ False."""
+
+    def _build(self, method, checkpoint):
+        from tuning.training.pipeline.stages import _build_post_training_configs
+        args = _make_args("/tmp/unused")
+        configs = _build_post_training_configs(args, method, checkpoint, train_size=512)
+        return configs.training_args.resume_from_checkpoint
+
+    def test_grpo_continue_true(self):
+        assert self._build("grpo", {**CHECKPOINT_ROW, "continue": True}) is True
+
+    def test_grpo_continue_false(self):
+        assert self._build("grpo", {**CHECKPOINT_ROW, "continue": False}) is False
+
+    def test_grpo_continue_absent_defaults_false(self):
+        assert self._build("grpo", dict(CHECKPOINT_ROW)) is False
+
+    def test_dpo_continue_true(self):
+        assert self._build("dpo", {**CHECKPOINT_ROW, "continue": True}) is True
+
+    def test_dpo_continue_absent_defaults_false(self):
+        assert self._build("dpo", dict(CHECKPOINT_ROW)) is False

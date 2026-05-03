@@ -60,7 +60,7 @@ class SimpleRLRLVR(HFDataset):
 
     def format_dataset(self):
         train_rows = self._get_rows(self._dataset["train"])
-        test_rows = self._get_rows(self._dataset["test"])
+        test_rows = self._get_rows(self._dataset["test"])[:200]
         self._dataset = DatasetDict({
             "train": Dataset.from_list(train_rows),
             "test": Dataset.from_list(test_rows),

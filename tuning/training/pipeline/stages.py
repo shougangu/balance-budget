@@ -203,6 +203,8 @@ def _build_post_training_configs(
         training_args.scale_rewards = False if scale_rewards == "false" else scale_rewards
         training_args.vllm_gpu_memory_utilization = gpu_util
 
+    training_args.resume_from_checkpoint = bool(checkpoint.get("continue", False))
+
     return _PostTrainingConfigs(
         dataset_config=dataset_config,
         sft_run_config=sft_run_config,

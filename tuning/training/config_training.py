@@ -65,6 +65,7 @@ class TrainingArgumentsConfig(BaseModel):
     eval_accumulation_steps: int = 1
     # prediction_loss_only: bool = True
     # eval_do_concat_batches: bool = False
+    resume_from_checkpoint: bool = False  # forwarded to trainer.train(); not an HF args field
 
     def to_hf_args(self, output_dir: str) -> dict:
         """Return kwargs for TrainingArguments/DPOConfig constructor."""
@@ -72,6 +73,7 @@ class TrainingArgumentsConfig(BaseModel):
         bf16_supported = torch.cuda.is_available() and torch.cuda.is_bf16_supported()
         d = self.model_dump()
         d.pop("beta", None)  # beta is DPO-specific, not a TrainingArguments field
+        d.pop("resume_from_checkpoint", None)  # consumed by trainer.train(), not its constructor
         d["output_dir"] = output_dir
         d["fp16"] = not bf16_supported
         d["bf16"] = bf16_supported
@@ -111,7 +113,8 @@ class GRPOTrainingConfig(TrainingArgumentsConfig):
     learning_rate: float = 1e-5
     num_train_epochs: int = 1
     per_device_train_batch_size: int = 8
-    per_device_eval_batch_size: int = 64
+    per_device_eval_batch_size: int = 16
+    
     eval_steps: float = 640
     gradient_accumulation_steps: int = 1
     log_completions: bool = True
