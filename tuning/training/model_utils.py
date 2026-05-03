@@ -2,6 +2,7 @@
 # ABOUTME: Supports both Unsloth-optimized and standard HuggingFace/PEFT loading.
 
 import json
+import os
 import torch
 
 
@@ -73,11 +74,17 @@ def load_model_with_lora(model_path, model_name, model_load_config, lora_config,
         if dtype is None:
             dtype = torch.bfloat16 if (torch.cuda.is_available() and torch.cuda.is_bf16_supported()) else torch.float16
 
+        # In distributed mode (LOCAL_RANK set by torchrun), device_map="auto"
+        # spreads the model across all GPUs on the node, conflicting with DDP.
+        # Let Accelerate handle placement instead.
+        local_rank = int(os.environ.get("LOCAL_RANK", -1))
+        device_map = None if local_rank >= 0 else "auto"
+
         model = AutoModelForCausalLM.from_pretrained(
             model_path,
             quantization_config=quantization_config,
             torch_dtype=dtype,
-            device_map="auto",
+            device_map=device_map,
         )
 
         if lora_config.use_gradient_checkpointing:

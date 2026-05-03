@@ -5,6 +5,8 @@ from datasets import Dataset, load_from_disk, DatasetDict
 from tuning.config import DATASETS_DIR
 from pathlib import Path
 
+import torch.distributed as dist
+
 def get_train_dataset(run_config: Union[PTRunConfig, SFTRunConfig]) -> DatasetDict:
 
     print(f"Getting train dataset for run config: {run_config}")
@@ -46,21 +48,35 @@ def get_train_dataset(run_config: Union[PTRunConfig, SFTRunConfig]) -> DatasetDi
 
         return full_dataset
 
-    train_size = run_config.dataset_config.train_size
-    
-    full_dataset_path = f"{DATASETS_DIR}/{dataset_stub}"
-    print(f"Loading dataset from {full_dataset_path}")
-    full_dataset = load_from_disk(full_dataset_path)
-    print(f"Full dataset: {full_dataset}")
+    # Cache miss: under DDP, only rank 0 builds and writes; other ranks wait at
+    # the barrier and then load_from_disk the freshly written cache. Concurrent
+    # save_to_disk on the same path corrupts arrow shards silently.
+    is_dist = dist.is_initialized() and dist.get_world_size() > 1
+    rank = dist.get_rank() if is_dist else 0
 
-    unique_column = "prompt" if "prompt" in full_dataset["train"].column_names else None
-    sampled_dataset = get_random_train_subset(full_dataset, train_size, unique_column=None)
-    print(f"Sampled dataset: {sampled_dataset}")
-    if len(sampled_dataset['train']) > 0:
-        print(f"Example training row: {sampled_dataset['train'][0]}")
-    print(f"Example evaluation row: {sampled_dataset['test'][0]}")
+    sampled_dataset = None
+    if rank == 0:
+        train_size = run_config.dataset_config.train_size
 
-    sampled_dataset.save_to_disk(f"{DATASETS_DIR}/{dataset_stub}-{train_size}")
+        full_dataset_path = f"{DATASETS_DIR}/{dataset_stub}"
+        print(f"Loading dataset from {full_dataset_path}")
+        full_dataset = load_from_disk(full_dataset_path)
+        print(f"Full dataset: {full_dataset}")
+
+        unique_column = "prompt" if "prompt" in full_dataset["train"].column_names else None
+        sampled_dataset = get_random_train_subset(full_dataset, train_size, unique_column=None)
+        print(f"Sampled dataset: {sampled_dataset}")
+        if len(sampled_dataset['train']) > 0:
+            print(f"Example training row: {sampled_dataset['train'][0]}")
+        print(f"Example evaluation row: {sampled_dataset['test'][0]}")
+
+        sampled_dataset.save_to_disk(check_path)
+
+    if is_dist:
+        dist.barrier()
+
+    if rank != 0:
+        sampled_dataset = load_from_disk(check_path)
 
     return sampled_dataset
 

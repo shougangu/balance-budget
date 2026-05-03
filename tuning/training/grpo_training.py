@@ -110,6 +110,9 @@ def train_model_grpo(
             wandb.run.tags = list(wandb.run.tags) + ["oom"]
         raise
 
-    save_trained_model(model, tokenizer, trainer, run_config.output_dir)
+    if trainer.accelerator.is_main_process:
+        unwrapped = trainer.accelerator.unwrap_model(model)
+        save_trained_model(unwrapped, tokenizer, trainer, run_config.output_dir)
+    trainer.accelerator.wait_for_everyone()
 
     return model, tokenizer, trainer, callbacks

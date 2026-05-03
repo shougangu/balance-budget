@@ -1,11 +1,15 @@
 # ABOUTME: Stage runners for SFT and post-training (DPO/GRPO). run_post_training is the
 # ABOUTME: shared helper; run_dpo and run_grpo are thin wrappers over it.
 
+import contextlib
+import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+import torch
+import torch.distributed as dist
 import wandb
 
 import tuning.config
@@ -259,7 +263,25 @@ def _train_dispatch(method, configs, passk_config, primary_eval,
 def run_post_training(args, method: Literal["dpo", "grpo"]):
     """Claim → check budget → build configs → wandb run → train → mark completed."""
     metadata_file = args.metadata_file[0]
-    checkpoint = claim_next_checkpoint(metadata_file)
+
+    # Bring up the process group early so claim/broadcast/barrier work before
+    # the trainer is constructed. HF Accelerator detects an existing group and
+    # reuses it.
+    if "LOCAL_RANK" in os.environ and not dist.is_initialized():
+        dist.init_process_group(backend="nccl")
+        torch.cuda.set_device(int(os.environ["LOCAL_RANK"]))
+    is_dist = dist.is_initialized() and dist.get_world_size() > 1
+    rank = dist.get_rank() if is_dist else 0
+
+    if rank == 0:
+        checkpoint = claim_next_checkpoint(metadata_file)
+    else:
+        checkpoint = None
+    if is_dist:
+        payload = [checkpoint]
+        dist.broadcast_object_list(payload, src=0)
+        checkpoint = payload[0]
+
     if checkpoint is None:
         print("No checkpoints available to claim, nothing to do.")
         sys.exit(42)
@@ -267,7 +289,10 @@ def run_post_training(args, method: Literal["dpo", "grpo"]):
     train_size = _resolve_remaining_budget(args, method, checkpoint)
     if train_size <= 0:
         print(f"Skipping {checkpoint['checkpoint_path']}: no data budget remaining")
-        mark_completed(metadata_file, checkpoint["checkpoint_path"])
+        if rank == 0:
+            mark_completed(metadata_file, checkpoint["checkpoint_path"])
+        if is_dist:
+            dist.barrier()
         return
 
     _init_seeds(args)
@@ -282,20 +307,27 @@ def run_post_training(args, method: Literal["dpo", "grpo"]):
 
     _train_dispatch._args = args
     try:
-        with wandb.init(
-            name=configs.run_config.model_name,
-            project=args.wandb_project,
-            job_type=method, tags=tags,
-            config={"stage": method, "seed": args.seed,
-                    "eval_seed": tuning.config.get_eval_seed()},
-            settings=wandb.Settings(init_timeout=300),
-        ):
+        if rank == 0:
+            wandb_ctx = wandb.init(
+                name=configs.run_config.model_name,
+                project=args.wandb_project,
+                job_type=method, tags=tags,
+                config={"stage": method, "seed": args.seed,
+                        "eval_seed": tuning.config.get_eval_seed()},
+                settings=wandb.Settings(init_timeout=300),
+            )
+        else:
+            wandb_ctx = contextlib.nullcontext()
+        with wandb_ctx:
             _train_dispatch(method, configs, passk_config, primary_eval,
                             monitor_evals, ppl_config, checkpoint)
     finally:
         del _train_dispatch._args
 
-    mark_completed(metadata_file, checkpoint["checkpoint_path"])
+    if rank == 0:
+        mark_completed(metadata_file, checkpoint["checkpoint_path"])
+    if is_dist:
+        dist.barrier()
 
 
 def run_dpo(args):
