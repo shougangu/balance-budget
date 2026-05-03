@@ -111,7 +111,7 @@ class GRPOTrainingConfig(TrainingArgumentsConfig):
     learning_rate: float = 1e-5
     num_train_epochs: int = 1
     per_device_train_batch_size: int = 8
-    per_device_eval_batch_size: int = 8
+    per_device_eval_batch_size: int = 64
     eval_steps: float = 640
     gradient_accumulation_steps: int = 1
     log_completions: bool = True
