@@ -5,6 +5,13 @@ from datasets import Dataset
 from tuning.data.hf_dataset import HFDataset
 from tuning.data.config import SYSTEM_MESSAGE_INSTRUCTION_FOLLOWING
 
+# Prompts above this character count are dropped from the dataset.
+# At ~4 chars/token this is a ~1024-token proxy for user content.
+# p99 of the raw dataset is 6,614 chars; p99.9 is 35,337; max is 391k.
+# Prompts exceeding the limit cause [B, H, S, S] SDPA score OOM at training time
+# because truncation would break the constraint structure and corrupt the reward signal.
+MAX_PROMPT_CHARS = 4096
+
 
 class IfrlvrRLVR(HFDataset):
     def __init__(self):
@@ -30,6 +37,8 @@ class IfrlvrRLVR(HFDataset):
         for row in dataset:
             prompt_text = row["messages"][0]["content"]
             if prompt_text in seen:
+                continue
+            if len(prompt_text) > MAX_PROMPT_CHARS:
                 continue
             seen.add(prompt_text)
             rows.append({

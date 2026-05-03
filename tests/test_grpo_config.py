@@ -53,9 +53,16 @@ def test_grpo_config_to_hf_args():
     assert d["epsilon_high"] == 0.28
     assert d["loss_type"] == "dapo"
     assert d["scale_rewards"] == "group"
-    assert d["save_strategy"] == "no"
+    assert d["save_strategy"] == "steps"
     # Should not contain fields that are not GRPOConfig params
     assert "eval_accumulation_steps" not in d
+
+
+def test_grpo_config_crash_recovery_defaults():
+    config = GRPOTrainingConfig()
+    d = config.to_hf_args(output_dir="/tmp/test")
+    assert d["save_strategy"] == "steps", "GRPO should save periodically for crash recovery"
+    assert d["save_steps"] > 4, "GRPO save_steps should be larger than the SFT default"
 
 
 def test_pt_run_config_grpo_naming():
