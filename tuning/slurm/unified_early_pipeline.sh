@@ -32,16 +32,17 @@ scontrol update JobId="$SLURM_JOB_ID" JobName="$WANDB_PROJECT"
 
 exec > "${SLURM_JOB_ID}_${WANDB_PROJECT}.out" 2>&1
 
-# GRPO worker mode launches under torchrun for DDP across all node GPUs.
+# GRPO worker mode launches under torchrun for DDP across all node GPUs. 
+# Occurs when --run-grpo is passed without --run-all. (if --run-all is passed, then torchrun is done via orchestrator.py)
 # Other modes (orchestrator, --run-sft, --run-dpo) use plain python.
-IS_GRPO_WORKER=0
-for _arg in "$@"; do
-    if [[ "$_arg" == "--run-grpo" ]]; then
-        IS_GRPO_WORKER=1
-        break
-    fi
+HAS_RUN_GRPO=0; HAS_RUN_ALL=0                                                                                                                                             
+for _arg in "$@"; do                                                                                                                                                    
+    [[ "$_arg" == "--run-grpo" ]] && HAS_RUN_GRPO=1                                                                                                                       
+    [[ "$_arg" == "--run-all"  ]] && HAS_RUN_ALL=1
 done
-
+IS_GRPO_WORKER=0                                                                                                                                                        
+[[ "$HAS_RUN_GRPO" == "1" && "$HAS_RUN_ALL" == "0" ]] && IS_GRPO_WORKER=1         
+                                                                                        
 NPROC="${SLURM_GPUS_ON_NODE:-1}"
 
 
