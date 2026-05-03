@@ -18,8 +18,8 @@ class OffsetAwareWandbCallback(WandbCallback):
         self._offset = int(initial_global_step or 0)
 
     def on_log(self, args, state, control, model=None, logs=None, **kwargs):
-        if self._offset and logs is not None:
-            logs["train/total_global_step"] = state.global_step + self._offset
+        if logs is not None:
+            logs["total_global_step"] = state.global_step + self._offset
         return super().on_log(args, state, control, model=model, logs=logs, **kwargs)
 
 
