@@ -46,11 +46,11 @@ class TrainingArgumentsConfig(BaseModel):
     gradient_accumulation_steps: int = EFFECTIVE_BATCH_SIZE // per_device_train_batch_size # one opt step uses effective_batch_size data
     per_device_eval_batch_size: int = 2
     eval_strategy: str = "steps"
-    eval_steps: float = 4
+    eval_steps: float = 64
     logging_steps: int = 1
     do_eval: bool = True
-    warmup_ratio: int = 0.1
-    num_train_epochs: int = 2
+    warmup_ratio: int = 0.0
+    num_train_epochs: int = 1
     learning_rate: float = 5e-5
     optim: str = "adamw_8bit"
     weight_decay: float = 0.01
@@ -85,6 +85,9 @@ class DPOTrainingConfig(TrainingArgumentsConfig):
     beta: float = 0.1 # set to 1, previously
     learning_rate: float = 5e-6
     num_train_epochs: int = 3
+    per_device_train_batch_size: int = 4
+    gradient_accumulation_steps: int = 4
+    eval_steps: float = 256
     per_device_eval_batch_size: int = 2
     dataset_num_proc: int = 4
 
@@ -99,7 +102,6 @@ class DPOTrainingConfig(TrainingArgumentsConfig):
 
 class GRPOTrainingConfig(TrainingArgumentsConfig):
     num_generations: int = 8
-    max_completion_length: int = 1024
     # max_prompt_length: int = 512
     beta: float = 0.0
     temperature: float = 1.0
@@ -112,11 +114,11 @@ class GRPOTrainingConfig(TrainingArgumentsConfig):
     vllm_gpu_memory_utilization: float = 0.65 # 0.7 is perfect for Q2 and L1
     learning_rate: float = 1e-5
     num_train_epochs: int = 1
-    per_device_train_batch_size: int = 8
+    per_device_train_batch_size: int = 4
     per_device_eval_batch_size: int = 8
-    
-    eval_steps: float = 640
-    gradient_accumulation_steps: int = 1
+    max_completion_length: int = 2048
+    eval_steps: float = 64
+    gradient_accumulation_steps: int = 32
     log_completions: bool = True
     save_strategy: str = "steps"
     save_steps: int = 100
@@ -148,7 +150,7 @@ class PassAtKConfig(BaseModel):
     temperature: float = 0.5  # Sampling temperature for generation
     max_tokens: int = 4096  # Maximum tokens to generate per response
     enabled: bool = True  # Whether to enable the callback
-    use_persistent_vllm: bool = True  # Keep vLLM engine alive between evals (saves cold-start time)
+    use_persistent_vllm: bool = False  # Keep vLLM engine alive between evals (saves cold-start time)
     vllm_gpu_memory_utilization: float = 0.4  # GPU memory fraction for vLLM (conservative for coexistence with training)
     num_inference_gpus: int = 1  # Number of GPUs for data-parallel vLLM inference (>1 forces ephemeral mode)
     max_checkpoint_gap: int | None = None  # Save a fallback checkpoint if no checkpoint for this many data points
@@ -163,8 +165,8 @@ class PassAtKConfig(BaseModel):
 
 class PerplexityConfig(BaseModel):
     """Configuration for perplexity evaluation callback."""
-    perplexity_thresholds: list[float] = [3.0, 2.5, 2.0]
-    num_samples: int = 100
+    perplexity_thresholds: list[float] = [1.0]
+    num_samples: int = 541
     early_tuples: list[tuple[int, float]] | None = None  # Each tuple: (patience, min_decrease)
     enabled: bool = True
     initial_global_step: int = 0  # Step offset for W&B logging continuity across chained runs
