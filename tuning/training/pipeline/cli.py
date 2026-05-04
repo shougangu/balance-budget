@@ -116,6 +116,7 @@ def _parse_args(argv=None):
     parser.add_argument("--model", required=True, choices=list(MODEL_TO_GPU_1),
                         help="Base model name")
     parser.add_argument("--wandb-project", required=True, help="W&B project name")
+    parser.add_argument("--tags", nargs="*", default=[], help="W&B run tags")
 
     stage = parser.add_argument_group("stage control")
     stage.add_argument("--run-sft", action="store_true", default=False)

@@ -67,7 +67,7 @@ def run_sft(args):
 
     passk_config, primary_eval, monitor_evals = _build_eval_components(args, "sft", gpu_util)
     ppl_config = _sft_ppl_config(args)
-    tags = _sft_tags(passk_config, ppl_config, primary_eval)
+    tags = _sft_tags(passk_config, ppl_config, primary_eval) + args.tags
 
     with wandb.init(
         name=run_config.model_name, project=args.wandb_project,
@@ -305,7 +305,7 @@ def run_post_training(args, method: Literal["dpo", "grpo"]):
         args, method, configs.gpu_util,
     )
     ppl_config = _dpo_ppl_config(args) if method == "dpo" else None
-    tags = post_training_tags(method, checkpoint, primary_eval, passk_config, ppl_config)
+    tags = post_training_tags(method, checkpoint, primary_eval, passk_config, ppl_config) + args.tags
 
     _train_dispatch._args = args
     try:
