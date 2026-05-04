@@ -29,39 +29,6 @@ class CompletionsIntervalCallback(TrainerCallback):
     def __init__(self, trainer, interval):
         self.trainer = trainer
         self.interval = interval
-        self._accumulated_df = None
-        self._original_wandb_log = None
-
-    def on_train_begin(self, args, state, control, **kwargs):
-        try:
-            import wandb
-            import pandas as pd
-        except ImportError:
-            return
-        if wandb.run is None:
-            return
-
-        self._original_wandb_log = wandb.log
-
-        def patched_log(data, *args, **kwargs):
-            if isinstance(data, dict) and "completions" in data:
-                current_table = data["completions"]
-                current_df = pd.DataFrame(current_table.data, columns=current_table.columns)
-                self._accumulated_df = (
-                    current_df if self._accumulated_df is None
-                    else pd.concat([self._accumulated_df, current_df], ignore_index=True)
-                )
-                data = {**data, "completions": wandb.Table(dataframe=self._accumulated_df)}
-            return self._original_wandb_log(data, *args, **kwargs)
-
-        wandb.log = patched_log
-
-    def on_train_end(self, args, state, control, **kwargs):
-        if self._original_wandb_log is not None:
-            import wandb
-            wandb.log = self._original_wandb_log
-            self._original_wandb_log = None
-
     def on_log(self, args, state, control, **kwargs):
         self.trainer.log_completions = (state.global_step % self.interval == 0)
 
