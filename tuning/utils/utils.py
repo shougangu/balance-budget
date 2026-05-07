@@ -166,6 +166,7 @@ def apply_chat_template_pt(tokenizer, dataset):
 STOP_TOKENS = {
     "chatml": ["<|im_end|>", "<|end_of_text|>"],
     "llama-3.1": ["<|eot_id|>", "<|end_of_text|>"],
+    "gemma-3": ["<end_of_turn>", "<eos>"],
     "simple": ["<|end_of_text|>", "</s>", "<|im_end|>", "<|eot_id|>"],
 }
 
@@ -188,6 +189,10 @@ RESPONSE_DELIMITERS = {
     "llama-3.1": {
         "instruction_part": "<|start_header_id|>user<|end_header_id|>\n\n",
         "response_part": "<|start_header_id|>assistant<|end_header_id|>\n\n",
+    },
+    "gemma-3": {
+        "instruction_part": "<start_of_turn>user\n",
+        "response_part": "<start_of_turn>model\n",
     },
 }
 

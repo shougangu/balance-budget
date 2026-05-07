@@ -82,7 +82,7 @@ def train_model_grpo(
     )
 
     if trainer.log_completions:
-        trainer.add_callback(CompletionsIntervalCallback(trainer, interval=512))
+        trainer.add_callback(CompletionsIntervalCallback(trainer, interval=64))
 
     for cb in callbacks or []:
         if isinstance(cb, PassAtKStoppingCallback):

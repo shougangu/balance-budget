@@ -29,7 +29,10 @@ HF_MODEL_MAP = {
     "qwen2-2B": "unsloth/Qwen2.5-1.5B",
     "qwen2-14B": "unsloth/Qwen2.5-14B",
     "llama3-3B": "unsloth/Llama-3.2-3B",
-    "llama3-1B": "unsloth/Llama-3.2-1B"
+    "llama3-1B": "unsloth/Llama-3.2-1B",
+    "gemma3-1B": "unsloth/gemma-3-1b-pt",
+    "gemma3-4B": "unsloth/gemma-3-4b-pt",
+    "gemma3-12B": "unsloth/gemma-3-12b-pt",
 }
 
 DEFAULT_CHAT_TEMPLATE = "chatml"
@@ -43,6 +46,9 @@ MODEL_CHAT_TEMPLATE_MAP = {
     "qwen2-7B": "chatml",
     "qwen2-3B": "chatml",
     "qwen2-2B": "chatml",
+    "gemma3-1B": "gemma-3",
+    "gemma3-4B": "gemma-3",
+    "gemma3-12B": "gemma-3",
 }
 
 

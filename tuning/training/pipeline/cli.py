@@ -20,6 +20,9 @@ MODEL_TO_GPU_1 = {
     "qwen2-2B": 0.65,
     "qwen2-3B": 0.65,
     "qwen2-7B": 0.55,
+    "gemma3-1B": 0.75,
+    "gemma3-4B": 0.65,
+    "gemma3-12B": 0.55,
 }
 
 MODEL_TO_GPU_2 = {
@@ -29,15 +32,21 @@ MODEL_TO_GPU_2 = {
     "qwen2-2B": 0.65,
     "qwen2-3B": 0.65,
     "qwen2-7B": 0.5,
+    "gemma3-1B": 0.7,
+    "gemma3-4B": 0.62,
+    "gemma3-12B": 0.5,
 }
 
 MODEL_TO_GPU_3 = {
     "llama3-1B": 0.7,
     "llama3-3B": 0.45, #0.6
-    "llama3-8B": 0.45,
+    "llama3-8B": 0.43,
     "qwen2-2B": 0.45,
     "qwen2-3B": 0.45,
     "qwen2-7B": 0.45,
+    "gemma3-1B": 0.7,
+    "gemma3-4B": 0.45,
+    "gemma3-12B": 0.4,
 }
 
 MODEL_TO_SIMPLERL_TIER = {
@@ -47,6 +56,9 @@ MODEL_TO_SIMPLERL_TIER = {
     "qwen2-2B":  "medium",
     "qwen2-3B":  "medium",
     "qwen2-7B":  "medium",
+    "gemma3-1B": "medium",
+    "gemma3-4B": "medium",
+    "gemma3-12B": "medium",
 }
 
 

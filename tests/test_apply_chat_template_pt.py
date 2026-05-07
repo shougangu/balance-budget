@@ -8,12 +8,14 @@ MODEL_TO_TEMPLATE = {
     "llama3-8B": "llama-3.1",
     "qwen2-7B": "chatml",
     "mistral-7b": "mistral",
+    "gemma3-4B": "gemma-3",
 }
 
 TEMPLATE_ASSISTANT_TOKENS = {
     "chatml": ("<|assistant|>\n", "\n<|end|>"),
     "llama-3.1": ("<|start_assistant|>", "<|eot|>"),
     "mistral": ("[/INST]", "</s>"),
+    "gemma-3": ("<start_of_turn>model\n", "<end_of_turn>\n"),
 }
 
 

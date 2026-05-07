@@ -2044,6 +2044,8 @@ class WordsPositionChecker(Instruction):
 		if len(words) < 2:
 			return False
 		if words[-1] in string.punctuation:
+			if len(words) < 3:
+				return False
 			if words[1].lower() == words[-3].lower() == self._keyword.lower():
 				return True
 			else:
