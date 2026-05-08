@@ -1,3 +1,7 @@
+import json
+import warnings
+from pathlib import Path
+
 import tuning.config
 
 
@@ -205,3 +209,55 @@ def get_response_delimiters() -> dict:
             f"Supported: {list(RESPONSE_DELIMITERS.keys())}"
         )
     return RESPONSE_DELIMITERS[chat_template]
+
+
+def _read_on_disk_chat_template(checkpoint_path: str) -> str | None:
+    """Read the saved chat_template at a checkpoint dir, or None if absent."""
+    cp = Path(checkpoint_path)
+    jinja = cp / "chat_template.jinja"
+    if jinja.is_file():
+        return jinja.read_text()
+    cfg_path = cp / "tokenizer_config.json"
+    if cfg_path.is_file():
+        try:
+            cfg = json.loads(cfg_path.read_text())
+        except json.JSONDecodeError:
+            return None
+        return cfg.get("chat_template")
+    return None
+
+
+def warn_if_template_mismatch(checkpoint_path: str, simple_requested: bool) -> None:
+    """Warn when --simple-template disagrees with the SFT checkpoint's saved template.
+
+    The CLI flag only mutates the in-memory tokenizer; vLLM (used for GRPO rollouts)
+    loads its own tokenizer from the checkpoint dir, so a mismatch silently trains
+    the model on prompts formatted with the on-disk template instead of the requested
+    one. Re-run SFT with the matching flag, or align the flag with the checkpoint.
+    """
+    on_disk = _read_on_disk_chat_template(checkpoint_path)
+    if on_disk is None:
+        warnings.warn(
+            f"Could not verify chat-template consistency: no chat_template found at "
+            f"{checkpoint_path}. Expected --simple-template={simple_requested}.",
+            stacklevel=2,
+        )
+        return
+
+    on_disk_is_simple = on_disk.strip() == SIMPLE_TEMPLATE.strip()
+    if simple_requested and not on_disk_is_simple:
+        warnings.warn(
+            f"Chat-template mismatch: --simple-template was passed, but the SFT "
+            f"checkpoint at {checkpoint_path} has a different (non-simple) chat_template "
+            f"saved on disk. vLLM rollouts will use the on-disk template, not the simple "
+            f"one. Re-run SFT with --simple-template, or drop the flag from this stage.",
+            stacklevel=2,
+        )
+    elif not simple_requested and on_disk_is_simple:
+        warnings.warn(
+            f"Chat-template mismatch: --simple-template was NOT passed, but the SFT "
+            f"checkpoint at {checkpoint_path} has the simple chat_template saved on disk. "
+            f"vLLM rollouts will use the simple template, not the model's default. "
+            f"Pass --simple-template, or re-run SFT without it.",
+            stacklevel=2,
+        )

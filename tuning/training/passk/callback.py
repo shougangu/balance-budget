@@ -127,7 +127,7 @@ class PassAtKStoppingCallback(TrainerCallback):
             sample_messages, tokenize=False, add_generation_prompt=True
         )
         print(f"\n{'='*60}")
-        print(f"[DEBUG] chat_template used for inference: {tokenizer.chat_template[:80]}...")
+        print(f"[DEBUG] chat_template used for inference: {tokenizer.chat_template[:200]}...")
         print(f"[DEBUG] Sample prompt (index 0):")
         print(sample_formatted)
         print(f"{'='*60}\n")

@@ -300,6 +300,10 @@ def run_post_training(args, method: Literal["dpo", "grpo"]):
     _init_seeds(args)
     set_chat_template(args.model, simple=args.simple_template)
 
+    if rank == 0:
+        from tuning.utils.utils import warn_if_template_mismatch
+        warn_if_template_mismatch(checkpoint["checkpoint_path"], args.simple_template)
+
     configs = _build_post_training_configs(args, method, checkpoint, train_size)
     passk_config, primary_eval, monitor_evals = _build_eval_components(
         args, method, configs.gpu_util,
