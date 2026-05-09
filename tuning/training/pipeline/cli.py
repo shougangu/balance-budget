@@ -139,6 +139,7 @@ def _parse_args(argv=None):
                        choices=["dpo", "grpo", "kto"])
     stage.add_argument("--parallel", type=int, default=1,
                        help="Number of concurrent post-training workers.")
+    stage.add_argument("--end-current-script", action="store_true", default=False)
     stage.add_argument("--short", action="store_true", default=False,
                        help="Use the shorter sbatch script for better queue times.")
     parser.add_argument("--sft-dataset", default="gsm8k", choices=["gsm8k", "tuluif", "openmath"])
@@ -164,6 +165,7 @@ def _parse_args(argv=None):
 
     parser.add_argument("--sft-learning-rate", type=float, default=5e-5)
     parser.add_argument("--sft-warmup-ratio", type=float, default=0.0)
+    parser.add_argument("--sft-lr-scheduler-type", type=str, default="cosine")
     parser.add_argument("--sft-num-epochs", type=int, default=1)
     parser.add_argument("--sft-eval-steps", type=int, default=64)
     parser.add_argument("--sft-batch-size", type=int, default=16)

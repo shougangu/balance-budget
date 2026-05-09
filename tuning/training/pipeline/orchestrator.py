@@ -130,6 +130,10 @@ def main():
         sbatch_script=args.sbatch_script,
         args=args,
     )
+    if args.end_current_script:
+        print("[orchestrator] --end-current-script is set, exiting main orchestrator loop")
+        return
+    
     for metadata_file in all_files:
         if not Path(metadata_file).is_file():
             print(f"Warning: metadata file {metadata_file} does not exist, skipping")
