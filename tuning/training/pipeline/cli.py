@@ -142,7 +142,7 @@ def _parse_args(argv=None):
     stage.add_argument("--end-current-script", action="store_true", default=False)
     stage.add_argument("--short", action="store_true", default=False,
                        help="Use the shorter sbatch script for better queue times.")
-    parser.add_argument("--sft-dataset", default="gsm8k", choices=["gsm8k", "tuluif", "openmath"])
+    parser.add_argument("--sft-dataset", default="gsm8k", choices=["gsm8k", "tuluif", "openmath", "openmath-p95", "openmath-reasoning"])
     parser.add_argument("--dataset", default="gsm8k",
                         choices=["tuluif", "gsm8k", "openmath", "ifrlvr",
                                  "simplerl", "simplerl-easy", "simplerl-medium",
@@ -212,6 +212,10 @@ def _parse_args(argv=None):
     parser.add_argument("--sft-passk-targets", type=float, nargs="+",
                         default=[0.0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45,
                                  0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95])
+    parser.add_argument("--sft-passk-max-checkpoint-gap", type=int, default=None)
+    parser.add_argument("--sft-passk-target-data-points", type=int, nargs="+",
+                        default=None)
+    
     parser.add_argument("--sft-passk-early", type=parse_early_tuple, nargs="*",
                         default=[])
     parser.add_argument("--sft-passk-k-values", type=int, nargs="+", default=[1])
@@ -223,8 +227,6 @@ def _parse_args(argv=None):
     parser.add_argument("--sft-passk-num-inference-gpus", type=int, default=1)
     parser.add_argument("--sft-passk-persistent-vllm",
                         action=argparse.BooleanOptionalAction, default=False)
-    parser.add_argument("--sft-passk-max-checkpoint-gap", type=int, default=None)
-
     parser.add_argument("--sft-ppl-thresholds", type=float, nargs="+", default=[1.0])
     parser.add_argument("--sft-ppl-num-samples", type=int, default=541)
     parser.add_argument("--sft-ppl-early", type=parse_early_tuple, nargs="*", default=[])

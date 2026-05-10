@@ -795,6 +795,26 @@ class TestMaxCheckpointGapArg:
 
 
 # ---------------------------------------------------------------------------
+# --sft-passk-target-data-points CLI arg
+# ---------------------------------------------------------------------------
+
+class TestTargetDataPointsArg:
+    def test_default_is_none(self):
+        args = _parse_args(REQUIRED)
+        assert args.sft_passk_target_data_points is None
+
+    def test_single_value(self):
+        args = _parse_args(REQUIRED + ["--sft-passk-target-data-points", "4000"])
+        assert args.sft_passk_target_data_points == [4000]
+
+    def test_multiple_values(self):
+        args = _parse_args(REQUIRED + [
+            "--sft-passk-target-data-points", "4000", "8000", "12000",
+        ])
+        assert args.sft_passk_target_data_points == [4000, 8000, 12000]
+
+
+# ---------------------------------------------------------------------------
 # --simple-template CLI arg
 # ---------------------------------------------------------------------------
 

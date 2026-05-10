@@ -52,6 +52,7 @@ class PassAtKStoppingCallback(TrainerCallback):
             target_thresholds=config.target_pass_at_k,
             early_tuples=config.early_tuples,
             max_checkpoint_gap=getattr(config, "max_checkpoint_gap", None),
+            target_data_points=getattr(config, "target_data_points", None),
         )
         self._step_offset = int(getattr(config, "initial_global_step", 0) or 0)
         self.tokenizer = tokenizer

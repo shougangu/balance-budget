@@ -17,10 +17,14 @@ class CheckpointDecisionEngine:
         target_thresholds: List[float],
         early_tuples: Optional[List[Tuple[int, float]]],
         max_checkpoint_gap: Optional[int],
+        target_data_points: Optional[List[int]] = None,
     ):
         self.target_thresholds = sorted(target_thresholds, reverse=True)
         self.early_tuples = list(early_tuples) if early_tuples else None
         self.max_checkpoint_gap = max_checkpoint_gap
+        self.target_data_points = (
+            sorted(target_data_points) if target_data_points else None
+        )
 
     def decide(
         self,
@@ -62,6 +66,16 @@ class CheckpointDecisionEngine:
                         triggered_idx.append(idx)
             for idx in reversed(triggered_idx):
                 self.early_tuples.pop(idx)
+
+        if self.target_data_points:
+            crossed = [t for t in self.target_data_points
+                       if t <= data_points_seen]
+            if crossed:
+                decisions.append(CheckpointDecision(
+                    label=f"data-{crossed[-1]}",
+                    advances_state=True,
+                ))
+                self.target_data_points = self.target_data_points[len(crossed):]
 
         if (self.max_checkpoint_gap is not None
                 and data_points_seen > 0

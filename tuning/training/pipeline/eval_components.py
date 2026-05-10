@@ -48,6 +48,7 @@ def _build_eval_components(args, stage, gpu_util):
         use_persistent_vllm=getattr(args, f"{prefix}_passk_persistent_vllm"),
         vllm_gpu_memory_utilization=gpu_util,
         max_checkpoint_gap=getattr(args, f"{prefix}_passk_max_checkpoint_gap", None),
+        target_data_points=getattr(args, f"{prefix}_passk_target_data_points", None),
     )
 
     k_values = getattr(args, f"{prefix}_passk_k_values", [1])

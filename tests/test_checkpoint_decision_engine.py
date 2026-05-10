@@ -4,11 +4,13 @@
 from tuning.training.passk.decisions import CheckpointDecision, CheckpointDecisionEngine
 
 
-def _engine(thresholds=None, early_tuples=None, max_gap=None):
+def _engine(thresholds=None, early_tuples=None, max_gap=None,
+            target_data_points=None):
     return CheckpointDecisionEngine(
         target_thresholds=thresholds or [],
         early_tuples=early_tuples or None,
         max_checkpoint_gap=max_gap,
+        target_data_points=target_data_points,
     )
 
 
@@ -83,3 +85,69 @@ class TestGapCheckpoint:
                                data_points_seen=2000, last_checkpoint_data_points=0)
         assert len(decisions) == 1
         assert decisions[0].label == "0.5"
+
+
+class TestFixedDataTargets:
+    def test_no_trigger_below_first_target(self):
+        eng = _engine(target_data_points=[4000, 8000])
+        decisions = eng.decide(primary_metric=0.0, history=[0.0],
+                               data_points_seen=2000, last_checkpoint_data_points=0)
+        assert decisions == []
+        assert eng.target_data_points == [4000, 8000]
+
+    def test_fires_at_first_crossing(self):
+        eng = _engine(target_data_points=[4000, 8000])
+        decisions = eng.decide(primary_metric=0.0, history=[0.0],
+                               data_points_seen=4500, last_checkpoint_data_points=0)
+        assert decisions == [CheckpointDecision(label="data-4000",
+                                                advances_state=True)]
+        assert eng.target_data_points == [8000]
+
+    def test_target_consumed_after_firing(self):
+        eng = _engine(target_data_points=[4000, 8000])
+        eng.decide(primary_metric=0.0, history=[0.0],
+                   data_points_seen=4500, last_checkpoint_data_points=0)
+        decisions = eng.decide(primary_metric=0.0, history=[0.0, 0.0],
+                               data_points_seen=5000,
+                               last_checkpoint_data_points=4500)
+        assert decisions == []
+
+    def test_multiple_crossings_one_eval_picks_highest(self):
+        eng = _engine(target_data_points=[4000, 8000])
+        decisions = eng.decide(primary_metric=0.0, history=[0.0],
+                               data_points_seen=8500, last_checkpoint_data_points=0)
+        assert decisions == [CheckpointDecision(label="data-8000",
+                                                advances_state=True)]
+        assert eng.target_data_points == []
+
+    def test_unsorted_input_handled(self):
+        eng = _engine(target_data_points=[12000, 4000, 8000])
+        decisions = eng.decide(primary_metric=0.0, history=[0.0],
+                               data_points_seen=4500, last_checkpoint_data_points=0)
+        assert decisions == [CheckpointDecision(label="data-4000",
+                                                advances_state=True)]
+        assert eng.target_data_points == [8000, 12000]
+
+    def test_fires_alongside_threshold(self):
+        eng = _engine(thresholds=[0.5], target_data_points=[4000])
+        decisions = eng.decide(primary_metric=0.6, history=[0.6],
+                               data_points_seen=4500, last_checkpoint_data_points=0)
+        labels = sorted(d.label for d in decisions)
+        assert labels == ["0.5", "data-4000"]
+        assert all(d.advances_state for d in decisions)
+        assert eng.target_thresholds == []
+        assert eng.target_data_points == []
+
+    def test_suppresses_gap_when_fired(self):
+        eng = _engine(target_data_points=[4000], max_gap=1000)
+        decisions = eng.decide(primary_metric=0.0, history=[0.0],
+                               data_points_seen=4500, last_checkpoint_data_points=0)
+        assert decisions == [CheckpointDecision(label="data-4000",
+                                                advances_state=True)]
+
+    def test_none_means_disabled(self):
+        eng = _engine(target_data_points=None)
+        decisions = eng.decide(primary_metric=0.0, history=[0.0],
+                               data_points_seen=999999,
+                               last_checkpoint_data_points=0)
+        assert decisions == []
