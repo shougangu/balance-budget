@@ -1,16 +1,15 @@
 # ABOUTME: SFT dataset from nvidia/OpenMathReasoning (cot split) filtered to QwQ solutions.
-# ABOUTME: Keeps correct solutions within 1024-3072 token range, deduplicated to first per problem.
+# ABOUTME: Keeps solutions within 1024-8000 token range.
 
 from datasets import Dataset
 from transformers import AutoTokenizer
 
 from tuning.data.hf_dataset import HFDataset
 from tuning.data.config import SYSTEM_MESSAGE_OPENMATH, COMPMATH_STRING
-from tuning.evaluation.math500_scoring import is_correct as math500_is_correct
 
 TOKENIZER_NAME = "unsloth/Meta-Llama-3.1-8B"
 MIN_RESPONSE_TOKENS = 1024
-MAX_RESPONSE_TOKENS = 3072
+MAX_RESPONSE_TOKENS = 8000
 
 
 class OpenMathReasoningSFT(HFDataset):
@@ -44,17 +43,13 @@ class OpenMathReasoningSFT(HFDataset):
 
         length_filtered = has_answer.filter(in_token_range, batched=True)
 
-        correct = length_filtered.filter(
-            lambda row: math500_is_correct(row["generated_solution"], row["expected_answer"]),
-            batched=False,
-        )
+        # correct = length_filtered.filter(
+        #     lambda row: math500_is_correct(row["generated_solution"], row["expected_answer"]),
+        #     batched=False,
+        # )
 
-        seen = set()
         rows = []
-        for row in correct:
-            if row["problem"] in seen:
-                continue
-            seen.add(row["problem"])
+        for row in length_filtered:
             prompt = COMPMATH_STRING.format(problem=row["problem"])
             rows.append({
                 "prompt": prompt,
@@ -69,7 +64,7 @@ class OpenMathReasoningSFT(HFDataset):
     def format_dataset(self):
         tokenizer = self._load_tokenizer()
         rows = self._format_rows(self._dataset, tokenizer)
-        print(f"OpenMathReasoning SFT: {len(rows)} unique problems after filtering")
+        print(f"OpenMathReasoning SFT: {len(rows)} rows after filtering")
         formatted_dataset = Dataset.from_list(rows).train_test_split(
             test_size=min(200, len(rows) - 1), shuffle=False
         )
