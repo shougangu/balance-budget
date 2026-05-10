@@ -176,7 +176,7 @@ def _parse_args(argv=None):
     parser.add_argument("--dpo-batch-size", type=int, default=4)
     parser.add_argument("--dpo-grad-accum", type=int, default=4)
     parser.add_argument("--grpo-num-epochs", type=int, default=1)
-    parser.add_argument("--grpo-num-gpus", type=int, default=1,
+    parser.add_argument("--grpo-num-gpus", type=int, default=2,
                         help="Number of GPUs for GRPO DDP training. >1 launches GRPO via torchrun.")
     parser.add_argument("--grpo-eval-steps", type=int, default=64)
     parser.add_argument("--grpo-batch-size", type=int, default=4)

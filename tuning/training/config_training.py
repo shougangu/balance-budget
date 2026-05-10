@@ -56,8 +56,8 @@ class TrainingArgumentsConfig(BaseModel):
     weight_decay: float = 0.01
     lr_scheduler_type: str = "cosine"
     report_to: list[str] = ["wandb"]
-    save_strategy: str = "no"
-    save_steps: int = 4 # each checkpoint step is one gradient weight update (optimizer.step()), data = grad_acc * batch_size * save_steps = effective_batch_size * save_steps
+    save_strategy: str = "steps"
+    save_steps: float = 0.1
     save_total_limit: int = 1
     load_best_model_at_end: bool = False
     dataloader_drop_last: bool = False
@@ -95,7 +95,6 @@ class DPOTrainingConfig(TrainingArgumentsConfig):
         """Return kwargs for DPOConfig constructor, including beta."""
         d = super().to_hf_args(output_dir)
         d["beta"] = self.beta
-        d["save_strategy"] = "no"
         d["dataset_num_proc"] = self.dataset_num_proc
         return d
 
@@ -121,7 +120,7 @@ class GRPOTrainingConfig(TrainingArgumentsConfig):
     gradient_accumulation_steps: int = 32
     log_completions: bool = True
     save_strategy: str = "steps"
-    save_steps: int = 100
+    save_steps: float = 0.1
 
     def to_hf_args(self, output_dir: str) -> dict:
         """Return kwargs for GRPOConfig constructor."""

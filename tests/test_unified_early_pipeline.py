@@ -695,6 +695,14 @@ class TestTaskNameDispatch:
         args = _parse_args(REQUIRED + ["--sft-warmup-ratio", "0.05"])
         assert args.sft_warmup_ratio == 0.05
 
+    def test_default_sft_lr_scheduler_type(self):
+        args = _parse_args(REQUIRED)
+        assert args.sft_lr_scheduler_type == "cosine"
+
+    def test_custom_sft_lr_scheduler_type(self):
+        args = _parse_args(REQUIRED + ["--sft-lr-scheduler-type", "linear"])
+        assert args.sft_lr_scheduler_type == "linear"
+
 
 # ---------------------------------------------------------------------------
 # GRPO pipeline args
@@ -726,6 +734,16 @@ class TestGRPOArgs:
         assert args.grpo_temperature == 1.0
         assert args.grpo_loss_type == "dapo"
         assert args.grpo_data_size is None
+        assert args.grpo_warmup_ratio == 0.0
+        assert args.grpo_lr_scheduler_type == "cosine"
+
+    def test_custom_grpo_warmup_ratio(self):
+        args = _parse_args(REQUIRED + ["--grpo-warmup-ratio", "0.1"])
+        assert args.grpo_warmup_ratio == 0.1
+
+    def test_custom_grpo_lr_scheduler_type(self):
+        args = _parse_args(REQUIRED + ["--grpo-lr-scheduler-type", "linear"])
+        assert args.grpo_lr_scheduler_type == "linear"
 
     def test_grpo_custom_args(self):
         args = _parse_args(REQUIRED + [

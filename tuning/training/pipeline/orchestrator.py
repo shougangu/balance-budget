@@ -75,11 +75,11 @@ def _dispatch_parallel_workers(parallel, base_cmd, pt_flag, metadata_files,
     for mf in metadata_files:
         if Path(mf).is_file():
             worker_argv += ["--metadata-file", mf]
-
-    for i in range(parallel - 1):
+    num_jobs = parallel - 1 if args.end_current_script else parallel
+    for i in range(num_jobs):
         job_id = _submit_sbatch_worker(sbatch_script, worker_argv,
                                         sbatch_flags=sbatch_flags)
-        print(f"[orchestrator] Submitted worker {i+1}/{parallel-1}: job {job_id}")
+        print(f"[orchestrator] Submitted worker {i+1}/{num_jobs}: job {job_id}")
 
 
 def main():
