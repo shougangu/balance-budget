@@ -142,7 +142,7 @@ def _parse_args(argv=None):
     stage.add_argument("--end-current-script", action="store_true", default=False)
     stage.add_argument("--short", action="store_true", default=False,
                        help="Use the shorter sbatch script for better queue times.")
-    parser.add_argument("--sft-dataset", default="gsm8k", choices=["gsm8k", "tuluif", "openmath", "openmath-p95", "openmath-reasoning"])
+    parser.add_argument("--sft-dataset", default="gsm8k", choices=["gsm8k", "tuluif", "openmath", "openmath-lenp95", "openmath-reasoning"])
     parser.add_argument("--dataset", default="gsm8k",
                         choices=["tuluif", "gsm8k", "openmath", "ifrlvr",
                                  "simplerl", "simplerl-easy", "simplerl-medium",
