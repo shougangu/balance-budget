@@ -63,6 +63,7 @@ def run_sft(args):
     training_args.per_device_train_batch_size = args.sft_batch_size
     training_args.gradient_accumulation_steps = args.sft_grad_accum
     training_args.warmup_ratio = args.sft_warmup_ratio
+    training_args.lr_scheduler_type = args.sft_lr_scheduler_type
     training_args.learning_rate = args.sft_learning_rate
 
     passk_config, primary_eval, monitor_evals = _build_eval_components(args, "sft", gpu_util)
@@ -198,6 +199,8 @@ def _build_post_training_configs(
         training_args.beta = args.grpo_beta
         training_args.temperature = args.grpo_temperature
         training_args.learning_rate = args.grpo_learning_rate
+        training_args.warmup_ratio = args.grpo_warmup_ratio
+        training_args.lr_scheduler_type = args.grpo_lr_scheduler_type
         training_args.loss_type = args.grpo_loss_type
         scale_rewards = args.grpo_scale_rewards
         training_args.scale_rewards = False if scale_rewards == "false" else scale_rewards

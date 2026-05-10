@@ -186,6 +186,8 @@ def _parse_args(argv=None):
     parser.add_argument("--grpo-beta", type=float, default=0.0)
     parser.add_argument("--grpo-temperature", type=float, default=1.0)
     parser.add_argument("--grpo-learning-rate", type=float, default=1e-5)
+    parser.add_argument("--grpo-warmup-ratio", type=float, default=0.0)
+    parser.add_argument("--grpo-lr-scheduler-type", type=str, default="cosine")
     parser.add_argument("--grpo-loss-type", default="dapo",
                         choices=["grpo", "dr_grpo", "dapo", "bnpo"])
     parser.add_argument("--grpo-scale-rewards", default="group",
