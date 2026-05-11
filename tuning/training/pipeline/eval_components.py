@@ -117,8 +117,8 @@ def _sft_tags(passk_config, ppl_config, primary_eval=None):
         tags.append(primary_eval.id)
     if passk_config is not None:
         k_val = primary_eval.stopping_k if primary_eval else 1
-        tags.append(f"p{k_val}")
-        tags.append(early_pair_tag(get_early_pairs(passk_config)))
+        # tags.append(f"p{k_val}")
+        # tags.append(early_pair_tag(get_early_pairs(passk_config)))
     if ppl_config is not None:
         tags.append("ppl")
         tags.append(early_pair_tag(get_early_pairs(ppl_config)))

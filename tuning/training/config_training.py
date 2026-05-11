@@ -119,6 +119,7 @@ class GRPOTrainingConfig(TrainingArgumentsConfig):
     eval_steps: float = 64
     gradient_accumulation_steps: int = 32
     log_completions: bool = True
+    num_completions_to_print: int = 4 # 4 printed on logs only, all on W&B
     save_strategy: str = "steps"
     save_steps: float = 0.1
 
@@ -138,6 +139,7 @@ class GRPOTrainingConfig(TrainingArgumentsConfig):
         d["vllm_mode"] = self.vllm_mode
         d["vllm_gpu_memory_utilization"] = self.vllm_gpu_memory_utilization
         d["log_completions"] = self.log_completions
+        d["num_completions_to_print"] = self.num_completions_to_print
         d.pop("eval_accumulation_steps", None)
         return d
 

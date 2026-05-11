@@ -163,6 +163,8 @@ def _parse_args(argv=None):
     parser.add_argument("--metadata-file", action="append", dest="metadata_file",
                         metavar="FILE")
 
+    parser.add_argument("--sft-resume", type=str, default="",
+                        help="W&B run ID to resume SFT from. Empty = start fresh.")
     parser.add_argument("--sft-learning-rate", type=float, default=5e-5)
     parser.add_argument("--sft-warmup-ratio", type=float, default=0.0)
     parser.add_argument("--sft-lr-scheduler-type", type=str, default="cosine")

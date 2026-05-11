@@ -82,9 +82,8 @@ def train_model_sft(
 
     print(trainer.args.to_dict())
 
-    # Resume from checkpoint if it exists
     resume_from_checkpoint = None
-    if Path(run_config.output_dir).exists():
+    if training_args.resume_from_checkpoint and Path(run_config.output_dir).exists():
         checkpoints = list(Path(run_config.output_dir).glob("checkpoint-*"))
         if checkpoints:
             resume_from_checkpoint = str(max(checkpoints, key=lambda x: int(x.name.split("-")[1])))

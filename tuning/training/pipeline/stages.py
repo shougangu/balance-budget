@@ -58,6 +58,7 @@ def run_sft(args):
     model_load_config = ModelLoadConfig()
     model_load_config.max_seq_length = args.max_seq_length
     training_args = TrainingArgumentsConfig()
+    training_args.resume_from_checkpoint = bool(args.sft_resume)
     training_args.num_train_epochs = args.sft_num_epochs
     training_args.eval_steps = args.sft_eval_steps
     training_args.per_device_train_batch_size = args.sft_batch_size
@@ -70,13 +71,7 @@ def run_sft(args):
     ppl_config = _sft_ppl_config(args)
     tags = _sft_tags(passk_config, ppl_config, primary_eval) + args.tags
 
-    with wandb.init(
-        name=run_config.model_name, project=args.wandb_project,
-        job_type="sft", tags=tags,
-        config={"stage": "sft", "seed": args.seed,
-                "eval_seed": tuning.config.get_eval_seed()},
-        settings=wandb.Settings(init_timeout=300),
-    ):
+    with _init_wandb_run(args, run_config.model_name, "sft", tags, args.sft_resume):
         model, tokenizer, trainer, callbacks = train_model_sft(
             run_config=run_config,
             lora_config=lora_config,
@@ -265,6 +260,22 @@ def _train_dispatch(method, configs, passk_config, primary_eval,
         )
 
 
+def _init_wandb_run(args, run_name, job_type, tags, wandb_run_id: str = ""):
+    """Open a wandb run; resume an existing run when wandb_run_id is provided."""
+    kwargs = dict(
+        name=run_name,
+        project=args.wandb_project,
+        job_type=job_type, tags=tags,
+        config={"stage": job_type, "seed": args.seed,
+                "eval_seed": tuning.config.get_eval_seed()},
+        settings=wandb.Settings(init_timeout=300),
+    )
+    if wandb_run_id:
+        kwargs["id"] = wandb_run_id
+        kwargs["resume"] = "must"
+    return wandb.init(**kwargs)
+
+
 def run_post_training(args, method: Literal["dpo", "grpo"]):
     """Claim → check budget → build configs → wandb run → train → mark completed."""
     metadata_file = args.metadata_file[0]
@@ -317,13 +328,9 @@ def run_post_training(args, method: Literal["dpo", "grpo"]):
     _train_dispatch._args = args
     try:
         if rank == 0:
-            wandb_ctx = wandb.init(
-                name=configs.run_config.model_name,
-                project=args.wandb_project,
-                job_type=method, tags=tags,
-                config={"stage": method, "seed": args.seed,
-                        "eval_seed": tuning.config.get_eval_seed()},
-                settings=wandb.Settings(init_timeout=300),
+            wandb_ctx = _init_wandb_run(
+                args, configs.run_config.model_name, method, tags,
+                checkpoint.get("wandb_run_id", ""),
             )
         else:
             wandb_ctx = contextlib.nullcontext()
