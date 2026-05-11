@@ -25,7 +25,19 @@ _TORCHRUN_ENV_VARS = (
 
 def _build_base_cmd(argv):
     """Build base subprocess command by stripping orchestrator-only flags."""
-    return [a for a in argv if a != "--run-all"]
+    result = []
+    skip_next = False
+    for tok in argv:
+        if skip_next:
+            skip_next = False
+            continue
+        if tok == "--parallel":
+            skip_next = True
+            continue
+        if tok in ("--run-all", "--end-current-script"):
+            continue
+        result.append(tok)
+    return result
 
 
 def _submit_sbatch_worker(sbatch_script, worker_args, sbatch_flags=()):
@@ -51,8 +63,7 @@ def _dispatch_parallel_workers(parallel, base_cmd, pt_flag, metadata_files,
     """Submit parallel-1 sbatch workers for post-training.
 
     Injects --gres=gpu:N when pt_method=='grpo' and grpo_num_gpus>1. No-op when
-    parallel <= 1. Strips --parallel from worker args so workers don't recursively
-    dispatch.
+    parallel <= 1.
     """
     if parallel <= 1:
         return
@@ -61,16 +72,7 @@ def _dispatch_parallel_workers(parallel, base_cmd, pt_flag, metadata_files,
     if args.post_training_method == "grpo" and args.grpo_num_gpus > 1:
         sbatch_flags.append(f"--gres=gpu:{args.grpo_num_gpus}")
 
-    worker_argv = []
-    skip_next = False
-    for tok in base_cmd[1:]:
-        if skip_next:
-            skip_next = False
-            continue
-        if tok == "--parallel":
-            skip_next = True
-            continue
-        worker_argv.append(tok)
+    worker_argv = list(base_cmd[1:])
     worker_argv += [pt_flag, "--run-all"]
     for mf in metadata_files:
         if Path(mf).is_file():
