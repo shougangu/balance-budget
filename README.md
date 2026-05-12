@@ -1,15 +1,26 @@
 # Balancing the Budget — Optimal SFT for Downstream RL
 
-Code for an in-progress paper studying **optimal SFT training for downstream
-RL (DPO / GRPO) under data and compute constraints**: how far to push SFT
-before switching to preference- or reward-based post-training, given a fixed data or compute budget.
+Modern post-training recipes interleave Supervised Fine-Tuning (SFT) with
+Reinforcement Learning (such as DPO or GRPO) to reach frontier performance
+on reasoning and instruction-following. The two stages trade off in opposite
+directions. SFT is compute-cheap, simple to set up, and offers fast iteration
+with immediate benchmark gains. It is, however, bottlenecked by the costly curation of
+high-quality, near-on-policy data that does not induce catastrophic forgetting.
+GRPO with verifiable rewards elicits strong general capabilities from the base
+model under comparatively light data and reward-signal demands, but pays for it
+in compute and a brittle infrastructure surface, whether that is the inference setup,
+hyperparameters, or weird reward hacking. *How much SFT to invest before handing off to
+RL* is therefore the central question for any fixed post-training budget (data or compute).
 
 This repository forks
 [mraghav4/balance-budget](https://github.com/mraghav4/balance-budget) — the
 code release for *Balancing the Budget: Understanding Trade-offs Between
 Supervised and Preference-Based Finetuning* (Raghavendra, Kang, Ritter; arXiv
 [2502.11284](https://arxiv.org/pdf/2502.11284)) — and extends it with GRPO /
-RLVR and multi-GPU DDP support for the follow-up paper.
+RLVR support and multi-GPU DDP for the follow-up paper. Preliminary results
+(below) suggest the SFT/RL trade-off is sharply asymmetric: a modest upfront
+SFT investment can cut downstream RLVR compute by roughly 40–50% to reach the
+same in-training reward.
 
 ![Method](assets/method.png)
 
@@ -21,6 +32,10 @@ llama3-3B on simpleRL dataset for GRPO. Going from
 **1024 → 6144 SFT examples** before GRPO reaches the same in-training mean
 reward in **~40% fewer RLVR steps** — up to ~50% less downstream RL compute and data
 for a small SFT investment. Curves are EMA-smoothed (α=0.1).
+
+## Compute
+We fit one H100 GPU for SFT and DPO training, and use memory-saving methods such as LoRA and Unsloth optimisations. For our scale of experiments (<=100k datapoints), this takes less than 12-hours.
+For GRPO, we colocate the vLLM server with the TRL trainer, and use DDP on a GPU node to help scale experiments linearly with device count. We get a gradient update every minute for a BS=128 per GPU-device without async inference.
 
 ## Install
 
