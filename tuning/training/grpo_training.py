@@ -91,6 +91,16 @@ def train_model_grpo(
                 print(f"[GRPO] PassAtK callback will reuse GRPOTrainer's vLLM engine")
             cb._accelerator = trainer.accelerator
 
+    # vLLM's offline LLM entrypoint disables stats logging by default; re-enable it
+    # so the engine emits throughput/queue/KV-cache stats every ~5s during generation.
+    if hasattr(trainer, 'vllm_generation'):
+        from vllm.v1.metrics.loggers import StatLoggerManager
+        _engine = trainer.vllm_generation.llm.llm_engine
+        if not _engine.log_stats:
+            _engine.log_stats = True
+            _engine.logger_manager = StatLoggerManager(vllm_config=_engine.vllm_config)
+            _engine.logger_manager.log_engine_initialized()
+
     # Swap the default WandbCallback for one that bridges train/global_step across runs.
     if initial_global_step:
         from transformers.integrations import WandbCallback

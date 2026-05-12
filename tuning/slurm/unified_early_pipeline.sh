@@ -59,9 +59,9 @@ else
 fi
 
 # Generate sweetspot table from the W&B project
-WANDB_ENTITY=$(python -c "import wandb; print(wandb.Api().default_entity)")
-SWEETSPOT_FLAGS=()
-if [[ "$TASK_NAME" == "ifeval" ]]; then
-    SWEETSPOT_FLAGS+=(--ifeval)
-fi
-python scripts/sweetspot_table.py "https://wandb.ai/${WANDB_ENTITY}/${WANDB_PROJECT}" "${SWEETSPOT_FLAGS[@]}"
+# WANDB_ENTITY=$(python -c "import wandb; print(wandb.Api().default_entity)")
+# SWEETSPOT_FLAGS=()
+# if [[ "$TASK_NAME" == "ifeval" ]]; then
+#     SWEETSPOT_FLAGS+=(--ifeval)
+# fi
+# python scripts/sweetspot_table.py "https://wandb.ai/${WANDB_ENTITY}/${WANDB_PROJECT}" "${SWEETSPOT_FLAGS[@]}"
