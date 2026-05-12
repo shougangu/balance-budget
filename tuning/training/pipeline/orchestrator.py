@@ -1,5 +1,5 @@
-# ABOUTME: Orchestrator: parses args, dispatches sbatch workers, runs main worker loop.
-# ABOUTME: Imports stages lazily inside worker-mode branches to preserve the unsloth gate.
+# ABOUTME: Orchestrator: top-level submits SFT+post-training as sbatch jobs and exits.
+# ABOUTME: Worker/resume mode (--run-dpo|grpo --run-all) skips SFT and runs one local share.
 
 import os
 import subprocess
@@ -34,39 +34,47 @@ def _build_base_cmd(argv):
         if tok == "--parallel":
             skip_next = True
             continue
-        if tok in ("--run-all", "--end-current-script"):
+        if tok == "--run-all":
             continue
         result.append(tok)
     return result
 
 
-def _submit_sbatch_worker(sbatch_script, worker_args, sbatch_flags=()):
+def _submit_sbatch_worker(sbatch_script, worker_args, sbatch_flags=(), wait=False):
     """Submit an sbatch worker job, return the Slurm job ID as a string.
 
-    sbatch_flags go between 'sbatch' and the script path. Exits the
-    orchestrator on sbatch error or unparseable output.
+    sbatch_flags go between 'sbatch' and the script path. When wait=True,
+    sbatch blocks until the submitted job terminates and the orchestrator
+    exits if the job failed. Exits the orchestrator on sbatch submission
+    error or unparseable output.
     """
-    cmd = ["sbatch", *sbatch_flags, sbatch_script, *worker_args]
+    flags = list(sbatch_flags)
+    if wait:
+        flags.append("--wait")
+    cmd = ["sbatch", *flags, sbatch_script, *worker_args]
     print(f"[orchestrator] Submitting sbatch worker: {' '.join(cmd)}")
     child_env = {k: v for k, v in os.environ.items() if k not in _TORCHRUN_ENV_VARS}
     result = subprocess.run(cmd, capture_output=True, text=True, env=child_env)
-    if result.returncode != 0:
-        sys.exit(f"sbatch failed (code {result.returncode}): {result.stderr.strip()}")
     tokens = result.stdout.strip().split()
     if len(tokens) < 4 or tokens[0] != "Submitted":
-        sys.exit(f"Unexpected sbatch stdout: {result.stdout!r}")
-    return tokens[-1]
+        sys.exit(f"sbatch submission failed (code {result.returncode}): "
+                 f"stdout={result.stdout!r} stderr={result.stderr.strip()}")
+    job_id = tokens[-1]
+    if result.returncode != 0:
+        sys.exit(f"sbatch job {job_id} failed (code {result.returncode}): "
+                 f"{result.stderr.strip()}")
+    return job_id
 
 
 def _dispatch_parallel_workers(parallel, base_cmd, pt_flag, metadata_files,
-                                sbatch_script, args):
-    """Submit parallel-1 sbatch workers for post-training.
+                                sbatch_script, args, is_top_level):
+    """Submit sbatch workers for post-training.
 
-    Injects --gres=gpu:N when pt_method=='grpo' and grpo_num_gpus>1. No-op when
-    parallel <= 1.
+    Top-level dispatches all `parallel` workers; worker/resume mode dispatches
+    `parallel - 1` (the caller handles one share locally).
+
+    Injects --gres=gpu:N when pt_method=='grpo' and grpo_num_gpus>1.
     """
-    if parallel <= 1:
-        return
 
     sbatch_flags = []
     if args.post_training_method == "grpo" and args.grpo_num_gpus > 1:
@@ -77,7 +85,7 @@ def _dispatch_parallel_workers(parallel, base_cmd, pt_flag, metadata_files,
     for mf in metadata_files:
         if Path(mf).is_file():
             worker_argv += ["--metadata-file", mf]
-    num_jobs = parallel if args.end_current_script else parallel - 1
+    num_jobs = parallel if is_top_level else parallel - 1
     for i in range(num_jobs):
         job_id = _submit_sbatch_worker(sbatch_script, worker_argv,
                                         sbatch_flags=sbatch_flags)
@@ -106,24 +114,23 @@ def main():
         return
 
     base_cmd = _build_base_cmd(sys.argv)
-    all_files = (args.metadata_file or [])
+    pt_method = args.post_training_method
+    pt_flag = f"--run-{pt_method}"
+    is_top_level = not (args.run_dpo or args.run_grpo)
 
-    if not (args.run_dpo or args.run_grpo):
-        sft_cmd = [sys.executable] + base_cmd + ["--run-sft"]
-        print(f"[orchestrator] Running SFT: {' '.join(sft_cmd)}")
-        result = subprocess.run(sft_cmd, stdout=subprocess.PIPE, text=True)
-        print(result.stdout)
-        if result.returncode != 0:
-            sys.exit(f"SFT subprocess failed with return code {result.returncode}")
-
-        metadata_files = parse_metadata_from_output(result.stdout)
+    if is_top_level:
+        sft_argv = list(base_cmd[1:]) + ["--run-sft"]
+        job_id = _submit_sbatch_worker(args.sbatch_script, sft_argv, wait=True)
+        sft_output = Path(f"{job_id}_{args.wandb_project}.out").read_text()
+        print(sft_output)
+        metadata_files = parse_metadata_from_output(sft_output)
         if not metadata_files and not args.metadata_file:
             sys.exit("No metadata files from SFT and no --metadata-file provided")
         all_files = metadata_files + (args.metadata_file or [])
-        print(f"Metadata files for post-training: {all_files}")
+    else:
+        all_files = args.metadata_file or []
+    print(f"Metadata files for post-training: {all_files}")
 
-    pt_method = args.post_training_method
-    pt_flag = f"--run-{pt_method}" if pt_method != "dpo" else "--run-dpo"
     _dispatch_parallel_workers(
         parallel=args.parallel,
         base_cmd=base_cmd,
@@ -131,11 +138,11 @@ def main():
         metadata_files=all_files,
         sbatch_script=args.sbatch_script,
         args=args,
+        is_top_level=is_top_level,
     )
-    if args.end_current_script:
-        print("[orchestrator] --end-current-script is set, exiting main orchestrator loop")
+    if is_top_level:
         return
-    
+
     for metadata_file in all_files:
         if not Path(metadata_file).is_file():
             print(f"Warning: metadata file {metadata_file} does not exist, skipping")
