@@ -101,6 +101,7 @@ class DPOTrainingConfig(TrainingArgumentsConfig):
 
 class GRPOTrainingConfig(TrainingArgumentsConfig):
     num_generations: int = 8
+    num_iterations: int = 1
     # max_prompt_length: int = 512
     beta: float = 0.0
     temperature: float = 1.0
@@ -127,6 +128,7 @@ class GRPOTrainingConfig(TrainingArgumentsConfig):
         """Return kwargs for GRPOConfig constructor."""
         d = super().to_hf_args(output_dir)
         d["num_generations"] = self.num_generations
+        d["num_iterations"] = self.num_iterations
         d["max_completion_length"] = self.max_completion_length
         # d["max_prompt_length"] = self.max_prompt_length
         d["beta"] = self.beta

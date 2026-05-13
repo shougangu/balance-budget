@@ -190,6 +190,7 @@ def _build_post_training_configs(
         training_args.per_device_train_batch_size = args.grpo_batch_size
         training_args.gradient_accumulation_steps = args.grpo_grad_accum
         training_args.num_generations = args.grpo_num_generations
+        training_args.num_iterations = args.grpo_num_iterations
         training_args.max_completion_length = args.grpo_max_completion_length
         training_args.beta = args.grpo_beta
         training_args.temperature = args.grpo_temperature
@@ -197,6 +198,9 @@ def _build_post_training_configs(
         training_args.warmup_ratio = args.grpo_warmup_ratio
         training_args.lr_scheduler_type = args.grpo_lr_scheduler_type
         training_args.loss_type = args.grpo_loss_type
+        if training_args.loss_type == "cispo":
+            training_args.epsilon_high = 5.0
+            training_args.num_iterations = 4
         scale_rewards = args.grpo_scale_rewards
         training_args.scale_rewards = False if scale_rewards == "false" else scale_rewards
         training_args.vllm_gpu_memory_utilization = gpu_util

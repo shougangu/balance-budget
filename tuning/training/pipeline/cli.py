@@ -163,6 +163,8 @@ def _parse_args(argv=None):
                        choices=["dpo", "grpo", "kto"])
     stage.add_argument("--parallel", type=int, default=1,
                        help="Number of concurrent post-training workers.")
+    stage.add_argument("--dispatch", action=argparse.BooleanOptionalAction,
+                       default=True)
     stage.add_argument("--short", action="store_true", default=False,
                        help="Use the shorter sbatch script for better queue times.")
     parser.add_argument("--sft-dataset", default="gsm8k", choices=["gsm8k", "tuluif", "openmath", "openmath-lenp95", "openmath-reasoning"])
@@ -207,6 +209,8 @@ def _parse_args(argv=None):
     parser.add_argument("--grpo-batch-size", type=int, default=4)
     parser.add_argument("--grpo-grad-accum", type=int, default=32)
     parser.add_argument("--grpo-num-generations", type=int, default=8)
+    parser.add_argument("--grpo-num-iterations", type=int, default=1,
+                        help="μ in the GRPO paper: inner optimization passes per rollout batch.")
     parser.add_argument("--grpo-max-completion-length", type=int, default=2048)
     parser.add_argument("--grpo-beta", type=float, default=0.0)
     parser.add_argument("--grpo-temperature", type=float, default=1.0)
@@ -214,7 +218,7 @@ def _parse_args(argv=None):
     parser.add_argument("--grpo-warmup-ratio", type=float, default=0.0)
     parser.add_argument("--grpo-lr-scheduler-type", type=str, default="cosine")
     parser.add_argument("--grpo-loss-type", default="dapo",
-                        choices=["grpo", "dr_grpo", "dapo", "bnpo"])
+                        choices=["grpo", "dr_grpo", "dapo", "bnpo", "cispo"])
     parser.add_argument("--grpo-scale-rewards", default="group",
                         choices=["group", "batch", "false"])
     parser.add_argument("--simple-template", action=argparse.BooleanOptionalAction,

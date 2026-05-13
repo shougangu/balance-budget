@@ -34,7 +34,7 @@ def _build_base_cmd(argv):
         if tok == "--parallel":
             skip_next = True
             continue
-        if tok == "--run-all":
+        if tok in ("--run-all", "--dispatch", "--no-dispatch"):
             continue
         result.append(tok)
     return result
@@ -67,7 +67,7 @@ def _submit_sbatch_worker(sbatch_script, worker_args, sbatch_flags=(), wait=Fals
 
 
 def _dispatch_parallel_workers(parallel, base_cmd, pt_flag, metadata_files,
-                                sbatch_script, args, is_top_level):
+                                sbatch_script, args):
     """Submit sbatch workers for post-training.
 
     Top-level dispatches all `parallel` workers; worker/resume mode dispatches
@@ -81,15 +81,14 @@ def _dispatch_parallel_workers(parallel, base_cmd, pt_flag, metadata_files,
         sbatch_flags.append(f"--gres=gpu:{args.grpo_num_gpus}")
 
     worker_argv = list(base_cmd[1:])
-    worker_argv += [pt_flag, "--run-all"]
+    worker_argv += [pt_flag, "--run-all", "--no-dispatch"]
     for mf in metadata_files:
         if Path(mf).is_file():
             worker_argv += ["--metadata-file", mf]
-    num_jobs = parallel if is_top_level else parallel - 1
-    for i in range(num_jobs):
+    for i in range(parallel):
         job_id = _submit_sbatch_worker(sbatch_script, worker_argv,
                                         sbatch_flags=sbatch_flags)
-        print(f"[orchestrator] Submitted worker {i+1}/{num_jobs}: job {job_id}")
+        print(f"[orchestrator] Submitted worker {i+1}/{parallel}: job {job_id}")
 
 
 def main():
@@ -97,8 +96,10 @@ def main():
     _resolve_simplerl_dataset(args)
     print(args)
 
+    # run_all if and only if on an orchestrator state
     if not any([args.run_sft, args.run_dpo, args.run_grpo, args.run_all]):
         args.run_all = True
+        args.run_sft = True
 
     if args.run_sft and not args.run_all:
         from tuning.training.pipeline.stages import run_sft
@@ -116,9 +117,8 @@ def main():
     base_cmd = _build_base_cmd(sys.argv)
     pt_method = args.post_training_method
     pt_flag = f"--run-{pt_method}"
-    is_top_level = not (args.run_dpo or args.run_grpo)
 
-    if is_top_level:
+    if args.run_sft and args.run_all:
         sft_argv = list(base_cmd[1:]) + ["--run-sft"]
         job_id = _submit_sbatch_worker(args.sbatch_script, sft_argv, wait=True)
         sft_output = Path(f"{job_id}_{args.wandb_project}.out").read_text()
@@ -127,20 +127,20 @@ def main():
         if not metadata_files and not args.metadata_file:
             sys.exit("No metadata files from SFT and no --metadata-file provided")
         all_files = metadata_files + (args.metadata_file or [])
+        args.run_sft = False # avoid re-running SFT in workers
     else:
         all_files = args.metadata_file or []
     print(f"Metadata files for post-training: {all_files}")
-
-    _dispatch_parallel_workers(
-        parallel=args.parallel,
-        base_cmd=base_cmd,
-        pt_flag=pt_flag,
-        metadata_files=all_files,
-        sbatch_script=args.sbatch_script,
-        args=args,
-        is_top_level=is_top_level,
-    )
-    if is_top_level:
+    
+    if args.run_all and args.dispatch:
+        _dispatch_parallel_workers(
+            parallel=args.parallel,
+            base_cmd=base_cmd,
+            pt_flag=pt_flag,
+            metadata_files=all_files,
+            sbatch_script=args.sbatch_script,
+            args=args,
+        )
         return
 
     for metadata_file in all_files:
