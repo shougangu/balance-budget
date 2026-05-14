@@ -123,6 +123,7 @@ class GRPOTrainingConfig(TrainingArgumentsConfig):
     num_completions_to_print: int = 4 # 4 printed on logs only, all on W&B
     save_strategy: str = "steps"
     save_steps: float = 0.1
+    use_liger_kernel: bool = False  # Fused Triton lm_head+GRPO loss; avoids materializing [B,T,V] logits
 
     def to_hf_args(self, output_dir: str) -> dict:
         """Return kwargs for GRPOConfig constructor."""

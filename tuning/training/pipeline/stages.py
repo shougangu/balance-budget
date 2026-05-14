@@ -204,6 +204,7 @@ def _build_post_training_configs(
         scale_rewards = args.grpo_scale_rewards
         training_args.scale_rewards = False if scale_rewards == "false" else scale_rewards
         training_args.vllm_gpu_memory_utilization = gpu_util
+        training_args.use_liger_kernel = args.grpo_use_liger_kernel
 
     training_args.resume_from_checkpoint = bool(checkpoint.get("continue", False))
 

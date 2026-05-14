@@ -221,6 +221,9 @@ def _parse_args(argv=None):
                         choices=["grpo", "dr_grpo", "dapo", "bnpo", "cispo"])
     parser.add_argument("--grpo-scale-rewards", default="group",
                         choices=["group", "batch", "false"])
+    parser.add_argument("--grpo-use-liger-kernel",
+                        action=argparse.BooleanOptionalAction, default=False,
+                        help="Fused Triton lm_head+GRPO loss (liger-kernel); cuts backward peak memory.")
     parser.add_argument("--simple-template", action=argparse.BooleanOptionalAction,
                         default=False)
 
