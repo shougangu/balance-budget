@@ -24,6 +24,26 @@ from tuning.config import HF_MODEL_MAP
 import subprocess
 
 
+class _GRPOTrainer(GRPOTrainer):
+    """GRPOTrainer with an extra metric: fraction of sequences masked by the vLLM IS ratio cap."""
+
+    def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
+        if (
+            self.use_vllm
+            and self.vllm_importance_sampling_correction
+            and self.vllm_importance_sampling_mode in ["sequence_mask", "token_mask"]
+            and "importance_sampling_ratio" in inputs
+        ):
+            mode = "train" if self.model.training else "eval"
+            is_ratio = inputs["importance_sampling_ratio"]
+            frac_masked = (is_ratio == 0.0).float().mean()
+            gathered = self.accelerator.gather(frac_masked)
+            self._metrics[mode]["sampling/importance_sampling_ratio/frac_masked"].append(
+                gathered.nanmean().item()
+            )
+        return super().compute_loss(model, inputs, return_outputs, num_items_in_batch)
+
+
 def train_model_grpo(
     run_config: PTRunConfig = None,
     lora_config: LoraConfig = None,
@@ -79,7 +99,7 @@ def train_model_grpo(
         )
         callbacks.append(passk_callback)
 
-    trainer = GRPOTrainer(
+    trainer = _GRPOTrainer(
         model=model,
         processing_class=tokenizer,
         reward_funcs=reward_funcs,
