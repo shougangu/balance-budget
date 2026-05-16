@@ -199,11 +199,13 @@ def _build_post_training_configs(
         training_args.lr_scheduler_type = args.grpo_lr_scheduler_type
         training_args.loss_type = args.grpo_loss_type
         if training_args.loss_type == "cispo":
-            training_args.epsilon_high = 5.0
+            training_args.epsilon_high = 3.0
             training_args.num_iterations = 4
         scale_rewards = args.grpo_scale_rewards
         training_args.scale_rewards = False if scale_rewards == "false" else scale_rewards
         training_args.vllm_gpu_memory_utilization = gpu_util
+        training_args.vllm_importance_sampling_correction = args.grpo_vllm_importance_sampling
+        training_args.upcast_lm_head_fp32 = args.grpo_upcast_lm_head_fp32
         training_args.use_liger_kernel = args.grpo_use_liger_kernel
 
     training_args.resume_from_checkpoint = bool(checkpoint.get("continue", False))
@@ -278,7 +280,13 @@ def _init_wandb_run(args, run_name, job_type, tags, wandb_run_id: str = ""):
     if wandb_run_id:
         kwargs["id"] = wandb_run_id
         kwargs["resume"] = "must"
-    return wandb.init(**kwargs)
+    run = wandb.init(**kwargs)
+    if not wandb_run_id:
+        wandb.alert(
+            title=f"Run started: {run_name}",
+            text=f"job_type={job_type} tags={tags}\n\n{' '.join(sys.argv)}",
+        )
+    return run
 
 
 def run_post_training(args, method: Literal["dpo", "grpo"]):

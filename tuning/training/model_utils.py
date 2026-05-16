@@ -108,6 +108,73 @@ def load_model_with_lora(model_path, model_name, model_load_config, lora_config,
     return model, tokenizer
 
 
+def upcast_lm_head_to_fp32(model):
+    """Cast the model's lm_head matmul to fp32 for GRPO numerical stability.
+
+    Mirrors MiniMax M1 / ScaleRL "FP32 logits" — keeps log_softmax in a precision
+    where trainer and vLLM logprobs agree well enough for the importance ratio.
+
+    If lm_head shares storage with the input embeddings (tie_word_embeddings=True),
+    the weight is cloned first so embed_tokens stays in its original dtype.
+    A forward pre-hook upcasts hidden_states so the matmul itself runs in fp32.
+    """
+    import torch.nn as nn
+
+    lm_head = model.get_output_embeddings()
+    embed = model.get_input_embeddings()
+    tied = lm_head.weight.data_ptr() == embed.weight.data_ptr()
+
+    src = lm_head.weight.data
+    new_weight = src.detach().clone().to(torch.float32) if tied else src.to(torch.float32)
+    lm_head.weight = nn.Parameter(new_weight, requires_grad=lm_head.weight.requires_grad)
+
+    def _cast_inputs_to_fp32(_module, inputs):
+        x = inputs[0]
+        if x.dtype != torch.float32:
+            return (x.to(torch.float32),) + inputs[1:]
+        return inputs
+
+    lm_head.register_forward_pre_hook(_cast_inputs_to_fp32)
+    return model
+
+
+def upcast_vllm_lm_head_to_fp32(llm):
+    """Force vLLM's lm_head matmul + log_softmax to run in fp32.
+
+    Patches the model's LogitsProcessor._get_logits to (a) upcast hidden_states
+    and (b) use an fp32 lm_head weight. Tied embeddings (e.g., Qwen2.5-3B,
+    Qwen3-4B) need a separate fp32 weight buffer so embed_tokens forward stays
+    in its original dtype; untied models upcast lm_head.weight in place so TRL's
+    sync_weights writes fp32→fp32 each step.
+    """
+    import types
+    import torch.nn.functional as F
+
+    vmodel = llm.llm_engine.model_executor.driver_worker.model_runner.model
+    lm_head = vmodel.lm_head
+    embed = vmodel.model.embed_tokens
+    tied = lm_head is embed  # vLLM ties by module identity (Qwen2/3 ForCausalLM)
+
+    if tied:
+        weight_holder = {"w": lm_head.weight.data.detach().to(torch.float32).clone()}
+    else:
+        lm_head.weight.data = lm_head.weight.data.to(torch.float32)
+        weight_holder = {"w": lm_head.weight}
+
+    lp = vmodel.logits_processor
+
+    def _fp32_get_logits(self, hidden_states, _lm_head, embedding_bias):
+        w = weight_holder["w"]
+        logits = F.linear(hidden_states.to(torch.float32), w, embedding_bias)
+        logits = self._gather_logits(logits)
+        if logits is not None:
+            logits = logits[..., : self.org_vocab_size]
+        return logits
+
+    lp._get_logits = types.MethodType(_fp32_get_logits, lp)
+    return llm
+
+
 def save_trained_model(model, tokenizer, trainer, output_dir):
     """Save merged model and training config to output_dir."""
     if hasattr(model, 'save_pretrained_merged'):

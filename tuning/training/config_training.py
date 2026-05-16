@@ -57,7 +57,7 @@ class TrainingArgumentsConfig(BaseModel):
     lr_scheduler_type: str = "cosine"
     report_to: list[str] = ["wandb"]
     save_strategy: str = "steps"
-    save_steps: float = 0.1
+    save_steps: int = 625
     save_total_limit: int = 1
     load_best_model_at_end: bool = False
     dataloader_drop_last: bool = False
@@ -88,6 +88,7 @@ class DPOTrainingConfig(TrainingArgumentsConfig):
     per_device_train_batch_size: int = 4
     gradient_accumulation_steps: int = 4
     eval_steps: float = 256
+    save_steps: int = 256
     per_device_eval_batch_size: int = 2
     dataset_num_proc: int = 4
 
@@ -122,12 +123,15 @@ class GRPOTrainingConfig(TrainingArgumentsConfig):
     log_completions: bool = True
     num_completions_to_print: int = 4 # 4 printed on logs only, all on W&B
     save_strategy: str = "steps"
-    save_steps: float = 0.1
+    save_steps: int = 64
+    vllm_importance_sampling_correction: bool = True
+    upcast_lm_head_fp32: bool = False  # MiniMax/ScaleRL stability: fp32 lm_head on trainer + vLLM
     use_liger_kernel: bool = False  # Fused Triton lm_head+GRPO loss; avoids materializing [B,T,V] logits
 
     def to_hf_args(self, output_dir: str) -> dict:
         """Return kwargs for GRPOConfig constructor."""
         d = super().to_hf_args(output_dir)
+        d.pop("upcast_lm_head_fp32", None)  # consumed by grpo_training.py, not GRPOConfig
         d["num_generations"] = self.num_generations
         d["num_iterations"] = self.num_iterations
         d["max_completion_length"] = self.max_completion_length
@@ -143,6 +147,7 @@ class GRPOTrainingConfig(TrainingArgumentsConfig):
         d["vllm_gpu_memory_utilization"] = self.vllm_gpu_memory_utilization
         d["log_completions"] = self.log_completions
         d["num_completions_to_print"] = self.num_completions_to_print
+        d["vllm_importance_sampling_correction"] = self.vllm_importance_sampling_correction
         d.pop("eval_accumulation_steps", None)
         return d
 

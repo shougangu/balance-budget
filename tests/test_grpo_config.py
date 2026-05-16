@@ -65,6 +65,34 @@ def test_grpo_config_crash_recovery_defaults():
     assert d["save_steps"] > 4, "GRPO save_steps should be larger than the SFT default"
 
 
+def test_grpo_config_upcast_lm_head_fp32_default_off():
+    config = GRPOTrainingConfig()
+    assert config.upcast_lm_head_fp32 is False
+
+
+def test_grpo_config_upcast_lm_head_fp32_excluded_from_hf_args():
+    config = GRPOTrainingConfig(upcast_lm_head_fp32=True)
+    d = config.to_hf_args(output_dir="/tmp/test")
+    assert "upcast_lm_head_fp32" not in d
+
+
+def test_grpo_upcast_lm_head_fp32_cli_default_off():
+    args = _parse_args(["--model", "qwen2-3B", "--wandb-project", "test"])
+    assert args.grpo_upcast_lm_head_fp32 is False
+
+
+def test_grpo_upcast_lm_head_fp32_cli_enable():
+    args = _parse_args(["--model", "qwen2-3B", "--wandb-project", "test",
+                        "--grpo-upcast-lm-head-fp32"])
+    assert args.grpo_upcast_lm_head_fp32 is True
+
+
+def test_grpo_upcast_lm_head_fp32_cli_explicit_disable():
+    args = _parse_args(["--model", "qwen2-3B", "--wandb-project", "test",
+                        "--no-grpo-upcast-lm-head-fp32"])
+    assert args.grpo_upcast_lm_head_fp32 is False
+
+
 def test_pt_run_config_grpo_naming():
     sft_config = SFTRunConfig(
         model_name="llama3-8B",

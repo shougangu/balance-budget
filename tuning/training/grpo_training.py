@@ -9,7 +9,13 @@ from tuning.data.train_dataset import get_train_dataset
 from tuning.training.config_training import PTRunConfig, LoraConfig, ModelLoadConfig, GRPOTrainingConfig
 from tuning.training.callback_utils import CompletionsIntervalCallback
 from tuning.training.passk_callback import PassAtKStoppingCallback
-from tuning.training.model_utils import load_model_with_lora, save_trained_model, top_layer_indices
+from tuning.training.model_utils import (
+    load_model_with_lora,
+    save_trained_model,
+    top_layer_indices,
+    upcast_lm_head_to_fp32,
+    upcast_vllm_lm_head_to_fp32,
+)
 
 from tuning.utils.utils import chat_template_func
 from trl import GRPOTrainer, GRPOConfig
@@ -56,6 +62,10 @@ def train_model_grpo(
     )
     tokenizer = chat_template_func(tokenizer)
 
+    if training_args.upcast_lm_head_fp32:
+        upcast_lm_head_to_fp32(model)
+        print("[GRPO] upcast lm_head to fp32 on trainer")
+
     callbacks = []
 
     if passk_config is not None and passk_config.enabled:
@@ -93,13 +103,22 @@ def train_model_grpo(
 
     # vLLM's offline LLM entrypoint disables stats logging by default; re-enable it
     # so the engine emits throughput/queue/KV-cache stats every ~5s during generation.
+    # The output processor needs the flag flipped too — otherwise LLMEngine.step
+    # builds IterationStats but newly-added requests have stats=None, tripping the
+    # assert in OutputProcessor._update_stats_from_output.
     if hasattr(trainer, 'vllm_generation'):
         from vllm.v1.metrics.loggers import StatLoggerManager
         _engine = trainer.vllm_generation.llm.llm_engine
         if not _engine.log_stats:
             _engine.log_stats = True
+            _engine.output_processor.log_stats = True
+            _engine.output_processor.lora_states.log_stats = True
             _engine.logger_manager = StatLoggerManager(vllm_config=_engine.vllm_config)
             _engine.logger_manager.log_engine_initialized()
+
+        if training_args.upcast_lm_head_fp32:
+            upcast_vllm_lm_head_to_fp32(trainer.vllm_generation.llm)
+            print("[GRPO] upcast lm_head to fp32 on vLLM engine")
 
     # Swap the default WandbCallback for one that bridges train/global_step across runs.
     if initial_global_step:

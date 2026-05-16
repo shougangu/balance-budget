@@ -56,7 +56,7 @@ MODEL_TO_GPU_3 = {
     "llama3-3B-instruct": 0.45,
     "llama3-8B": 0.43,
     "llama3-8B-instruct": 0.43,
-    "qwen2-2B": 0.45,
+    "qwen2-2B": 0.3, # 0.45 -> #0.25 after [600, 2048, 8192] -> 5, 10, 31 GB needed 
     "qwen2-2B-instruct": 0.45,
     "qwen2-3B": 0.45,
     "qwen2-3B-instruct": 0.45,
@@ -192,7 +192,7 @@ def _parse_args(argv=None):
                         help="W&B run ID to resume SFT from. Empty = start fresh.")
     parser.add_argument("--sft-learning-rate", type=float, default=5e-5)
     parser.add_argument("--sft-warmup-ratio", type=float, default=0.0)
-    parser.add_argument("--sft-lr-scheduler-type", type=str, default="cosine")
+    parser.add_argument("--sft-lr-scheduler-type", type=str, default="constant")
     parser.add_argument("--sft-num-epochs", type=int, default=1)
     parser.add_argument("--sft-eval-steps", type=int, default=64)
     parser.add_argument("--sft-batch-size", type=int, default=16)
@@ -215,12 +215,18 @@ def _parse_args(argv=None):
     parser.add_argument("--grpo-beta", type=float, default=0.0)
     parser.add_argument("--grpo-temperature", type=float, default=1.0)
     parser.add_argument("--grpo-learning-rate", type=float, default=1e-5)
-    parser.add_argument("--grpo-warmup-ratio", type=float, default=0.0)
-    parser.add_argument("--grpo-lr-scheduler-type", type=str, default="cosine")
+    parser.add_argument("--grpo-warmup-ratio", type=float, default=0.05)
+    parser.add_argument("--grpo-lr-scheduler-type", type=str, default="constant")
     parser.add_argument("--grpo-loss-type", default="dapo",
                         choices=["grpo", "dr_grpo", "dapo", "bnpo", "cispo"])
     parser.add_argument("--grpo-scale-rewards", default="group",
                         choices=["group", "batch", "false"])
+    parser.add_argument("--grpo-vllm-importance-sampling",
+                        action=argparse.BooleanOptionalAction, default=True,
+                        help="Enable vLLM IS correction (only meaningful with --grpo-num-iterations > 1).")
+    parser.add_argument("--grpo-upcast-lm-head-fp32",
+                        action=argparse.BooleanOptionalAction, default=False,
+                        help="MiniMax/ScaleRL fp32 lm_head on trainer + vLLM for GRPO stability.")
     parser.add_argument("--grpo-use-liger-kernel",
                         action=argparse.BooleanOptionalAction, default=False,
                         help="Fused Triton lm_head+GRPO loss (liger-kernel); cuts backward peak memory.")
