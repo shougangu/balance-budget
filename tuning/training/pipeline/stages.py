@@ -32,6 +32,14 @@ from tuning.training.pipeline.eval_components import (
 )
 
 
+def _build_lora_config(args) -> LoraConfig:
+    """LoraConfig with CLI-controllable knobs applied (gradient checkpointing, etc.)."""
+    cfg = LoraConfig()
+    if not getattr(args, "gradient_checkpointing", True):
+        cfg.use_gradient_checkpointing = False
+    return cfg
+
+
 def run_sft(args):
     """Run SFT stage, returning a list of metadata file paths written by callbacks."""
     import subprocess
@@ -54,7 +62,7 @@ def run_sft(args):
         do_training=True, do_inference=False, do_evaluation=False,
         task_name=args.task_name,
     )
-    lora_config = LoraConfig()
+    lora_config = _build_lora_config(args)
     model_load_config = ModelLoadConfig()
     model_load_config.max_seq_length = args.max_seq_length
     training_args = TrainingArgumentsConfig()
@@ -140,7 +148,10 @@ def _build_post_training_configs(
     """Construct dataclass with all configs needed for the post-training stage."""
     model_name = Path(checkpoint["checkpoint_path"]).name
     gpu_util_map = MODEL_TO_GPU_2 if method == "dpo" else MODEL_TO_GPU_3
-    gpu_util = gpu_util_map[args.model]
+    gpu_util = (
+        args.grpo_gpu_util if method == "grpo" and args.grpo_gpu_util is not None
+        else gpu_util_map[args.model]
+    )
 
     dataset_type = "pt" if method == "dpo" else "rlvr"
     dataset_config = DatasetConfig(
@@ -169,7 +180,7 @@ def _build_post_training_configs(
         run_config_kwargs["simple_template"] = args.simple_template
     run_config = PTRunConfig(**run_config_kwargs)
 
-    lora_config = LoraConfig()
+    lora_config = _build_lora_config(args)
     if method == "grpo" and args.grpo_lora_target_modules is not None:
         lora_config.target_modules = args.grpo_lora_target_modules
 

@@ -24,6 +24,23 @@ from tuning.config import HF_MODEL_MAP
 import subprocess
 
 
+def _enable_vllm_engine_stats():
+    # TRL builds vllm.LLM() without passing disable_log_stats; vllm's entrypoint
+    # then forces it to True, which propagates log_stats=False all the way into
+    # the Scheduler so make_stats() returns None and no periodic engine stats
+    # (throughput, KV-cache usage, queue depths) are ever logged. Override the
+    # default so the Scheduler emits stats and LoggingStatLogger has data to log.
+    from vllm import LLM
+    orig_init = LLM.__init__
+    def init(self, *args, **kwargs):
+        kwargs.setdefault("disable_log_stats", False)
+        return orig_init(self, *args, **kwargs)
+    LLM.__init__ = init
+
+
+_enable_vllm_engine_stats()
+
+
 class _GRPOTrainer(GRPOTrainer):
     """GRPOTrainer with an extra metric: fraction of sequences masked by the vLLM IS ratio cap."""
 
@@ -121,21 +138,7 @@ def train_model_grpo(
                 print(f"[GRPO] PassAtK callback will reuse GRPOTrainer's vLLM engine")
             cb._accelerator = trainer.accelerator
 
-    # vLLM's offline LLM entrypoint disables stats logging by default; re-enable it
-    # so the engine emits throughput/queue/KV-cache stats every ~5s during generation.
-    # The output processor needs the flag flipped too — otherwise LLMEngine.step
-    # builds IterationStats but newly-added requests have stats=None, tripping the
-    # assert in OutputProcessor._update_stats_from_output.
     if hasattr(trainer, 'vllm_generation'):
-        from vllm.v1.metrics.loggers import StatLoggerManager
-        _engine = trainer.vllm_generation.llm.llm_engine
-        if not _engine.log_stats:
-            _engine.log_stats = True
-            _engine.output_processor.log_stats = True
-            _engine.output_processor.lora_states.log_stats = True
-            _engine.logger_manager = StatLoggerManager(vllm_config=_engine.vllm_config)
-            _engine.logger_manager.log_engine_initialized()
-
         if training_args.upcast_lm_head_fp32:
             upcast_vllm_lm_head_to_fp32(trainer.vllm_generation.llm)
             print("[GRPO] upcast lm_head to fp32 on vLLM engine")

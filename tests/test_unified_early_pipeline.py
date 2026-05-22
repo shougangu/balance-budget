@@ -217,6 +217,23 @@ class TestParseArgs:
         assert args.run_sft is True
         assert args.run_dpo is False
 
+    def test_default_gradient_checkpointing_enabled(self):
+        assert _parse_args(REQUIRED).gradient_checkpointing is True
+
+    def test_no_gradient_checkpointing_disables(self):
+        args = _parse_args(REQUIRED + ["--no-gradient-checkpointing"])
+        assert args.gradient_checkpointing is False
+
+    def test_build_lora_config_default_keeps_unsloth_gc(self):
+        from tuning.training.pipeline.stages import _build_lora_config
+        cfg = _build_lora_config(_parse_args(REQUIRED))
+        assert cfg.use_gradient_checkpointing == "unsloth"
+
+    def test_build_lora_config_disables_gc(self):
+        from tuning.training.pipeline.stages import _build_lora_config
+        cfg = _build_lora_config(_parse_args(REQUIRED + ["--no-gradient-checkpointing"]))
+        assert cfg.use_gradient_checkpointing is False
+
     def test_invalid_model_rejected(self):
         with pytest.raises(SystemExit):
             _parse_args(["--model", "nonexistent", "--wandb-project", "tuning"])

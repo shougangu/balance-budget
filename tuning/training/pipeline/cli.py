@@ -233,8 +233,14 @@ def _parse_args(argv=None):
     parser.add_argument("--simple-template", action=argparse.BooleanOptionalAction,
                         default=False)
 
+    parser.add_argument("--grpo-gpu-util", type=float, default=None,
+                        help="Override MODEL_TO_GPU_3 vLLM GPU utilisation for GRPO (0.0–1.0).")
     parser.add_argument("--grpo-lora-target-modules", type=str, nargs="+", default=None)
     parser.add_argument("--grpo-lora-layers-fraction", type=float, default=1.0)
+    parser.add_argument("--gradient-checkpointing",
+                        action=argparse.BooleanOptionalAction, default=True,
+                        help="Gradient checkpointing for SFT and GRPO LoRA training. "
+                             "--no-gradient-checkpointing disables it (faster step, much higher activation memory).")
 
     parser.add_argument("--sft-enable-passk", action=argparse.BooleanOptionalAction,
                         default=True)
