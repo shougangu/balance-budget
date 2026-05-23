@@ -1,5 +1,6 @@
 import os
 import json
+import wandb
 from transformers import TrainerCallback, TrainerState
 from transformers.integrations import WandbCallback
 from transformers.training_args import TrainingArguments
@@ -69,8 +70,11 @@ def save_sweetspot_checkpoint(
         Path to the saved checkpoint directory.
     """
     data_points_seen = compute_data_points_seen(state, args)
+    wandb_run_id = wandb.run.id if wandb.run else ""
 
     checkpoint_name = f"{model_name}_{threshold_label}_sft-{data_points_seen}"
+    if wandb_run_id:
+        checkpoint_name = f"{checkpoint_name}_{wandb_run_id}"
     checkpoint_path = os.path.join(MODELS_DIR, checkpoint_name)
 
     print(f"[Callback] Saving sweetspot checkpoint to {checkpoint_path}")
@@ -89,6 +93,7 @@ def save_sweetspot_checkpoint(
         "checkpoint_path": checkpoint_path,
         "data_points_seen": data_points_seen,
         **(extra_metadata or {}),
+        "sft_wandb_run_id": wandb_run_id,
     }
     with open(metadata_path, "a") as f:
         f.write(json.dumps(metadata) + "\n")

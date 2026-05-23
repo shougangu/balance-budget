@@ -209,20 +209,26 @@ class SFTRunConfig(BaseModel):
     do_training: bool = False
     do_inference: bool = False
     do_evaluation: bool = False
+    wandb_run_id: str = ""
 
     @property
     def run_name(self):
+        if self.dataset_config and self.dataset_config.dynamic_path:
+            return self.dataset_config.dataset_full_name
         if not self.dataset_config or not self.dataset_config.train_size:
             return self.model_name
         return f"{self.model_name}_{self.dataset_config.dataset_full_name}"
-    
+
     @property
     def output_dir(self):
-        return f"{MODELS_DIR}/{self.run_name}"
-    
+        base = f"{MODELS_DIR}/{self.run_name}"
+        if self.wandb_run_id:
+            return f"{base}_{self.wandb_run_id}"
+        return base
+
     def __str__(self):
         return self.run_name
-    
+
 
 class PTRunConfig(BaseModel):
     model_name_hf: str = "unsloth/Meta-Llama-3.1-8B"
@@ -238,6 +244,7 @@ class PTRunConfig(BaseModel):
     add_beta_run_name: bool = False
     beta: float = 0.1
     simple_template: bool = False
+    wandb_run_id: str = ""
 
     @property
     def run_name(self):
@@ -251,12 +258,15 @@ class PTRunConfig(BaseModel):
         if self.add_beta_run_name:
             run_name = f"{run_name}_beta-{self.beta}"
 
-            run_name = run_name.replace(".", "-")   
+            run_name = run_name.replace(".", "-")
         return run_name
-    
+
     @property
     def output_dir(self):
-        return f"{MODELS_DIR}/{self.run_name}"
+        base = f"{MODELS_DIR}/{self.run_name}"
+        if self.wandb_run_id:
+            return f"{base}_{self.wandb_run_id}"
+        return base
     
     def __str__(self):
         return self.run_name

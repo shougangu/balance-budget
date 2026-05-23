@@ -102,6 +102,18 @@ def mark_completed(metadata_file, checkpoint_path):
     )
 
 
+def record_wandb_run_id(metadata_file, checkpoint_path, wandb_run_id):
+    """Persist the active wandb run id onto the row for ``checkpoint_path`` so
+    downstream stages can resume the same run. No-op when wandb_run_id is empty."""
+    if not wandb_run_id:
+        return
+    _update_row(
+        metadata_file,
+        lambda r: r["checkpoint_path"] == checkpoint_path,
+        {"wandb_run_id": wandb_run_id},
+    )
+
+
 def print_metadata_paths(paths):
     """Print metadata file paths with a prefix for subprocess IPC."""
     for p in paths:

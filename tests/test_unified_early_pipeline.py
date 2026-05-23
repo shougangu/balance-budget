@@ -10,7 +10,7 @@ from pathlib import Path
 from tuning.training.pipeline.cli import parse_early_tuple, _parse_args
 from tuning.training.pipeline.checkpoint_metadata import (
     load_checkpoints, next_checkpoint, claim_next_checkpoint, mark_completed,
-    print_metadata_paths, parse_metadata_from_output,
+    print_metadata_paths, parse_metadata_from_output, record_wandb_run_id,
 )
 from tuning.training.pipeline.orchestrator import (
     _build_base_cmd, _submit_sbatch_worker, _dispatch_parallel_workers,
@@ -290,6 +290,32 @@ class TestMetadataWorkQueue:
         assert row["data_points_seen"] == 512
         assert row["threshold_type"] == "pass_at_1"
         assert row["completed"] is True
+
+    def test_record_wandb_run_id_sets_field_on_matching_row(self, tmp_path):
+        f = tmp_path / "meta.jsonl"
+        _write_jsonl(f, [PASSK_ROW, PPL_ROW])
+        record_wandb_run_id(str(f), "/models/cp1", "newrun")
+        with open(f) as fh:
+            lines = [json.loads(l) for l in fh]
+        assert lines[0]["wandb_run_id"] == "newrun"
+        assert "wandb_run_id" not in lines[1]
+
+    def test_record_wandb_run_id_overwrites_existing(self, tmp_path):
+        f = tmp_path / "meta.jsonl"
+        _write_jsonl(f, [{**PASSK_ROW, "wandb_run_id": "old"}])
+        record_wandb_run_id(str(f), "/models/cp1", "new")
+        with open(f) as fh:
+            row = json.loads(fh.readline())
+        assert row["wandb_run_id"] == "new"
+
+    def test_record_wandb_run_id_is_noop_when_empty(self, tmp_path):
+        """An empty wandb_run_id (no active wandb run) must not touch the file."""
+        f = tmp_path / "meta.jsonl"
+        _write_jsonl(f, [PASSK_ROW])
+        record_wandb_run_id(str(f), "/models/cp1", "")
+        with open(f) as fh:
+            row = json.loads(fh.readline())
+        assert "wandb_run_id" not in row
 
 
 class TestClaimNextCheckpoint:

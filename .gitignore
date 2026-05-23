@@ -188,3 +188,4 @@ Balance/
 gha-creds-*.json
 docs/
 artifacts/*
+balance-budget.code-workspace

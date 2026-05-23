@@ -110,6 +110,91 @@ def test_pt_run_config_grpo_naming():
     assert "rlvr-gsm8k-500" in run_config.run_name
 
 
+def test_pt_run_config_no_duplicate_model_name_with_dynamic_path():
+    """When sft_run_config.dataset_config.dynamic_path already encodes a full SFT folder
+    name (e.g. "llama3-3B_sft-gsm8k-1000"), PTRunConfig.run_name must not prepend the
+    model_name a second time."""
+    sft_folder_name = "llama3-3B_sft-gsm8k-1000"
+    sft_config = SFTRunConfig(
+        model_name="llama3-3B",
+        model_name_hf="unsloth/Meta-Llama-3.1-3B",
+        dataset_config=DatasetConfig(
+            dataset="gsm8k", dataset_type="sft", train_size=1000,
+            dynamic_path=sft_folder_name,
+        ),
+    )
+    run_config = PTRunConfig(
+        model_name="llama3-3B",
+        model_name_hf="unsloth/Meta-Llama-3.1-3B",
+        sft_run_config=sft_config,
+        dataset_config=DatasetConfig(dataset="gsm8k", dataset_type="rlvr", train_size=500),
+        pft_method="grpo",
+    )
+    assert "llama3-3B_llama3-3B" not in run_config.run_name
+    assert run_config.run_name.startswith("llama3-3B_sft-gsm8k-1000_")
+    assert run_config.run_name.endswith("_grpo")
+
+
+def test_pt_run_config_output_dir_includes_wandb_run_id():
+    """PTRunConfig.output_dir appends wandb_run_id when set."""
+    run_config = PTRunConfig(
+        model_name="llama3-3B",
+        model_name_hf="unsloth/Meta-Llama-3.1-3B",
+        dataset_config=DatasetConfig(dataset="gsm8k", dataset_type="rlvr", train_size=500),
+        pft_method="grpo",
+        wandb_run_id="abc123",
+    )
+    assert run_config.output_dir.endswith("_abc123")
+
+
+def test_pt_run_config_output_dir_omits_empty_wandb_run_id():
+    """An empty wandb_run_id must not produce a trailing underscore."""
+    run_config = PTRunConfig(
+        model_name="llama3-3B",
+        model_name_hf="unsloth/Meta-Llama-3.1-3B",
+        dataset_config=DatasetConfig(dataset="gsm8k", dataset_type="rlvr", train_size=500),
+        pft_method="grpo",
+    )
+    assert not run_config.output_dir.endswith("_")
+    assert run_config.output_dir.endswith("_grpo")
+
+
+def test_sft_run_config_output_dir_includes_wandb_run_id():
+    """SFTRunConfig.output_dir appends wandb_run_id when set."""
+    sft_config = SFTRunConfig(
+        model_name="llama3-3B",
+        model_name_hf="unsloth/Meta-Llama-3.1-3B",
+        dataset_config=DatasetConfig(dataset="gsm8k", dataset_type="sft", train_size=1000),
+        wandb_run_id="xyz789",
+    )
+    assert sft_config.output_dir.endswith("_xyz789")
+
+
+def test_sft_run_config_output_dir_omits_empty_wandb_run_id():
+    """An empty wandb_run_id must not produce a trailing underscore on the SFT path."""
+    sft_config = SFTRunConfig(
+        model_name="llama3-3B",
+        model_name_hf="unsloth/Meta-Llama-3.1-3B",
+        dataset_config=DatasetConfig(dataset="gsm8k", dataset_type="sft", train_size=1000),
+    )
+    assert not sft_config.output_dir.endswith("_")
+    assert sft_config.output_dir.endswith("sft-gsm8k-1000")
+
+
+def test_sft_run_config_run_name_uses_dynamic_path_directly():
+    """When dynamic_path is set, SFTRunConfig.run_name returns just the dynamic_path
+    basename — model_name must not be prepended again."""
+    sft_config = SFTRunConfig(
+        model_name="llama3-3B",
+        model_name_hf="unsloth/Meta-Llama-3.1-3B",
+        dataset_config=DatasetConfig(
+            dataset="gsm8k", dataset_type="sft", train_size=1000,
+            dynamic_path="llama3-3B_sft-gsm8k-1000",
+        ),
+    )
+    assert sft_config.run_name == "llama3-3B_sft-gsm8k-1000"
+
+
 def test_sft_learning_rate_cli_arg():
     args = _parse_args(["--model", "qwen2-3B", "--wandb-project", "test",
                         "--sft-learning-rate", "2e-4"])

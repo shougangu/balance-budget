@@ -21,7 +21,7 @@ from tuning.training.config_training import (
 from tuning.utils.gpu import cleanup_gpu
 
 from tuning.training.pipeline.checkpoint_metadata import (
-    claim_next_checkpoint, mark_completed,
+    claim_next_checkpoint, mark_completed, record_wandb_run_id,
 )
 from tuning.training.pipeline.cli import (
     MODEL_TO_GPU_1, MODEL_TO_GPU_2, MODEL_TO_GPU_3, _init_seeds,
@@ -79,7 +79,9 @@ def run_sft(args):
     ppl_config = _sft_ppl_config(args)
     tags = _sft_tags(passk_config, ppl_config, primary_eval) + args.tags
 
-    with _init_wandb_run(args, run_config.model_name, "sft", tags, args.sft_resume):
+    wandb_ctx = _init_wandb_run(args, run_config.model_name, "sft", tags, args.sft_resume)
+    run_config.wandb_run_id = wandb_ctx.id if wandb_ctx else ""
+    with wandb_ctx:
         model, tokenizer, trainer, callbacks = train_model_sft(
             run_config=run_config,
             lora_config=lora_config,
@@ -352,12 +354,23 @@ def run_post_training(args, method: Literal["dpo", "grpo"]):
     _train_dispatch._args = args
     try:
         if rank == 0:
+            # Only resume the W&B run when continuing an in-progress post-training run.
+            # On fresh forks from an SFT checkpoint, multiple post-training runs may share
+            # the same SFT checkpoint, so each needs its own W&B run.
+            resume_id = checkpoint.get("wandb_run_id", "") if checkpoint.get("continue") else ""
             wandb_ctx = _init_wandb_run(
-                args, configs.run_config.model_name, method, tags,
-                checkpoint.get("wandb_run_id", ""),
+                args, configs.run_config.model_name, method, tags, resume_id,
             )
+            wandb_run_id = wandb_ctx.id if wandb_ctx else ""
+            record_wandb_run_id(metadata_file, checkpoint["checkpoint_path"], wandb_run_id)
         else:
             wandb_ctx = contextlib.nullcontext()
+            wandb_run_id = ""
+        if is_dist:
+            payload = [wandb_run_id]
+            dist.broadcast_object_list(payload, src=0)
+            wandb_run_id = payload[0]
+        configs.run_config.wandb_run_id = wandb_run_id
         with wandb_ctx:
             _train_dispatch(method, configs, passk_config, primary_eval,
                             monitor_evals, ppl_config, checkpoint)

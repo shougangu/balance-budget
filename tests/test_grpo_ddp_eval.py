@@ -1,6 +1,7 @@
 # ABOUTME: Tests for DDP eval support in PassAtKStoppingCallback.
 # ABOUTME: CPU-only; mocks vllm, unsloth, and torch.distributed.
 
+import os
 import sys
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -158,6 +159,97 @@ def test_save_sweetspot_no_unwrap_when_accelerator_none(tmp_path):
 
     model.save_pretrained_merged.assert_called_once()
     model.save_pretrained.assert_not_called()
+
+
+def _save_sweetspot_with_wandb(callback_utils, tmp_path, wandb_run):
+    """Helper: run save_sweetspot_checkpoint with MODELS_DIR redirected to tmp_path
+    so the mocked model's no-op save_pretrained_merged still allows
+    training_config.json to be written."""
+
+    def _fake_save(path, *args, **kwargs):
+        os.makedirs(path, exist_ok=True)
+
+    model = MagicMock(name="unsloth_model")
+    model.save_pretrained_merged.side_effect = _fake_save
+    tokenizer = MagicMock()
+    state = SimpleNamespace(global_step=10, log_history=[])
+    args = SimpleNamespace(
+        per_device_train_batch_size=8,
+        gradient_accumulation_steps=1,
+        world_size=1,
+        output_dir=str(tmp_path),
+        to_dict=lambda: {},
+    )
+    metadata_path = str(tmp_path / "meta.jsonl")
+
+    with patch.object(callback_utils, "MODELS_DIR", str(tmp_path)), \
+         patch.object(callback_utils, "wandb", SimpleNamespace(run=wandb_run)):
+        callback_utils.save_sweetspot_checkpoint(
+            model=model,
+            tokenizer=tokenizer,
+            model_name="qwen2-2B",
+            threshold_label="p@1-0.5",
+            state=state,
+            args=args,
+            metadata_path=metadata_path,
+            extra_metadata={"threshold_type": "pass_at_1", "threshold_value": 0.5},
+        )
+    return metadata_path
+
+
+def test_save_sweetspot_records_wandb_run_id(tmp_path):
+    """The metadata row written by save_sweetspot_checkpoint includes the active
+    wandb run id, so downstream stages can resume the same run."""
+    import json
+    import os
+    from tuning.training import callback_utils
+
+    metadata_path = _save_sweetspot_with_wandb(
+        callback_utils, tmp_path, SimpleNamespace(id="abc123"),
+    )
+
+    rows = [json.loads(line) for line in open(metadata_path)]
+    assert len(rows) == 1
+    assert rows[0]["wandb_run_id"] == "abc123"
+    assert rows[0]["threshold_type"] == "pass_at_1"
+
+
+def test_save_sweetspot_records_empty_wandb_run_id_when_no_active_run(tmp_path):
+    """Without an active wandb run, the wandb_run_id field is written as the empty
+    string (kept present so consumers can use a single .get() path)."""
+    import json
+    import os
+    from tuning.training import callback_utils
+
+    metadata_path = _save_sweetspot_with_wandb(callback_utils, tmp_path, None)
+
+    rows = [json.loads(line) for line in open(metadata_path)]
+    assert rows[0]["wandb_run_id"] == ""
+
+
+def test_save_sweetspot_checkpoint_path_includes_wandb_run_id(tmp_path):
+    """When wandb is active, the sweetspot checkpoint folder name appends the
+    wandb run id so multiple SFT runs with the same data budget don't collide."""
+    import json
+    from tuning.training import callback_utils
+
+    metadata_path = _save_sweetspot_with_wandb(
+        callback_utils, tmp_path, SimpleNamespace(id="run42"),
+    )
+
+    rows = [json.loads(line) for line in open(metadata_path)]
+    assert rows[0]["checkpoint_path"].endswith("_run42")
+
+
+def test_save_sweetspot_checkpoint_path_omits_empty_wandb_run_id(tmp_path):
+    """Without an active wandb run, the checkpoint folder name has no trailing _ ."""
+    import json
+    from tuning.training import callback_utils
+
+    metadata_path = _save_sweetspot_with_wandb(callback_utils, tmp_path, None)
+
+    rows = [json.loads(line) for line in open(metadata_path)]
+    assert not rows[0]["checkpoint_path"].endswith("_")
 
 
 def test_run_eval_ddp_partitions_and_merges(monkeypatch):
