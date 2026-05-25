@@ -1,5 +1,5 @@
 # ABOUTME: Tests that OffsetAwareWandbCallback, PassAtK, and Perplexity callbacks
-# ABOUTME: inject train/total_global_step into their wandb.log dicts when initial_global_step is set.
+# ABOUTME: always inject total_global_step (= global_step + offset) into their log dicts.
 
 import sys
 from types import SimpleNamespace
@@ -249,18 +249,18 @@ class TestOffsetAwareWandbCallback:
     def test_injects_total_global_step_with_offset(self):
         cb = OffsetAwareWandbCallback(initial_global_step=1000)
         logs = _fire_on_log(cb, global_step=50)
-        assert logs["train/total_global_step"] == 1050
+        assert logs["total_global_step"] == 1050
 
     def test_total_global_step_tracks_changing_global_step(self):
         cb = OffsetAwareWandbCallback(initial_global_step=500)
         for step in [0, 10, 100, 200]:
             logs = _fire_on_log(cb, global_step=step)
-            assert logs["train/total_global_step"] == step + 500
+            assert logs["total_global_step"] == step + 500
 
-    def test_no_injection_when_offset_is_zero(self):
+    def test_injects_total_global_step_when_offset_is_zero(self):
         cb = OffsetAwareWandbCallback(initial_global_step=0)
         logs = _fire_on_log(cb, global_step=50)
-        assert "train/total_global_step" not in logs
+        assert logs["total_global_step"] == 50
 
     def test_no_crash_when_logs_is_none(self):
         cb = OffsetAwareWandbCallback(initial_global_step=100)

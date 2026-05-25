@@ -83,11 +83,10 @@ def train_model_dpo(
     )
 
     # Swap the default WandbCallback for one that bridges train/global_step across runs.
-    if initial_global_step:
-        from transformers.integrations import WandbCallback
-        from tuning.training.callback_utils import OffsetAwareWandbCallback
-        trainer.pop_callback(WandbCallback)
-        trainer.add_callback(OffsetAwareWandbCallback(initial_global_step))
+    from transformers.integrations import WandbCallback
+    from tuning.training.callback_utils import OffsetAwareWandbCallback
+    trainer.pop_callback(WandbCallback)
+    trainer.add_callback(OffsetAwareWandbCallback(initial_global_step or 0))
 
     try:
         trainer_stats = trainer.train(

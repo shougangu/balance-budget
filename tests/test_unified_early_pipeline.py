@@ -585,7 +585,7 @@ class TestOffsetAwareWandbCallback:
         logs = {}
 
         callback.on_log(args=None, state=state, control=None, logs=logs)
-        assert logs["train/total_global_step"] == 105
+        assert logs["total_global_step"] == 105
 
     def test_does_not_mutate_global_step(self):
         from tuning.training.callback_utils import OffsetAwareWandbCallback
@@ -599,7 +599,7 @@ class TestOffsetAwareWandbCallback:
         callback.on_log(args=None, state=state, control=None, logs={})
         assert state.global_step == 5
 
-    def test_zero_offset_skips_injection(self):
+    def test_zero_offset_still_injects(self):
         from tuning.training.callback_utils import OffsetAwareWandbCallback
         from transformers import TrainerState
 
@@ -610,9 +610,9 @@ class TestOffsetAwareWandbCallback:
         logs = {}
 
         callback.on_log(args=None, state=state, control=None, logs=logs)
-        assert "train/total_global_step" not in logs
+        assert logs["total_global_step"] == 5
 
-    def test_none_offset_skips_injection(self):
+    def test_none_offset_still_injects(self):
         from tuning.training.callback_utils import OffsetAwareWandbCallback
         from transformers import TrainerState
 
@@ -623,7 +623,7 @@ class TestOffsetAwareWandbCallback:
         logs = {}
 
         callback.on_log(args=None, state=state, control=None, logs=logs)
-        assert "train/total_global_step" not in logs
+        assert logs["total_global_step"] == 5
 
     def test_setup_redefines_step_metric_after_super(self):
         """The override's define_metric calls must run AFTER the parent's,
