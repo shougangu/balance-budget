@@ -22,6 +22,8 @@ from trl import GRPOTrainer, GRPOConfig
 from typing import Callable, List
 from tuning.config import HF_MODEL_MAP
 import subprocess
+from transformers.integrations import WandbCallback
+from tuning.training.callback_utils import OffsetAwareWandbCallback
 
 
 def _enable_vllm_engine_stats():
@@ -144,11 +146,8 @@ def train_model_grpo(
             print("[GRPO] upcast lm_head to fp32 on vLLM engine")
 
     # Swap the default WandbCallback for one that bridges train/global_step across runs.
-    if initial_global_step:
-        from transformers.integrations import WandbCallback
-        from tuning.training.callback_utils import OffsetAwareWandbCallback
-        trainer.pop_callback(WandbCallback)
-        trainer.add_callback(OffsetAwareWandbCallback(initial_global_step))
+    trainer.pop_callback(WandbCallback)
+    trainer.add_callback(OffsetAwareWandbCallback(initial_global_step or 0))
 
     try:
         trainer_stats = trainer.train(
