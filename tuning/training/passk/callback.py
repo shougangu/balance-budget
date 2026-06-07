@@ -64,6 +64,9 @@ class PassAtKStoppingCallback(TrainerCallback):
         self._last_eval_step = -1
         self._last_checkpoint_data_points = 0
         self._accelerator = None
+        # Set by the GRPO setup when the callback reuses the trainer's vLLM engine
+        # (colocate/server). Used to refresh the engine before the baseline eval.
+        self._trainer_vllm_generation = None
 
         # Eval strategies
         self.primary_eval = primary_eval
@@ -143,6 +146,13 @@ class PassAtKStoppingCallback(TrainerCallback):
         print(f"[PassAtKCallback] on_train_begin: model_name={self.model_name}")
         now = datetime.datetime.now().strftime("%m%d_%H%M%S")
         self.metadata_path = os.path.join(MODELS_METADATA_DIR, f"{self.model_name}_{self.primary_eval.id}_{self.primary_eval.stopping_metric()}-{now}.json")
+
+        # When reusing the trainer's vLLM engine, refresh its weights from the trainer
+        # model before the baseline eval. HF applies resume_from_checkpoint inside
+        # train(), after the engine was built, so it still holds pre-resume weights here.
+        if self._trainer_vllm_generation is not None:
+            print("[PassAtKCallback] syncing trainer weights to vLLM before baseline eval")
+            self._trainer_vllm_generation.sync_weights()
 
         # Baseline evaluation before training starts
         self.on_evaluate(args, state, control, **kwargs)

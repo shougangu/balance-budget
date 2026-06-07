@@ -102,6 +102,39 @@ def test_external_vllm_defaults_to_none():
     assert not isinstance(callback._runner, ExternalVLLMRunner)
 
 
+def test_on_train_begin_syncs_trainer_weights_before_baseline_eval():
+    """The reused vLLM engine must be re-synced before the baseline eval reads it.
+
+    HF applies resume_from_checkpoint inside train(), after the trainer (and its vLLM
+    engine) were built, so the engine still holds pre-resume weights until on_train_begin
+    syncs. Without the sync, the first eval reflects stale weights.
+    """
+    callback = _make_callback()
+
+    call_order = []
+    fake_vllm_generation = MagicMock()
+    fake_vllm_generation.sync_weights.side_effect = lambda: call_order.append("sync")
+    callback._trainer_vllm_generation = fake_vllm_generation
+
+    # Observe ordering only; don't run real inference for the baseline eval.
+    callback.on_evaluate = lambda *a, **k: call_order.append("eval")
+
+    callback.on_train_begin(args=MagicMock(), state=MagicMock(), control=MagicMock())
+
+    fake_vllm_generation.sync_weights.assert_called_once()
+    assert call_order == ["sync", "eval"]
+
+
+def test_on_train_begin_without_trainer_vllm_does_not_sync():
+    """When the callback owns its own (ephemeral/persistent) runner, there is no trainer
+    engine to sync, and on_train_begin must not attempt one."""
+    callback = _make_callback()
+    assert callback._trainer_vllm_generation is None
+
+    callback.on_evaluate = lambda *a, **k: None
+    callback.on_train_begin(args=MagicMock(), state=MagicMock(), control=MagicMock())
+
+
 def test_external_vllm_skips_lora_save_and_uses_engine():
     callback = _make_callback()
     mock_llm = _mock_vllm_engine()
