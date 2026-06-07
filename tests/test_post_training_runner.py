@@ -33,6 +33,7 @@ def _make_args(metadata_file, **overrides):
     base = dict(
         model="llama3-3B",
         wandb_project="test",
+        tags=[],
         dataset="gsm8k",
         train_size=4096,
         sft_data_size=None, dpo_data_size=None, grpo_data_size=None,
@@ -48,10 +49,22 @@ def _make_args(metadata_file, **overrides):
         dpo_batch_size=2, dpo_grad_accum=2,
         grpo_learning_rate=1e-5, grpo_num_epochs=1, grpo_eval_steps=64,
         grpo_batch_size=2, grpo_grad_accum=2, grpo_num_generations=2,
+        grpo_num_iterations=1,
         grpo_max_completion_length=256, grpo_max_prompt_length=256,
         grpo_beta=0.0, grpo_temperature=1.0,
+        grpo_warmup_ratio=0.05, grpo_lr_scheduler_type="constant",
         grpo_loss_type="dapo", grpo_scale_rewards="group",
+        grpo_gpu_util=None,
+        grpo_vllm_importance_sampling=True,
+        grpo_upcast_lm_head_fp32=False,
+        grpo_use_liger_kernel=False,
+        grpo_vllm_mode="colocate",
+        grpo_vllm_server_host="127.0.0.1",
+        grpo_vllm_server_port=8000,
+        grpo_vllm_group_port=51216,
+        grpo_vllm_server_timeout=300.0,
         grpo_lora_target_modules=None, grpo_lora_layers_fraction=1.0,
+        gradient_checkpointing=True,
         metadata_file=[str(metadata_file)],
     )
     base.update(overrides)
@@ -106,6 +119,7 @@ class TestRunPostTrainingGrpo:
         monkeypatch.setattr(stages, "_train_dispatch", fake_dispatch)
 
         with patch("tuning.training.pipeline.stages.wandb") as wandb_mock:
+            wandb_mock.init.return_value.id = "run-test"
             wandb_mock.init.return_value.__enter__ = MagicMock()
             wandb_mock.init.return_value.__exit__ = MagicMock()
             stages.run_post_training(args, "grpo")

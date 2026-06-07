@@ -16,6 +16,7 @@ from tuning.training.model_utils import (
     upcast_lm_head_to_fp32,
     upcast_vllm_lm_head_to_fp32,
 )
+from tuning.training.server_rollouts import install_client_rendered_chat
 
 from tuning.utils.utils import chat_template_func
 from trl import GRPOTrainer, GRPOConfig
@@ -133,17 +134,42 @@ def train_model_grpo(
     if trainer.log_completions:
         trainer.add_callback(CompletionsIntervalCallback(trainer, interval=64))
 
+    vllm_mode = getattr(trainer, "vllm_mode", None)
+    is_colocate = vllm_mode == "colocate" and hasattr(trainer, "vllm_generation")
+    is_server = vllm_mode == "server" and hasattr(trainer, "vllm_generation")
+    server_client = None
+    if is_server:
+        server_client = getattr(trainer.vllm_generation, "vllm_client", None)
+        if trainer.accelerator.is_main_process and server_client is None:
+            raise RuntimeError(
+                "GRPO server mode initialized without a rank-0 VLLMClient. "
+                "Start trl vllm-serve and pass --grpo-vllm-server-host/port."
+            )
+        if server_client is not None:
+            install_client_rendered_chat(server_client, tokenizer)
+            print("[GRPO] Server rollouts will render prompts with the trainer tokenizer "
+                  "and use the vLLM /generate/ endpoint")
+
     for cb in callbacks or []:
         if isinstance(cb, PassAtKStoppingCallback):
-            if hasattr(trainer, 'vllm_generation'):
+            if is_colocate:
                 cb.set_trainer_vllm(trainer.vllm_generation.llm)
-                print(f"[GRPO] PassAtK callback will reuse GRPOTrainer's vLLM engine")
+                print(f"[GRPO] PassAtK callback will reuse GRPOTrainer's colocate vLLM engine")
+            elif is_server:
+                # rank 0 owns vllm_client; other ranks pass None and receive results via broadcast
+                cb.set_trainer_vllm_client(server_client)
+                print(f"[GRPO] PassAtK callback will reuse GRPOTrainer's vLLM server "
+                      f"(rank-0 client {'attached' if server_client is not None else 'absent'})")
+            if is_colocate or is_server:
+                cb._trainer_vllm_generation = trainer.vllm_generation
             cb._accelerator = trainer.accelerator
 
-    if hasattr(trainer, 'vllm_generation'):
-        if training_args.upcast_lm_head_fp32:
-            upcast_vllm_lm_head_to_fp32(trainer.vllm_generation.llm)
-            print("[GRPO] upcast lm_head to fp32 on vLLM engine")
+    if is_colocate and training_args.upcast_lm_head_fp32:
+        upcast_vllm_lm_head_to_fp32(trainer.vllm_generation.llm)
+        print("[GRPO] upcast lm_head to fp32 on vLLM engine")
+    elif is_server and training_args.upcast_lm_head_fp32:
+        print("[GRPO] WARNING: trainer lm_head is fp32; server-side lm_head dtype "
+              "is controlled by vLLM storage during weight sync")
 
     # Swap the default WandbCallback for one that bridges train/global_step across runs.
     trainer.pop_callback(WandbCallback)

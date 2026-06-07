@@ -220,6 +220,13 @@ def _build_post_training_configs(
         training_args.vllm_importance_sampling_correction = args.grpo_vllm_importance_sampling
         training_args.upcast_lm_head_fp32 = args.grpo_upcast_lm_head_fp32
         training_args.use_liger_kernel = args.grpo_use_liger_kernel
+        training_args.vllm_mode = args.grpo_vllm_mode
+        if args.grpo_vllm_mode == "server":
+            training_args.dataloader_num_workers = 0
+        training_args.vllm_server_host = args.grpo_vllm_server_host
+        training_args.vllm_server_port = args.grpo_vllm_server_port
+        training_args.vllm_group_port = args.grpo_vllm_group_port
+        training_args.vllm_server_timeout = args.grpo_vllm_server_timeout
 
     training_args.resume_from_checkpoint = bool(checkpoint.get("continue", False))
 

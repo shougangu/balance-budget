@@ -18,6 +18,7 @@ from .runners import (
     RunnerConfig,
     VLLMRunner,
     ExternalVLLMRunner,
+    ServerVLLMRunner,
     PersistentVLLMRunner,
     EphemeralVLLMRunner,
     DataParallelVLLMRunner,
@@ -179,6 +180,17 @@ class PassAtKStoppingCallback(TrainerCallback):
     def set_trainer_vllm(self, llm):
         self._runner = ExternalVLLMRunner(self._runner_config, llm=llm)
 
+    def set_trainer_vllm_client(self, client):
+        """Route eval through the GRPO trainer's vLLM server (server mode).
+
+        `client` is `trainer.vllm_generation.vllm_client` on rank 0 and None on
+        other ranks. The DDP eval path runs `run()` only on rank 0 and
+        broadcasts results, so non-rank-0 runners holding None never execute.
+        """
+        self._runner = ServerVLLMRunner(
+            self._runner_config, client=client, tokenizer=self.tokenizer,
+        )
+
     def _save_lora_adapter(self, model, adapter_dir: str):
         """Save only the LoRA adapter weights (~50MB instead of ~2GB merged)."""
         print(f"[PassAtKCallback] Saving LoRA adapter to {adapter_dir}...")
@@ -214,7 +226,7 @@ class PassAtKStoppingCallback(TrainerCallback):
         )
 
     def _save_adapter_if_needed(self, model, adapter_dir: str):
-        if isinstance(self._runner, ExternalVLLMRunner):
+        if isinstance(self._runner, (ExternalVLLMRunner, ServerVLLMRunner)):
             return None
         self._save_lora_adapter(model, adapter_dir)
         return adapter_dir
@@ -243,20 +255,36 @@ class PassAtKStoppingCallback(TrainerCallback):
         return scores, model_results
 
     def _run_eval_with_results_ddp(self, model, eval_strategy: EvalStrategy) -> tuple[Dict[str, float], List[Dict]]:
-        """DDP eval path: each rank generates its slice via the colocated vLLM,
-        all ranks gather responses, all ranks score deterministically.
+        """DDP eval path. Two flavours:
+        - ExternalVLLMRunner (colocate): each rank generates its slice via its own
+          colocated vLLM, all ranks gather responses, all ranks score.
+        - ServerVLLMRunner (server mode): rank 0 issues the HTTP call to the
+          shared vLLM server and broadcasts results to the other ranks.
 
-        Returns (scores, model_results) on every rank. Requires the runner to be
-        ExternalVLLMRunner (set by set_trainer_vllm in train_model_grpo).
+        Returns (scores, model_results) on every rank.
         """
         from collections import defaultdict
+
+        if isinstance(self._runner, ServerVLLMRunner):
+            rank = dist.get_rank()
+            if rank == 0:
+                model_results = self._runner.run(model, eval_strategy, adapter_path=None)
+            else:
+                model_results = None
+            payload = [model_results]
+            dist.broadcast_object_list(payload, src=0)
+            model_results = payload[0]
+            scores = eval_strategy.score_responses(model_results, self.tokenizer)
+            return scores, model_results
+
         from vllm import SamplingParams
         from tuning.inference.config_inference import VLLMSamplingParamsConfig
 
         if not isinstance(self._runner, ExternalVLLMRunner):
             raise RuntimeError(
                 "DDP eval path requires the colocated trainer vLLM "
-                "(set via set_trainer_vllm)."
+                "(set via set_trainer_vllm) or the server client (set via "
+                "set_trainer_vllm_client)."
             )
         llm = self._runner._llm
 

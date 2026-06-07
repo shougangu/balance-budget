@@ -105,6 +105,53 @@ class ExternalVLLMRunner(VLLMRunner):
         return self._run_inference(self._llm, eval_strategy, adapter_path=None)
 
 
+class ServerVLLMRunner(VLLMRunner):
+    """Uses TRL's VLLMClient to talk to a trl-vllm-serve HTTP endpoint.
+
+    Single-rank: DDP callers must invoke from rank 0 and broadcast results. The
+    server holds the merged base+LoRA weights from the trainer's last sync_weights()
+    call, so no adapter save is required.
+    """
+
+    def __init__(self, config: RunnerConfig, client, tokenizer):
+        super().__init__(config)
+        self._client = client
+        self._tokenizer = tokenizer
+
+    def run(self, model, eval_strategy, adapter_path):
+        if self._client is None:
+            raise RuntimeError(
+                "ServerVLLMRunner.run() called without a VLLMClient; this should "
+                "only happen on rank 0 under DDP."
+            )
+        import tuning.config as tuning_config
+
+        messages = eval_strategy.get_test_messages()
+        prompts = [
+            self._tokenizer.apply_chat_template(
+                m, tokenize=False, add_generation_prompt=True,
+                chat_template=self.config.chat_template,
+            )
+            for m in messages
+        ]
+        n = eval_strategy.n_samples
+        # VLLMClient.chat raises on custom chat_template; pre-render and use generate().
+        response = self._client.generate(
+            prompts=prompts,
+            n=n,
+            temperature=self.config.temperature,
+            max_tokens=self.config.max_tokens,
+            generation_kwargs={"seed": tuning_config.get_eval_seed()},
+        )
+        completion_ids = response["completion_ids"]  # flat [P*n]
+        texts = self._tokenizer.batch_decode(completion_ids, skip_special_tokens=True)
+        test_prompts = eval_strategy.get_test_prompts()
+        grouped = defaultdict(list)
+        for i, prompt in enumerate(test_prompts):
+            grouped[prompt].extend(texts[i * n:(i + 1) * n])
+        return [{"prompt": p, "responses": resps} for p, resps in grouped.items()]
+
+
 def _make_llm(config: RunnerConfig):
     """Construct a vLLM LLM with our standard LoRA settings.
 
