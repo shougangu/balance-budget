@@ -70,9 +70,6 @@ def _dispatch_parallel_workers(parallel, base_cmd, pt_flag, metadata_files,
                                 sbatch_script, args):
     """Submit sbatch workers for post-training.
 
-    Top-level dispatches all `parallel` workers; worker/resume mode dispatches
-    `parallel - 1` (the caller handles one share locally).
-
     Injects --gres=gpu:N when pt_method=='grpo' and grpo_num_gpus>1.
     """
 
