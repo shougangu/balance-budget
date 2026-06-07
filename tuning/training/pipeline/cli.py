@@ -7,6 +7,7 @@ import random
 import sys
 
 import tuning.config
+from tuning.training.pipeline.vllm_sidecar import resolve_grpo_server_split
 
 
 SBATCH_WORKER_SCRIPT_DEFAULT = "tuning/slurm/unified_early_pipeline.sh"
@@ -204,7 +205,24 @@ def _parse_args(argv=None):
     parser.add_argument("--dpo-grad-accum", type=int, default=4)
     parser.add_argument("--grpo-num-epochs", type=int, default=1)
     parser.add_argument("--grpo-num-gpus", type=int, default=2,
-                        help="Number of GPUs for GRPO DDP training. >1 launches GRPO via torchrun.")
+                        help="Total GPUs for GRPO. In colocate mode all are trainer ranks; in server mode "
+                             "GPU 0 trains and GPUs 1..N-1 run data-parallel trl vllm-serve workers.")
+    parser.add_argument("--grpo-vllm-mode", default="colocate",
+                        choices=["colocate", "server"],
+                        help="vLLM execution mode for GRPO rollouts. 'server' dedicates GPU 0 to the trainer and "
+                             "GPUs 1..N-1 to trl vllm-serve.")
+    parser.add_argument("--grpo-vllm-server-host", default="127.0.0.1",
+                        help="Host trainer connects to for vLLM server (server mode only).")
+    parser.add_argument("--grpo-vllm-server-port", type=int, default=8000,
+                        help="Port trainer connects to for vLLM server (server mode only). "
+                             "The Python sidecar overrides this when it launches a local server.")
+    parser.add_argument("--grpo-vllm-group-port", type=int, default=51216,
+                        help="NCCL weight-sync group port (server mode only). "
+                             "The Python sidecar overrides this when it launches a local server.")
+    parser.add_argument("--grpo-vllm-server-timeout", type=float, default=300.0,
+                        help="Seconds the trainer waits for the vLLM server to be reachable (server mode only).")
+    parser.add_argument("--grpo-vllm-server-gpu-util", type=float, default=0.9,
+                        help="vLLM server gpu_memory_utilization (server mode only).")
     parser.add_argument("--grpo-eval-steps", type=int, default=64)
     parser.add_argument("--grpo-batch-size", type=int, default=4)
     parser.add_argument("--grpo-grad-accum", type=int, default=32)
@@ -306,6 +324,12 @@ def _parse_args(argv=None):
                         action=argparse.BooleanOptionalAction, default=False)
 
     args = parser.parse_args(argv)
+
+    if args.grpo_vllm_mode == "server":
+        try:
+            resolve_grpo_server_split(args.grpo_num_gpus)
+        except ValueError as exc:
+            parser.error(str(exc))
 
     if (args.sft_enable_ppl or args.dpo_enable_ppl) and args.max_seq_length == 1024:
         args.max_seq_length = 4096

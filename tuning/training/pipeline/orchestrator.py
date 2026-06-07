@@ -6,8 +6,13 @@ import subprocess
 import sys
 from pathlib import Path
 
+from tuning.config import HF_MODEL_MAP
 from tuning.training.pipeline.checkpoint_metadata import parse_metadata_from_output
 from tuning.training.pipeline.cli import _parse_args, _resolve_simplerl_dataset
+from tuning.training.pipeline.vllm_sidecar import (
+    GRPOVLLMServerSidecar,
+    resolve_grpo_server_split,
+)
 
 # torchrun exports these into worker env; propagating them through sbatch
 # leaks the parent's rendezvous config to the child and defeats the per-job
@@ -88,6 +93,53 @@ def _dispatch_parallel_workers(parallel, base_cmd, pt_flag, metadata_files,
         print(f"[orchestrator] Submitted worker {i+1}/{parallel}: job {job_id}")
 
 
+
+def _run_grpo_server_subprocess(base_cmd, pt_flag, metadata_file, args):
+    """Start the vLLM sidecar, then run the single-GPU GRPO trainer."""
+    split = resolve_grpo_server_split(args.grpo_num_gpus)
+    with GRPOVLLMServerSidecar(
+        model_hf=HF_MODEL_MAP[args.model],
+        split=split,
+        gpu_memory_utilization=args.grpo_vllm_server_gpu_util,
+        startup_timeout=args.grpo_vllm_server_timeout,
+    ) as server:
+        trainer_env = {k: v for k, v in os.environ.items() if k not in _TORCHRUN_ENV_VARS}
+        trainer_env["CUDA_VISIBLE_DEVICES"] = ",".join(split.trainer_gpus)
+        pt_cmd = [
+            sys.executable, *base_cmd,
+            pt_flag, "--metadata-file", metadata_file,
+            "--grpo-vllm-server-host", server.host,
+            "--grpo-vllm-server-port", str(server.port),
+            "--grpo-vllm-group-port", str(server.group_port),
+        ]
+        print(
+            "[orchestrator] Running GRPO server-mode trainer: "
+            f"CUDA_VISIBLE_DEVICES={trainer_env['CUDA_VISIBLE_DEVICES']} "
+            f"{' '.join(pt_cmd)}"
+        )
+        return subprocess.run(pt_cmd, env=trainer_env)
+
+
+def _run_post_training_subprocess(pt_method, base_cmd, pt_flag, metadata_file, args):
+    """Run one claimed post-training subprocess, starting vLLM sidecar if needed."""
+    if pt_method == "grpo" and args.grpo_vllm_mode == "server":
+        return _run_grpo_server_subprocess(base_cmd, pt_flag, metadata_file, args)
+
+    if pt_method == "grpo" and args.grpo_num_gpus > 1:
+        master_port = 20000 + (os.getpid() % 20000)
+        pt_cmd = (
+            ["torchrun", f"--nproc_per_node={args.grpo_num_gpus}",
+             f"--master-port={master_port}"]
+            + base_cmd + [pt_flag, "--metadata-file", metadata_file]
+        )
+    else:
+        pt_cmd = [sys.executable] + base_cmd + [
+            pt_flag, "--metadata-file", metadata_file,
+        ]
+    print(f"[orchestrator] Running {pt_method.upper()}: {' '.join(pt_cmd)}")
+    return subprocess.run(pt_cmd)
+
+
 def main():
     args = _parse_args()
     _resolve_simplerl_dataset(args)
@@ -145,19 +197,9 @@ def main():
             print(f"Warning: metadata file {metadata_file} does not exist, skipping")
             continue
         while True:
-            if pt_method == "grpo" and args.grpo_num_gpus > 1:
-                master_port = 20000 + (os.getpid() % 20000)
-                pt_cmd = (
-                    ["torchrun", f"--nproc_per_node={args.grpo_num_gpus}",
-                     f"--master-port={master_port}"]
-                    + base_cmd + [pt_flag, "--metadata-file", metadata_file]
-                )
-            else:
-                pt_cmd = [sys.executable] + base_cmd + [
-                    pt_flag, "--metadata-file", metadata_file,
-                ]
-            print(f"[orchestrator] Running {pt_method.upper()}: {' '.join(pt_cmd)}")
-            result = subprocess.run(pt_cmd)
+            result = _run_post_training_subprocess(
+                pt_method, base_cmd, pt_flag, metadata_file, args,
+            )
             if result.returncode == 42:
                 print(f"[orchestrator] No more checkpoints in {metadata_file}, moving on")
                 break
