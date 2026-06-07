@@ -12,15 +12,31 @@ class OffsetAwareWandbCallback(WandbCallback):
 
     Injects train/total_global_step (= global_step + offset) into every log dict.
     Use train/total_global_step as the x-axis in W&B to compare chained runs.
+
+    Also injects train/training_minutes_cumulative: the running sum of per-step
+    training wall time (TRL's train/step_time), in minutes, excluding evaluation.
+    The logged step_time is the per-step mean over the logging window, so each
+    window contributes mean * (steps elapsed since the last log).
     """
 
     def __init__(self, initial_global_step=0):
         super().__init__()
         self._offset = int(initial_global_step or 0)
+        self._cumulative_train_seconds = 0.0
+        self._last_step_time_step = None
 
     def on_log(self, args, state, control, model=None, logs=None, **kwargs):
         if logs is not None:
             logs["total_global_step"] = state.global_step + self._offset
+            step_time = logs.get("step_time")
+            if step_time is not None:
+                if self._last_step_time_step is None:
+                    steps_in_window = 1
+                else:
+                    steps_in_window = max(state.global_step - self._last_step_time_step, 1)
+                self._cumulative_train_seconds += step_time * steps_in_window
+                self._last_step_time_step = state.global_step
+                logs["training_minutes_cumulative"] = self._cumulative_train_seconds / 60.0
         return super().on_log(args, state, control, model=model, logs=logs, **kwargs)
 
 

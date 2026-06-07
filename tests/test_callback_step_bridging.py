@@ -270,3 +270,28 @@ class TestOffsetAwareWandbCallback:
         control = TrainerControl()
         with patch.object(type(cb).__bases__[0], "on_log"):
             cb.on_log(args, state, control, logs=None)  # must not raise
+
+    def test_accumulates_step_time_into_cumulative_minutes(self):
+        cb = OffsetAwareWandbCallback(initial_global_step=0)
+        logs = _fire_on_log(cb, global_step=1, logs={"step_time": 2.0})
+        assert logs["training_minutes_cumulative"] == 2.0 / 60.0
+        logs = _fire_on_log(cb, global_step=2, logs={"step_time": 3.0})
+        assert logs["training_minutes_cumulative"] == 5.0 / 60.0
+        logs = _fire_on_log(cb, global_step=3, logs={"step_time": 5.0})
+        assert logs["training_minutes_cumulative"] == 10.0 / 60.0
+
+    def test_step_time_window_scales_with_global_step_delta(self):
+        cb = OffsetAwareWandbCallback(initial_global_step=0)
+        # First observation counts as a single-step window.
+        logs = _fire_on_log(cb, global_step=10, logs={"step_time": 2.0})
+        assert logs["training_minutes_cumulative"] == 2.0 / 60.0
+        # logging_steps>1: logged step_time is the per-step mean, so the window
+        # of 10 steps contributes mean * 10 seconds.
+        logs = _fire_on_log(cb, global_step=20, logs={"step_time": 3.0})
+        assert logs["training_minutes_cumulative"] == (2.0 + 3.0 * 10) / 60.0
+
+    def test_no_cumulative_minutes_without_step_time(self):
+        cb = OffsetAwareWandbCallback(initial_global_step=0)
+        logs = _fire_on_log(cb, global_step=5, logs={"train/loss": 0.5})
+        assert "training_minutes_cumulative" not in logs
+        assert logs["total_global_step"] == 5
