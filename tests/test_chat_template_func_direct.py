@@ -40,3 +40,33 @@ def test_chat_template_func_direct_import_and_apply(monkeypatch):
     assert len(calls) == 1
     assert calls[0]["chat_template"] == "llama"
     assert calls[0]["map_eos_token"] is False
+
+
+
+def test_chat_template_func_overrides_gemma3_template(monkeypatch):
+    calls = []
+
+    def fake_get_chat_template(tokenizer, chat_template, mapping, map_eos_token):
+        calls.append(chat_template)
+        tokenizer.chat_template = f"applied:{chat_template}"
+        return tokenizer
+
+    fake_unsloth = types.ModuleType("unsloth")
+    fake_chat_templates = types.ModuleType("unsloth.chat_templates")
+    fake_chat_templates.get_chat_template = fake_get_chat_template
+    fake_unsloth.chat_templates = fake_chat_templates
+
+    monkeypatch.setitem(sys.modules, "unsloth", fake_unsloth)
+    monkeypatch.setitem(sys.modules, "unsloth.chat_templates", fake_chat_templates)
+
+    original = tuning.config.DEFAULT_CHAT_TEMPLATE
+    try:
+        tuning.config.DEFAULT_CHAT_TEMPLATE = "gemma-3"
+        tokenizer = types.SimpleNamespace()
+        out = utils.chat_template_func(tokenizer)
+    finally:
+        tuning.config.DEFAULT_CHAT_TEMPLATE = original
+
+    assert out is tokenizer
+    assert calls == ["gemma-3"]
+    assert out.chat_template == utils.GEMMA_3_CHAT_TEMPLATE

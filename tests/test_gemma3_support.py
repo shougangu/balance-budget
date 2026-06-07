@@ -4,6 +4,7 @@
 import warnings
 
 import pytest
+from jinja2 import BaseLoader, Environment
 
 from tuning.config import (
     HF_MODEL_MAP,
@@ -16,10 +17,21 @@ from tuning.training.pipeline.cli import (
     MODEL_TO_GPU_3,
     MODEL_TO_SIMPLERL_TIER,
 )
-from tuning.utils.utils import RESPONSE_DELIMITERS, STOP_TOKENS
+from tuning.utils.utils import GEMMA_3_CHAT_TEMPLATE, RESPONSE_DELIMITERS, STOP_TOKENS
 
 
 GEMMA3_MODELS = ["gemma3-1B", "gemma3-4B", "gemma3-12B"]
+BOS = "<bos>"
+
+
+def render_gemma3(messages, add_generation_prompt=False):
+    env = Environment(loader=BaseLoader())
+    template = env.from_string(GEMMA_3_CHAT_TEMPLATE)
+    return template.render(
+        messages=messages,
+        bos_token=BOS,
+        add_generation_prompt=add_generation_prompt,
+    )
 
 
 @pytest.mark.parametrize("model", GEMMA3_MODELS)
@@ -59,6 +71,58 @@ def test_gemma3_chat_template_resolution(model):
 
 def test_gemma3_chat_template_resolution_with_run_name_suffix():
     assert resolve_chat_template("gemma3-4B_sft-tuluif-500_pt-tuluif-500") == "gemma-3"
+
+
+def test_gemma3_chat_template_renders_system_as_first_user_prefix():
+    messages = [
+        {"role": "system", "content": "You are concise."},
+        {"role": "user", "content": "  What is 2+2?  "},
+        {"role": "assistant", "content": " 4 "},
+    ]
+
+    rendered = render_gemma3(messages)
+
+    assert rendered == (
+        "<bos><start_of_turn>user\n"
+        "You are concise.\n\n"
+        "What is 2+2?<end_of_turn>\n"
+        "<start_of_turn>model\n"
+        "4<end_of_turn>\n"
+    )
+
+
+def test_gemma3_chat_template_adds_generation_prompt():
+    messages = [
+        {"role": "system", "content": "You are concise."},
+        {"role": "user", "content": "  Say hi.  "},
+    ]
+
+    rendered = render_gemma3(messages, add_generation_prompt=True)
+
+    assert rendered == (
+        "<bos><start_of_turn>user\n"
+        "You are concise.\n\n"
+        "Say hi.<end_of_turn>\n"
+        "<start_of_turn>model\n"
+    )
+
+
+def test_gemma3_chat_template_supports_sharegpt_messages():
+    messages = [
+        {"from": "system", "value": "You are concise."},
+        {"from": "human", "value": "  Hi  "},
+        {"from": "gpt", "value": " Hello "},
+    ]
+
+    rendered = render_gemma3(messages)
+
+    assert rendered == (
+        "<bos><start_of_turn>user\n"
+        "You are concise.\n\n"
+        "Hi<end_of_turn>\n"
+        "<start_of_turn>model\n"
+        "Hello<end_of_turn>\n"
+    )
 
 
 def test_gemma3_stop_tokens_registered():

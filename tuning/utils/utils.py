@@ -69,6 +69,47 @@ SIMPLE_TEMPLATE = """\
 """
 
 
+GEMMA_3_CHAT_TEMPLATE = """\
+{{ bos_token }}\
+{%- if 'role' in messages[0] %}\
+    {%- if messages[0]['role'] == 'system' %}\
+        {%- set first_user_prefix = messages[0]['content'] + '\\n\\n' %}\
+        {%- set loop_messages = messages[1:] %}\
+    {%- else %}\
+        {%- set first_user_prefix = "" %}\
+        {%- set loop_messages = messages %}\
+    {%- endif %}\
+    {%- for message in loop_messages %}\
+        {%- if message['role'] == 'assistant' %}\
+            {%- set role = "model" %}\
+        {%- else %}\
+            {%- set role = message['role'] %}\
+        {%- endif %}\
+        {{- '<start_of_turn>' + role + '\\n' + (first_user_prefix if loop.first else "") + (message['content'] | trim) + '<end_of_turn>\\n' }}\
+    {%- endfor %}\
+{%- else %}\
+    {%- if messages[0]['from'] == 'system' %}\
+        {%- set first_user_prefix = messages[0]['value'] + '\\n\\n' %}\
+        {%- set loop_messages = messages[1:] %}\
+    {%- else %}\
+        {%- set first_user_prefix = "" %}\
+        {%- set loop_messages = messages %}\
+    {%- endif %}\
+    {%- for message in loop_messages %}\
+        {%- if message['from'] == 'human' %}\
+            {%- set role = "user" %}\
+        {%- else %}\
+            {%- set role = "model" %}\
+        {%- endif %}\
+        {{- '<start_of_turn>' + role + '\\n' + (first_user_prefix if loop.first else "") + (message['value'] | trim) + '<end_of_turn>\\n' }}\
+    {%- endfor %}\
+{%- endif %}\
+{%- if add_generation_prompt %}\
+    {{- '<start_of_turn>model\\n' }}\
+{%- endif %}\
+"""
+
+
 def chat_template_func(tokenizer):
     from unsloth.chat_templates import get_chat_template
 
@@ -89,6 +130,8 @@ def chat_template_func(tokenizer):
 
     if chat_template == "llama-3.1":
         tokenizer.chat_template = LLAMA_31_SIMPLE_TEMPLATE
+    elif chat_template == "gemma-3":
+        tokenizer.chat_template = GEMMA_3_CHAT_TEMPLATE
     elif chat_template == "simple":
         tokenizer.chat_template = SIMPLE_TEMPLATE
 
