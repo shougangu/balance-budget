@@ -57,14 +57,14 @@ MODEL_TO_GPU_3 = {
     "llama3-3B-instruct": 0.45,
     "llama3-8B": 0.43,
     "llama3-8B-instruct": 0.43,
-    "qwen2-2B": 0.3, # 0.45 -> #0.25 after [600, 2048, 8192] -> 5, 10, 31 GB needed 
+    "qwen2-2B": 0.45, # 0.45 -> #0.25 after [600, 2048, 8192] -> 5, 10, 31 GB needed
     "qwen2-2B-instruct": 0.45,
     "qwen2-3B": 0.45,
     "qwen2-3B-instruct": 0.45,
     "qwen2-7B": 0.45,
     "qwen2-7B-instruct": 0.45,
     "gemma3-1B": 0.7,
-    "gemma3-4B": 0.45,
+    "gemma3-4B": 0.38,
     "gemma3-12B": 0.4,
 }
 
@@ -166,8 +166,11 @@ def _parse_args(argv=None):
                        help="Number of concurrent post-training workers.")
     stage.add_argument("--dispatch", action=argparse.BooleanOptionalAction,
                        default=True)
-    stage.add_argument("--short", action="store_true", default=False,
-                       help="Use the shorter sbatch script for better queue times.")
+    duration = stage.add_mutually_exclusive_group()
+    duration.add_argument("--short", action="store_true", default=False,
+                          help="Use the 3-hour sbatch script for better queue times.")
+    duration.add_argument("--long", action="store_true", default=False,
+                          help="Dispatch jobs to the 24-hour H100 partition.")
     parser.add_argument("--sft-dataset", default="gsm8k", choices=["gsm8k", "tuluif", "openmath", "openmath-lenp95", "openmath-reasoning"])
     parser.add_argument("--dataset", default="gsm8k",
                         choices=["tuluif", "gsm8k", "openmath", "ifrlvr",
@@ -203,7 +206,7 @@ def _parse_args(argv=None):
     parser.add_argument("--dpo-eval-steps", type=int, default=256)
     parser.add_argument("--dpo-batch-size", type=int, default=4)
     parser.add_argument("--dpo-grad-accum", type=int, default=4)
-    parser.add_argument("--grpo-num-epochs", type=int, default=1)
+    parser.add_argument("--grpo-num-epochs", type=int, default=20)
     parser.add_argument("--grpo-num-gpus", type=int, default=2,
                         help="Total GPUs for GRPO. In colocate mode all are trainer ranks; in server mode "
                              "GPU 0 trains and GPUs 1..N-1 run data-parallel trl vllm-serve workers.")

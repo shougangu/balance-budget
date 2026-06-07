@@ -27,6 +27,11 @@ _TORCHRUN_ENV_VARS = (
     "TORCH_NCCL_ASYNC_ERROR_HANDLING",
 )
 
+_LONG_SBATCH_FLAGS = (
+    "--partition=gpubase_h100_b3,gpubase_h100_b4,gpubase_h100_b5",
+    "--time=1-00:00:00",
+)
+
 
 def _build_base_cmd(argv):
     """Build base subprocess command by stripping orchestrator-only flags."""
@@ -43,6 +48,11 @@ def _build_base_cmd(argv):
             continue
         result.append(tok)
     return result
+
+
+def _sbatch_flags_for_args(args):
+    """Return scheduler overrides requested by the pipeline CLI."""
+    return list(_LONG_SBATCH_FLAGS) if getattr(args, "long", False) else []
 
 
 def _submit_sbatch_worker(sbatch_script, worker_args, sbatch_flags=(), wait=False):
@@ -78,7 +88,7 @@ def _dispatch_parallel_workers(parallel, base_cmd, pt_flag, metadata_files,
     Injects --gres=gpu:N when pt_method=='grpo' and grpo_num_gpus>1.
     """
 
-    sbatch_flags = []
+    sbatch_flags = _sbatch_flags_for_args(args)
     if args.post_training_method == "grpo" and args.grpo_num_gpus > 1:
         sbatch_flags.append(f"--gres=gpu:{args.grpo_num_gpus}")
 
@@ -90,7 +100,7 @@ def _dispatch_parallel_workers(parallel, base_cmd, pt_flag, metadata_files,
     for i in range(parallel):
         job_id = _submit_sbatch_worker(sbatch_script, worker_argv,
                                         sbatch_flags=sbatch_flags)
-        print(f"[orchestrator] Submitted worker {i+1}/{parallel}: job {job_id}")
+        print(f"[orchestrator] Submitted worker {i+1}/{parallel}: job {job_id}_{args.wandb_project}.out")
 
 
 
@@ -169,7 +179,12 @@ def main():
 
     if args.run_sft and args.run_all:
         sft_argv = list(base_cmd[1:]) + ["--run-sft"]
-        job_id = _submit_sbatch_worker(args.sbatch_script, sft_argv, wait=True)
+        job_id = _submit_sbatch_worker(
+            args.sbatch_script,
+            sft_argv,
+            sbatch_flags=_sbatch_flags_for_args(args),
+            wait=True,
+        )
         sft_output = Path(f"{job_id}_{args.wandb_project}.out").read_text()
         print(sft_output)
         metadata_files = parse_metadata_from_output(sft_output)

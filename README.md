@@ -72,14 +72,17 @@ sbatch --gres=gpu:4 tuning/slurm/unified_early_pipeline.sh \
   --run-all
 ```
 
-`--grpo-num-gpus N` launches the GRPO worker under `torchrun
---nproc_per_node=N`, allowing for near linear speedup through DDP.
+`--grpo-num-gpus N` is mode-dependent. In colocate mode it launches GRPO
+under `torchrun --nproc_per_node=N`. In `--grpo-vllm-mode server`, GPU 0 runs
+the trainer and GPUs `1..N-1` run data-parallel `trl vllm-serve` workers.
+Pass `--long` to dispatch SFT and post-training workers to the 24-hour
+H100-capable `gpubase_h100_b3`, `b4`, and `b5` partitions. `--short` instead
+uses the 3-hour worker script.
 
 `--task-name` sets the primary eval that drives sweetspot decisions and
 early stopping; `--monitor-evals` adds extra suites logged alongside it.
-During GRPO, the pass@k callback reuses `GRPOTrainer`'s in-process
-`vllm_generation.llm` engine for both the primary and monitor evals, so
-checkpoint evaluation runs without spinning up a separate vLLM server.
+During GRPO, the pass@k callback reuses the trainer's active vLLM backend for
+both the primary and monitor evals.
 
 ## Tests
 

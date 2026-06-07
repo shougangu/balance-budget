@@ -15,6 +15,7 @@ from tuning.training.pipeline.checkpoint_metadata import (
 )
 from tuning.training.pipeline.orchestrator import (
     _build_base_cmd, _submit_sbatch_worker, _dispatch_parallel_workers,
+    _sbatch_flags_for_args,
 )
 
 
@@ -463,6 +464,34 @@ class TestDispatchParallelWorkers:
         )
         assert len(calls) == 1
 
+    def test_long_dispatch_uses_24_hour_h100_partition(self, monkeypatch, tmp_path):
+        from tuning.training.pipeline import orchestrator as orch
+        calls = []
+        monkeypatch.setattr(
+            orch,
+            "_submit_sbatch_worker",
+            lambda script, argv, **kwargs: (calls.append(kwargs), "999")[1],
+        )
+        mf = tmp_path / "meta.jsonl"
+        mf.write_text("{}\n")
+        args = SimpleNamespace(
+            post_training_method="dpo",
+            grpo_num_gpus=1,
+            long=True,
+        )
+        orch._dispatch_parallel_workers(
+            parallel=1,
+            base_cmd=["pipeline.py", "--model", "llama3-3B"],
+            pt_flag="--run-dpo",
+            metadata_files=[str(mf)],
+            sbatch_script="tuning/slurm/unified_early_pipeline.sh",
+            args=args,
+        )
+        assert calls[0]["sbatch_flags"] == [
+            "--partition=gpubase_h100_b3,gpubase_h100_b4,gpubase_h100_b5",
+            "--time=1-00:00:00",
+        ]
+
     def test_parallel_3_submits_3_workers(self, monkeypatch, tmp_path):
         from tuning.training.pipeline import orchestrator as orch
         calls = []
@@ -751,7 +780,7 @@ class TestTaskNameDispatch:
 
     def test_default_sft_lr_scheduler_type(self):
         args = _parse_args(REQUIRED)
-        assert args.sft_lr_scheduler_type == "cosine"
+        assert args.sft_lr_scheduler_type == "constant"
 
     def test_custom_sft_lr_scheduler_type(self):
         args = _parse_args(REQUIRED + ["--sft-lr-scheduler-type", "linear"])
@@ -778,7 +807,10 @@ class TestGRPOArgs:
 
     def test_grpo_defaults(self):
         args = _parse_args(REQUIRED)
-        assert args.grpo_num_epochs == 1
+        assert args.grpo_num_epochs == 20
+        assert args.grpo_num_gpus == 2
+        assert args.grpo_vllm_mode == "colocate"
+        assert args.grpo_vllm_server_gpu_util == 0.9
         assert args.grpo_eval_steps == 64
         assert args.grpo_batch_size == 4
         assert args.grpo_grad_accum == 32
@@ -788,8 +820,23 @@ class TestGRPOArgs:
         assert args.grpo_temperature == 1.0
         assert args.grpo_loss_type == "dapo"
         assert args.grpo_data_size is None
-        assert args.grpo_warmup_ratio == 0.0
-        assert args.grpo_lr_scheduler_type == "cosine"
+        assert args.grpo_warmup_ratio == 0.05
+        assert args.grpo_lr_scheduler_type == "constant"
+
+    def test_grpo_server_mode_accepts_dp_only_split(self):
+        args = _parse_args(REQUIRED + [
+            "--grpo-vllm-mode", "server",
+            "--grpo-num-gpus", "5",
+        ])
+        assert args.grpo_vllm_mode == "server"
+        assert args.grpo_num_gpus == 5
+
+    def test_grpo_server_mode_rejects_one_gpu(self):
+        with pytest.raises(SystemExit):
+            _parse_args(REQUIRED + [
+                "--grpo-vllm-mode", "server",
+                "--grpo-num-gpus", "1",
+            ])
 
     def test_custom_grpo_warmup_ratio(self):
         args = _parse_args(REQUIRED + ["--grpo-warmup-ratio", "0.1"])
@@ -981,3 +1028,19 @@ class TestSbatchScriptResolution:
     def test_short_flag_uses_short_script(self):
         args = _parse_args(["--model", "llama3-3B", "--wandb-project", "p", "--short"])
         assert args.sbatch_script == "tuning/slurm/unified_early_pipeline_short.sh"
+
+    def test_long_flag_uses_default_script_and_scheduler_override(self):
+        args = _parse_args(["--model", "llama3-3B", "--wandb-project", "p", "--long"])
+        assert args.long is True
+        assert args.sbatch_script == "tuning/slurm/unified_early_pipeline.sh"
+        assert _sbatch_flags_for_args(args) == [
+            "--partition=gpubase_h100_b3,gpubase_h100_b4,gpubase_h100_b5",
+            "--time=1-00:00:00",
+        ]
+
+    def test_short_and_long_are_mutually_exclusive(self):
+        with pytest.raises(SystemExit):
+            _parse_args([
+                "--model", "llama3-3B", "--wandb-project", "p",
+                "--short", "--long",
+            ])
