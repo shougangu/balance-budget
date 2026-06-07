@@ -101,6 +101,7 @@ def save_sweetspot_checkpoint(
     else:
         model.save_pretrained_merged(checkpoint_path, tokenizer, save_method="merged_16bit")
 
+    os.makedirs(checkpoint_path, exist_ok=True)
     with open(f"{checkpoint_path}/training_config.json", "w") as f:
         json.dump(args.to_dict(), f, indent=4)
 
@@ -109,6 +110,7 @@ def save_sweetspot_checkpoint(
         "checkpoint_path": checkpoint_path,
         "data_points_seen": data_points_seen,
         **(extra_metadata or {}),
+        "wandb_run_id": wandb_run_id,
         "sft_wandb_run_id": wandb_run_id,
     }
     with open(metadata_path, "a") as f:
