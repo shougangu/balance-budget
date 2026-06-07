@@ -13,6 +13,7 @@ sys.modules.setdefault("instruction_following_eval.evaluation_lib", MagicMock())
 sys.modules.setdefault("unsloth", MagicMock())
 
 from transformers import TrainerControl, TrainerState
+from transformers.trainer_callback import ExportableState
 
 from tuning.training.callback_utils import OffsetAwareWandbCallback
 from tuning.training.config_training import PassAtKConfig, PerplexityConfig
@@ -246,6 +247,107 @@ def _fire_on_log(cb, global_step, logs=None):
 
 
 class TestOffsetAwareWandbCallback:
+    def test_exports_cumulative_timing_state(self):
+        cb = OffsetAwareWandbCallback(initial_global_step=1000)
+        _fire_on_log(cb, global_step=10, logs={"step_time": 2.0})
+
+        assert isinstance(cb, ExportableState)
+        assert cb.state() == {
+            "args": {"initial_global_step": 1000},
+            "attributes": {
+                "_cumulative_train_seconds": 2.0,
+                "_last_step_time_step": 10,
+            },
+        }
+
+    def test_restored_state_continues_cumulative_minutes(self):
+        original = OffsetAwareWandbCallback(initial_global_step=1000)
+        _fire_on_log(original, global_step=10, logs={"step_time": 2.0})
+        restored = OffsetAwareWandbCallback.from_state(original.state())
+
+        logs = _fire_on_log(restored, global_step=20, logs={"step_time": 3.0})
+
+        assert logs["training_minutes_cumulative"] == (2.0 + 3.0 * 10) / 60.0
+        assert logs["total_global_step"] == 1020
+
+    def test_reconstructs_timing_from_legacy_checkpoint_history(self):
+        cb = OffsetAwareWandbCallback(initial_global_step=1000)
+        cb._wandb = None
+        state = TrainerState(
+            global_step=20,
+            log_history=[
+                {"step": 10, "step_time": 2.0},
+                {"step": 20, "step_time": 3.0},
+                {"step": 20, "eval_runtime": 5.0},
+            ],
+        )
+
+        cb.on_train_begin(SimpleNamespace(), state, TrainerControl())
+        logs = _fire_on_log(cb, global_step=30, logs={"step_time": 4.0})
+
+        assert logs["training_minutes_cumulative"] == (
+            2.0 + 3.0 * 10 + 4.0 * 10
+        ) / 60.0
+        assert state.stateful_callbacks["OffsetAwareWandbCallback"] == {
+            "args": {"initial_global_step": 1000},
+            "attributes": {
+                "_cumulative_train_seconds": 32.0,
+                "_last_step_time_step": 20,
+            },
+        }
+
+    def test_legacy_untrained_checkpoint_starts_at_zero(self):
+        cb = OffsetAwareWandbCallback(initial_global_step=1000)
+        cb._wandb = None
+        state = TrainerState(
+            global_step=0,
+            log_history=[{"step": 0, "step_time": 99.0}],
+        )
+
+        cb.on_train_begin(SimpleNamespace(), state, TrainerControl())
+
+        assert cb._cumulative_train_seconds == 0.0
+        assert cb._last_step_time_step is None
+        assert state.stateful_callbacks["OffsetAwareWandbCallback"] == cb.state()
+
+    def test_saved_zero_state_is_not_reconstructed_as_legacy(self):
+        cb = OffsetAwareWandbCallback(initial_global_step=1000)
+        cb._wandb = None
+        saved_state = cb.state()
+        state = TrainerState(
+            global_step=20,
+            log_history=[{"step": 20, "step_time": 3.0}],
+            stateful_callbacks={"OffsetAwareWandbCallback": saved_state},
+        )
+
+        cb.on_train_begin(SimpleNamespace(), state, TrainerControl())
+
+        assert cb._cumulative_train_seconds == 0.0
+        assert cb._last_step_time_step is None
+        assert state.stateful_callbacks["OffsetAwareWandbCallback"] is saved_state
+
+    def test_saved_cumulative_state_wins_over_log_history(self):
+        saved_state = {
+            "args": {"initial_global_step": 1000},
+            "attributes": {
+                "_cumulative_train_seconds": 45.0,
+                "_last_step_time_step": 20,
+            },
+        }
+        cb = OffsetAwareWandbCallback.from_state(saved_state)
+        cb._wandb = None
+        state = TrainerState(
+            global_step=20,
+            log_history=[{"step": 20, "step_time": 99.0}],
+            stateful_callbacks={"OffsetAwareWandbCallback": saved_state},
+        )
+
+        cb.on_train_begin(SimpleNamespace(), state, TrainerControl())
+
+        assert cb._cumulative_train_seconds == 45.0
+        assert cb._last_step_time_step == 20
+        assert state.stateful_callbacks["OffsetAwareWandbCallback"] is saved_state
+
     def test_injects_total_global_step_with_offset(self):
         cb = OffsetAwareWandbCallback(initial_global_step=1000)
         logs = _fire_on_log(cb, global_step=50)

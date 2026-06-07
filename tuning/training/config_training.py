@@ -63,6 +63,7 @@ class TrainingArgumentsConfig(BaseModel):
     dataloader_drop_last: bool = False
     dataloader_num_workers: int = 2
     eval_accumulation_steps: int = 1
+    restore_callback_states_from_checkpoint: bool = True
     # prediction_loss_only: bool = True
     # eval_do_concat_batches: bool = False
     resume_from_checkpoint: bool = False  # forwarded to trainer.train(); not an HF args field

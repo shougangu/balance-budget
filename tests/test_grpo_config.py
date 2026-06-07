@@ -224,6 +224,13 @@ def test_training_arguments_config_seed_uses_global_default():
     assert d["seed"] == 42
 
 
+def test_training_arguments_restore_callback_state_on_resume():
+    from tuning.training.config_training import TrainingArgumentsConfig
+
+    d = TrainingArgumentsConfig().to_hf_args(output_dir="/tmp/test")
+    assert d["restore_callback_states_from_checkpoint"] is True
+
+
 def test_training_arguments_config_seed_follows_set_seed():
     tuning.config.set_seed(7)
     from tuning.training.config_training import TrainingArgumentsConfig

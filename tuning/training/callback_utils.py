@@ -3,11 +3,12 @@ import json
 import wandb
 from transformers import TrainerCallback, TrainerState
 from transformers.integrations import WandbCallback
+from transformers.trainer_callback import ExportableState
 from transformers.training_args import TrainingArguments
 from tuning.config import MODELS_DIR
 
 
-class OffsetAwareWandbCallback(WandbCallback):
+class OffsetAwareWandbCallback(WandbCallback, ExportableState):
     """WandbCallback that bridges train/global_step across chained runs.
 
     Injects train/total_global_step (= global_step + offset) into every log dict.
@@ -24,6 +25,38 @@ class OffsetAwareWandbCallback(WandbCallback):
         self._offset = int(initial_global_step or 0)
         self._cumulative_train_seconds = 0.0
         self._last_step_time_step = None
+
+    def state(self):
+        return {
+            "args": {"initial_global_step": self._offset},
+            "attributes": {
+                "_cumulative_train_seconds": self._cumulative_train_seconds,
+                "_last_step_time_step": self._last_step_time_step,
+            },
+        }
+
+    def on_train_begin(self, args, state, control, **kwargs):
+        callback_name = self.__class__.__name__
+        has_saved_state = callback_name in state.stateful_callbacks
+
+        # Legacy checkpoints have no callback state. Rebuild trained checkpoints
+        # from log history; untrained checkpoints correctly remain at zero.
+        if not has_saved_state and state.global_step > 0:
+            for entry in state.log_history:
+                step_time = entry.get("step_time")
+                step = entry.get("step")
+                if step_time is None or step is None:
+                    continue
+                if self._last_step_time_step is None:
+                    steps_in_window = 1
+                else:
+                    steps_in_window = max(step - self._last_step_time_step, 1)
+                self._cumulative_train_seconds += step_time * steps_in_window
+                self._last_step_time_step = step
+
+        # Transformers indexes this mapping directly while saving.
+        state.stateful_callbacks.setdefault(callback_name, self.state())
+        return super().on_train_begin(args, state, control, **kwargs)
 
     def on_log(self, args, state, control, model=None, logs=None, **kwargs):
         if logs is not None:
