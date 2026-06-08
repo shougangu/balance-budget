@@ -8,6 +8,11 @@ from tuning.training.config_training import PTRunConfig, LoraConfig, ModelLoadCo
 from tuning.training.perplexity_callback import PerplexityStoppingCallback
 from tuning.training.passk_callback import PassAtKStoppingCallback
 from tuning.training.model_utils import load_model_with_lora, save_trained_model
+from tuning.training.callback_utils import (
+    OffsetAwareWandbCallback,
+    load_total_seconds_from_checkpoint,
+    remove_default_wandb_callback,
+)
 from tuning.utils.utils import chat_template_func
 from trl import DPOTrainer, DPOConfig # DPOConfig is a wrapper around TrainingArguments with some DPO-specific defaults
 from typing import List, Optional
@@ -36,6 +41,10 @@ def train_model_dpo(
     else:
         model_path = run_config.model_name_hf
 
+    initial_total_seconds = 0.0
+    if run_config.sft_run_config and not training_args.resume_from_checkpoint:
+        initial_total_seconds = load_total_seconds_from_checkpoint(model_path)
+
     raw_dataset = get_train_dataset(run_config)
 
     print(f"Loading model from {model_path}")
@@ -47,7 +56,12 @@ def train_model_dpo(
     )
     tokenizer = chat_template_func(tokenizer)
 
-    callbacks = []
+    callbacks = [
+        OffsetAwareWandbCallback(
+            initial_global_step=initial_global_step or 0,
+            initial_total_seconds=initial_total_seconds,
+        )
+    ]
 
     if passk_config is not None and passk_config.enabled:
         passk_callback = PassAtKStoppingCallback(
@@ -82,11 +96,7 @@ def train_model_dpo(
         ),
     )
 
-    # Swap the default WandbCallback for one that bridges train/global_step across runs.
-    from transformers.integrations import WandbCallback
-    from tuning.training.callback_utils import OffsetAwareWandbCallback
-    trainer.pop_callback(WandbCallback)
-    trainer.add_callback(OffsetAwareWandbCallback(initial_global_step or 0))
+    remove_default_wandb_callback(trainer)
 
     try:
         trainer_stats = trainer.train(

@@ -18,6 +18,7 @@ def log_eval_metrics(
     raw_results: List[Dict],
     global_step: int,
     step_offset: int,
+    total_minutes: float,
     thresholds_remaining: List[float],
     is_primary: bool,
 ) -> None:
@@ -25,6 +26,7 @@ def log_eval_metrics(
     log_dict = {
         "train/global_step": global_step,
         "train/total_global_step": global_step + step_offset,
+        "train/total_minutes": total_minutes,
     }
     log_dict.update(eval_strategy.wandb_metrics(scores))
     wandb.log(log_dict)
@@ -36,6 +38,7 @@ def log_eval_metrics(
         model_results=raw_results,
         global_step=global_step,
         step_offset=step_offset,
+        total_minutes=total_minutes,
         stopping_metric_name=stopping_key,
         stopping_metric_value=stopping_value,
         thresholds_remaining=thresholds_remaining,
@@ -58,6 +61,7 @@ def _log_raw_generation_table(
     model_results: List[Dict],
     global_step: int,
     step_offset: int,
+    total_minutes: float,
     stopping_metric_name: str,
     stopping_metric_value,
     thresholds_remaining,
@@ -101,6 +105,7 @@ def _log_raw_generation_table(
         wandb.log({
             "train/global_step": global_step,
             "train/total_global_step": global_step + step_offset,
+            "train/total_minutes": total_minutes,
             table_key: table,
         })
     except Exception as exc:

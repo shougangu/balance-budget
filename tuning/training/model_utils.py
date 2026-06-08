@@ -5,6 +5,8 @@ import json
 import os
 import torch
 
+from tuning.training.callback_utils import save_trainer_state
+
 
 def top_layer_indices(model_name_hf, fraction):
     """Return the layer indices for the top fraction of a model's transformer layers.
@@ -185,3 +187,4 @@ def save_trained_model(model, tokenizer, trainer, output_dir):
         tokenizer.save_pretrained(output_dir)
     with open(f"{output_dir}/training_config.json", "w") as f:
         json.dump(trainer.args.to_dict(), f, indent=4)
+    save_trainer_state(trainer.state, output_dir)

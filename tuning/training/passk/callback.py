@@ -10,7 +10,10 @@ from transformers import TrainerCallback, TrainerControl, TrainerState
 from transformers.training_args import TrainingArguments
 
 from tuning.config import MODELS_METADATA_DIR
-from tuning.training.callback_utils import save_sweetspot_checkpoint
+from tuning.training.callback_utils import (
+    get_total_minutes_from_state,
+    save_sweetspot_checkpoint,
+)
 from tuning.training.eval_strategy import EvalStrategy
 from .decisions import CheckpointDecisionEngine
 from .logging import log_eval_metrics
@@ -353,6 +356,7 @@ class PassAtKStoppingCallback(TrainerCallback):
                 raw_results=raw_results,
                 global_step=state.global_step,
                 step_offset=self._step_offset,
+                total_minutes=get_total_minutes_from_state(state),
                 thresholds_remaining=self._decision_engine.target_thresholds,
                 is_primary=is_primary,
             )

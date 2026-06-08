@@ -5,6 +5,10 @@ from tuning.training.config_training import ModelLoadConfig, LoraConfig, SFTRunC
 from tuning.training.perplexity_callback import PerplexityStoppingCallback
 from tuning.training.passk_callback import PassAtKStoppingCallback
 from tuning.training.model_utils import load_model_with_lora, save_trained_model
+from tuning.training.callback_utils import (
+    OffsetAwareWandbCallback,
+    remove_default_wandb_callback,
+)
 from tuning.utils.utils import chat_template_func, apply_chat_template, get_response_delimiters
 from typing import List, Optional
 from pathlib import Path
@@ -38,7 +42,7 @@ def train_model_sft(
     dataset = apply_chat_template(tokenizer, dataset)
     print(f"Example SFT input:\n{dataset['train'][0]['text']}")
 
-    callbacks = []
+    callbacks = [OffsetAwareWandbCallback()]
     if passk_config is not None and passk_config.enabled:
         passk_callback = PassAtKStoppingCallback(
             config=passk_config,
@@ -64,7 +68,7 @@ def train_model_sft(
         processing_class = tokenizer,
         train_dataset = dataset["train"],
         eval_dataset = dataset["test"],
-        callbacks = callbacks if callbacks else None,
+        callbacks = callbacks,
         args = SFTConfig(
             dataset_text_field = "text",
             max_length = model_load_config.max_seq_length,
@@ -79,6 +83,8 @@ def train_model_sft(
     if tuning.config.DEFAULT_CHAT_TEMPLATE != "simple":
         from unsloth import train_on_responses_only
         train_on_responses_only(trainer, **get_response_delimiters())
+
+    remove_default_wandb_callback(trainer)
 
     print(trainer.args.to_dict())
 

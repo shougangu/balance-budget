@@ -6,6 +6,8 @@ import sys
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+from transformers import TrainerState
+
 sys.modules.setdefault("vllm", MagicMock())
 sys.modules.setdefault("vllm.lora.request", MagicMock())
 sys.modules.setdefault("instruction_following_eval", MagicMock())
@@ -103,7 +105,7 @@ def test_save_sweetspot_unwraps_when_accelerator_provided(tmp_path, monkeypatch)
     accelerator = SimpleNamespace(unwrap_model=MagicMock(return_value=underlying))
     tokenizer = MagicMock()
 
-    state = SimpleNamespace(global_step=42, log_history=[])
+    state = TrainerState(global_step=42)
     args = SimpleNamespace(
         per_device_train_batch_size=8,
         gradient_accumulation_steps=1,
@@ -137,7 +139,7 @@ def test_save_sweetspot_no_unwrap_when_accelerator_none(tmp_path):
     model = MagicMock(name="unsloth_model")
     tokenizer = MagicMock()
 
-    state = SimpleNamespace(global_step=10, log_history=[])
+    state = TrainerState(global_step=10)
     args = SimpleNamespace(
         per_device_train_batch_size=8,
         gradient_accumulation_steps=1,
@@ -172,7 +174,14 @@ def _save_sweetspot_with_wandb(callback_utils, tmp_path, wandb_run):
     model = MagicMock(name="unsloth_model")
     model.save_pretrained_merged.side_effect = _fake_save
     tokenizer = MagicMock()
-    state = SimpleNamespace(global_step=10, log_history=[])
+    state = TrainerState(
+        global_step=10,
+        stateful_callbacks={
+            "OffsetAwareWandbCallback": callback_utils.OffsetAwareWandbCallback(
+                initial_total_seconds=90.0,
+            ).state(),
+        },
+    )
     args = SimpleNamespace(
         per_device_train_batch_size=8,
         gradient_accumulation_steps=1,
@@ -250,6 +259,26 @@ def test_save_sweetspot_checkpoint_path_omits_empty_wandb_run_id(tmp_path):
 
     rows = [json.loads(line) for line in open(metadata_path)]
     assert not rows[0]["checkpoint_path"].endswith("_")
+
+
+def test_save_sweetspot_checkpoint_writes_trainer_state_json(tmp_path):
+    """Sweetspot model dirs carry TrainerState so post-training can import total_seconds."""
+    import json
+    from tuning.training import callback_utils
+
+    metadata_path = _save_sweetspot_with_wandb(callback_utils, tmp_path, None)
+
+    rows = [json.loads(line) for line in open(metadata_path)]
+    state_path = os.path.join(rows[0]["checkpoint_path"], "trainer_state.json")
+    with open(state_path) as f:
+        state = json.load(f)
+    assert state["global_step"] == 10
+    assert state["stateful_callbacks"]["OffsetAwareWandbCallback"]["attributes"] == {
+        "total_seconds": 90.0,
+    }
+    assert callback_utils.load_total_seconds_from_checkpoint(
+        rows[0]["checkpoint_path"],
+    ) == 90.0
 
 
 def test_run_eval_ddp_partitions_and_merges(monkeypatch):

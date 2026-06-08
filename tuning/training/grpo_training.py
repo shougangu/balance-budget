@@ -7,7 +7,12 @@ import wandb
 from tuning.config import MODELS_DIR
 from tuning.data.train_dataset import get_train_dataset
 from tuning.training.config_training import PTRunConfig, LoraConfig, ModelLoadConfig, GRPOTrainingConfig
-from tuning.training.callback_utils import CompletionsIntervalCallback
+from tuning.training.callback_utils import (
+    CompletionsIntervalCallback,
+    OffsetAwareWandbCallback,
+    load_total_seconds_from_checkpoint,
+    remove_default_wandb_callback,
+)
 from tuning.training.passk_callback import PassAtKStoppingCallback
 from tuning.training.model_utils import (
     load_model_with_lora,
@@ -23,8 +28,6 @@ from trl import GRPOTrainer, GRPOConfig
 from typing import Callable, List
 from tuning.config import HF_MODEL_MAP
 import subprocess
-from transformers.integrations import WandbCallback
-from tuning.training.callback_utils import OffsetAwareWandbCallback
 
 
 def _enable_vllm_engine_stats():
@@ -85,6 +88,10 @@ def train_model_grpo(
     else:
         model_path = run_config.model_name_hf
 
+    initial_total_seconds = 0.0
+    if run_config.sft_run_config and not training_args.resume_from_checkpoint:
+        initial_total_seconds = load_total_seconds_from_checkpoint(model_path)
+
     raw_dataset = get_train_dataset(run_config)
 
     layers = None
@@ -106,7 +113,12 @@ def train_model_grpo(
         upcast_lm_head_to_fp32(model)
         print("[GRPO] upcast lm_head to fp32 on trainer")
 
-    callbacks = []
+    callbacks = [
+        OffsetAwareWandbCallback(
+            initial_global_step=initial_global_step or 0,
+            initial_total_seconds=initial_total_seconds,
+        )
+    ]
 
     if passk_config is not None and passk_config.enabled:
         passk_callback = PassAtKStoppingCallback(
@@ -171,9 +183,7 @@ def train_model_grpo(
         print("[GRPO] WARNING: trainer lm_head is fp32; server-side lm_head dtype "
               "is controlled by vLLM storage during weight sync")
 
-    # Swap the default WandbCallback for one that bridges train/global_step across runs.
-    trainer.pop_callback(WandbCallback)
-    trainer.add_callback(OffsetAwareWandbCallback(initial_global_step or 0))
+    remove_default_wandb_callback(trainer)
 
     try:
         trainer_stats = trainer.train(

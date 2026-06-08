@@ -1,5 +1,9 @@
-import os
 import json
+import math
+import os
+import time
+import warnings
+
 import wandb
 from transformers import TrainerCallback, TrainerState
 from transformers.integrations import WandbCallback
@@ -8,69 +12,155 @@ from transformers.training_args import TrainingArguments
 from tuning.config import MODELS_DIR
 
 
+TRAINER_STATE_FILENAME = "trainer_state.json"
+_CALLBACK_STATE_NAMES = ("OffsetAwareWandbCallback", "TrainingTimeCallback")
+
+
+def _valid_seconds(value):
+    try:
+        seconds = float(value)
+    except (TypeError, ValueError):
+        return None
+    return seconds if math.isfinite(seconds) and seconds >= 0 else None
+
+
+def _read_timing_state(stateful_callbacks):
+    """Return (stored name, total seconds, step offset) across supported states."""
+    for name in _CALLBACK_STATE_NAMES:
+        callback_state = (stateful_callbacks or {}).get(name)
+        if isinstance(callback_state, list):
+            callback_state = callback_state[-1] if callback_state else None
+        if not isinstance(callback_state, dict):
+            continue
+
+        attributes = callback_state.get("attributes", {})
+        total_seconds = _valid_seconds(attributes.get("total_seconds"))
+        if total_seconds is None:
+            total_seconds = _valid_seconds(attributes.get("_cumulative_train_seconds"))
+
+        try:
+            step_offset = int(
+                callback_state.get("args", {}).get("initial_global_step", 0) or 0
+            )
+        except (TypeError, ValueError):
+            step_offset = None
+        return name, total_seconds, step_offset
+    return None, None, None
+
+
 class OffsetAwareWandbCallback(WandbCallback, ExportableState):
-    """WandbCallback that bridges train/global_step across chained runs.
+    """Log chained-run step offsets and completed training-step time to W&B."""
 
-    Injects train/total_global_step (= global_step + offset) into every log dict.
-    Use train/total_global_step as the x-axis in W&B to compare chained runs.
-
-    Also injects train/training_minutes_cumulative: the running sum of per-step
-    training wall time (TRL's train/step_time), in minutes, excluding evaluation.
-    The logged step_time is the per-step mean over the logging window, so each
-    window contributes mean * (steps elapsed since the last log).
-    """
-
-    def __init__(self, initial_global_step=0):
+    def __init__(self, initial_global_step=0, initial_total_seconds=0.0):
         super().__init__()
-        self._offset = int(initial_global_step or 0)
-        self._cumulative_train_seconds = 0.0
-        self._last_step_time_step = None
+        self.step_offset = int(initial_global_step or 0)
+        self.total_seconds = _valid_seconds(initial_total_seconds) or 0.0
+        self.step_start = None
 
     def state(self):
         return {
-            "args": {"initial_global_step": self._offset},
-            "attributes": {
-                "_cumulative_train_seconds": self._cumulative_train_seconds,
-                "_last_step_time_step": self._last_step_time_step,
-            },
+            "args": {"initial_global_step": self.step_offset},
+            "attributes": {"total_seconds": self.total_seconds},
         }
 
+    def _sync_state(self, state):
+        state.stateful_callbacks[self.__class__.__name__] = self.state()
+
+    def setup(self, args, state, model, **kwargs):
+        super().setup(args, state, model, **kwargs)
+        if self._wandb is not None and self.step_offset:
+            self._wandb.define_metric("train/total_global_step")
+            self._wandb.define_metric(
+                "*",
+                step_metric="train/total_global_step",
+                step_sync=True,
+            )
+
     def on_train_begin(self, args, state, control, **kwargs):
-        callback_name = self.__class__.__name__
-        has_saved_state = callback_name in state.stateful_callbacks
+        stored_name, total_seconds, step_offset = _read_timing_state(
+            state.stateful_callbacks,
+        )
+        if total_seconds is not None:
+            self.total_seconds = total_seconds
+        elif state.global_step > 0:
+            warnings.warn(
+                "No valid OffsetAwareWandbCallback timing state found in resumed "
+                "TrainerState; starting train/total_minutes at 0.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            self.total_seconds = 0.0
+        if step_offset is not None:
+            self.step_offset = step_offset
+        if stored_name and stored_name != self.__class__.__name__:
+            state.stateful_callbacks.pop(stored_name, None)
 
-        # Legacy checkpoints have no callback state. Rebuild trained checkpoints
-        # from log history; untrained checkpoints correctly remain at zero.
-        if not has_saved_state and state.global_step > 0:
-            for entry in state.log_history:
-                step_time = entry.get("step_time")
-                step = entry.get("step")
-                if step_time is None or step is None:
-                    continue
-                if self._last_step_time_step is None:
-                    steps_in_window = 1
-                else:
-                    steps_in_window = max(step - self._last_step_time_step, 1)
-                self._cumulative_train_seconds += step_time * steps_in_window
-                self._last_step_time_step = step
-
-        # Transformers indexes this mapping directly while saving.
-        state.stateful_callbacks.setdefault(callback_name, self.state())
+        self.step_start = None
+        self._sync_state(state)
         return super().on_train_begin(args, state, control, **kwargs)
+
+    def on_step_begin(self, args, state, control, **kwargs):
+        self.step_start = time.perf_counter()
+        return super().on_step_begin(args, state, control, **kwargs)
+
+    def on_step_end(self, args, state, control, **kwargs):
+        if self.step_start is not None:
+            self.total_seconds += max(time.perf_counter() - self.step_start, 0.0)
+            self.step_start = None
+            self._sync_state(state)
+        return super().on_step_end(args, state, control, **kwargs)
 
     def on_log(self, args, state, control, model=None, logs=None, **kwargs):
         if logs is not None:
-            logs["total_global_step"] = state.global_step + self._offset
-            step_time = logs.get("step_time")
-            if step_time is not None:
-                if self._last_step_time_step is None:
-                    steps_in_window = 1
-                else:
-                    steps_in_window = max(state.global_step - self._last_step_time_step, 1)
-                self._cumulative_train_seconds += step_time * steps_in_window
-                self._last_step_time_step = state.global_step
-                logs["training_minutes_cumulative"] = self._cumulative_train_seconds / 60.0
+            logs["total_global_step"] = state.global_step + self.step_offset
+            logs["total_minutes"] = self.total_seconds / 60.0
+            self._sync_state(state)
         return super().on_log(args, state, control, model=model, logs=logs, **kwargs)
+
+
+def remove_default_wandb_callback(trainer) -> None:
+    for callback in list(trainer.callback_handler.callbacks):
+        if type(callback) is WandbCallback:
+            trainer.remove_callback(callback)
+            return
+
+
+def get_total_seconds_from_state(state: TrainerState) -> float:
+    _, total_seconds, _ = _read_timing_state(
+        getattr(state, "stateful_callbacks", None),
+    )
+    return total_seconds or 0.0
+
+
+def get_total_minutes_from_state(state: TrainerState) -> float:
+    return get_total_seconds_from_state(state) / 60.0
+
+
+def load_total_seconds_from_checkpoint(checkpoint_path: str, warn: bool = True) -> float:
+    state_path = os.path.join(checkpoint_path, TRAINER_STATE_FILENAME)
+    try:
+        state = TrainerState.load_from_json(state_path)
+    except (OSError, json.JSONDecodeError, TypeError, ValueError) as exc:
+        if warn:
+            warnings.warn(
+                f"Could not load {state_path}: {exc}; "
+                "starting train/total_minutes at 0.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+        return 0.0
+
+    stored_name, total_seconds, _ = _read_timing_state(state.stateful_callbacks)
+    if total_seconds is not None:
+        return total_seconds
+    if warn:
+        reason = "No timing callback state" if stored_name is None else "No valid total_seconds"
+        warnings.warn(
+            f"{reason} found in {state_path}; starting train/total_minutes at 0.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+    return 0.0
 
 
 class CompletionsIntervalCallback(TrainerCallback):
@@ -89,6 +179,13 @@ def compute_data_points_seen(state: TrainerState, args: TrainingArguments) -> in
     ga = args.gradient_accumulation_steps
     ws = getattr(args, "world_size", 1)
     return int(state.global_step * bs * ga * ws)
+
+
+def save_trainer_state(state: TrainerState, output_dir: str) -> None:
+    if not isinstance(state, TrainerState):
+        raise TypeError("state must be a transformers.TrainerState")
+    os.makedirs(output_dir, exist_ok=True)
+    state.save_to_json(os.path.join(output_dir, TRAINER_STATE_FILENAME))
 
 
 def save_sweetspot_checkpoint(
@@ -137,6 +234,7 @@ def save_sweetspot_checkpoint(
     os.makedirs(checkpoint_path, exist_ok=True)
     with open(f"{checkpoint_path}/training_config.json", "w") as f:
         json.dump(args.to_dict(), f, indent=4)
+    save_trainer_state(state, checkpoint_path)
 
     metadata = {
         "global_step": state.global_step,

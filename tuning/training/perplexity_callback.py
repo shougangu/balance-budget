@@ -9,7 +9,10 @@ from transformers.training_args import TrainingArguments
 import wandb
 
 from tuning.config import MODELS_METADATA_DIR
-from tuning.training.callback_utils import save_sweetspot_checkpoint
+from tuning.training.callback_utils import (
+    get_total_minutes_from_state,
+    save_sweetspot_checkpoint,
+)
 from tuning.training.config_training import PerplexityConfig
 
 class PerplexityStoppingCallback(TrainerCallback):
@@ -135,7 +138,12 @@ class PerplexityStoppingCallback(TrainerCallback):
             return control
         
         current_perplexity = self.evaluate_perplexity(model)
-        wandb.log({"eval/perplexity": current_perplexity, "train/global_step": state.global_step, "train/total_global_step": state.global_step + self._step_offset})
+        wandb.log({
+            "eval/perplexity": current_perplexity,
+            "train/global_step": state.global_step,
+            "train/total_global_step": state.global_step + self._step_offset,
+            "train/total_minutes": get_total_minutes_from_state(state),
+        })
         self.prevResults.append(current_perplexity)
         
         print(f"\n[PerplexityCallback] Step {state.global_step}, Data Points {data_points_seen}: PPL = {current_perplexity:.4f}")
