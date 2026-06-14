@@ -93,6 +93,15 @@ def test_grpo_upcast_lm_head_fp32_cli_explicit_disable():
     assert args.grpo_upcast_lm_head_fp32 is False
 
 
+def test_grpo_profile_cli_toggle_is_not_supported():
+    with pytest.raises(SystemExit):
+        _parse_args([
+            "--model", "qwen2-3B",
+            "--wandb-project", "test",
+            "--grpo-profile",
+        ])
+
+
 def test_pt_run_config_grpo_naming():
     sft_config = SFTRunConfig(
         model_name="llama3-8B",

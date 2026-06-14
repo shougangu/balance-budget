@@ -683,7 +683,11 @@ class TestOffsetAwareWandbCallback:
             self._wandb.define_metric("*", step_metric="train/global_step", step_sync=True)
 
         with patch.object(WandbCallback, "setup", fake_super_setup):
-            callback.setup(args=None, state=None, model=None)
+            callback.setup(
+                args=None,
+                state=SimpleNamespace(is_world_process_zero=True),
+                model=None,
+            )
 
         glob_calls = [
             c for c in mock_wandb.define_metric.call_args_list
@@ -709,7 +713,11 @@ class TestOffsetAwareWandbCallback:
             self._wandb.define_metric("*", step_metric="train/global_step", step_sync=True)
 
         with patch.object(WandbCallback, "setup", fake_super_setup):
-            callback.setup(args=None, state=None, model=None)
+            callback.setup(
+                args=None,
+                state=SimpleNamespace(is_world_process_zero=True),
+                model=None,
+            )
 
         glob_calls = [
             c for c in mock_wandb.define_metric.call_args_list
@@ -717,6 +725,24 @@ class TestOffsetAwareWandbCallback:
         ]
         assert len(glob_calls) == 1
         assert glob_calls[0].kwargs.get("step_metric") == "train/global_step"
+
+    def test_setup_does_not_define_metric_on_nonzero_rank(self):
+        from tuning.training.callback_utils import OffsetAwareWandbCallback
+        from transformers.integrations import WandbCallback
+        from unittest.mock import MagicMock, patch
+
+        callback = OffsetAwareWandbCallback(initial_global_step=100)
+        mock_wandb = MagicMock()
+        callback._wandb = mock_wandb
+
+        with patch.object(WandbCallback, "setup"):
+            callback.setup(
+                args=None,
+                state=SimpleNamespace(is_world_process_zero=False),
+                model=None,
+            )
+
+        mock_wandb.define_metric.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -729,6 +755,21 @@ class TestBuildBaseCmd:
         result = _build_base_cmd(original)
         assert "--run-all" not in result
         assert "--model" in result
+
+    def test_strips_stage_and_metadata_flags(self):
+        original = [
+            "/usr/bin/python", "pipeline.py",
+            "--model", "llama3-3B",
+            "--run-grpo",
+            "--metadata-file", "checkpoint.json",
+        ]
+
+        result = _build_base_cmd(original)
+
+        assert "--run-grpo" not in result
+        assert "--metadata-file" not in result
+        assert "checkpoint.json" not in result
+        assert result[-2:] == ["--model", "llama3-3B"]
 
     def test_preserves_other_args(self):
         original = ["/usr/bin/python", "pipeline.py", "--model", "llama3-3B", "--run-all", "--train-size", "5000"]

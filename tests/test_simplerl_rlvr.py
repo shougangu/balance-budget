@@ -14,6 +14,7 @@ sys.modules.setdefault("unsloth", MagicMock())
 from tuning.training.pipeline.cli import (
     _parse_args,
     _resolve_simplerl_dataset,
+    MODEL_TO_GPU_1,
     MODEL_TO_SIMPLERL_TIER,
 )
 from tuning.training.pipeline.stages import _build_reward_funcs
@@ -39,9 +40,7 @@ class TestResolveSimplerlDataset:
         assert args.dataset == "gsm8k"
 
     def test_all_models_have_tier_mapping(self):
-        expected_models = {"llama3-1B", "llama3-3B", "llama3-8B",
-                           "qwen2-2B", "qwen2-3B", "qwen2-7B"}
-        assert set(MODEL_TO_SIMPLERL_TIER.keys()) == expected_models
+        assert set(MODEL_TO_SIMPLERL_TIER.keys()) == set(MODEL_TO_GPU_1.keys())
 
     def test_all_tier_values_are_valid(self):
         valid_tiers = {"easy", "medium", "hard"}

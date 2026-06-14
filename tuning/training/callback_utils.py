@@ -68,7 +68,11 @@ class OffsetAwareWandbCallback(WandbCallback, ExportableState):
 
     def setup(self, args, state, model, **kwargs):
         super().setup(args, state, model, **kwargs)
-        if self._wandb is not None and self.step_offset:
+        if (
+            self._wandb is not None
+            and self.step_offset
+            and state.is_world_process_zero
+        ):
             self._wandb.define_metric("train/total_global_step")
             self._wandb.define_metric(
                 "*",

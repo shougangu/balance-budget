@@ -32,19 +32,27 @@ _LONG_SBATCH_FLAGS = (
     "--time=1-00:00:00",
 )
 
+_SHORT_SBATCH_FLAGS = (
+    "--partition=gpubase_h100_b1,gpubase_h100_b2,gpubase_h100_b3,gpubase_h100_b4,gpubase_h100_b5",
+    "--time=3:00:00"
+)
+
 
 def _build_base_cmd(argv):
-    """Build base subprocess command by stripping orchestrator-only flags."""
+    """Build a stage-neutral subprocess command for worker launches."""
     result = []
     skip_next = False
     for tok in argv:
         if skip_next:
             skip_next = False
             continue
-        if tok == "--parallel":
+        if tok in ("--parallel", "--metadata-file"):
             skip_next = True
             continue
-        if tok in ("--run-all", "--dispatch", "--no-dispatch"):
+        if tok in (
+            "--run-sft", "--run-dpo", "--run-grpo", "--run-all",
+            "--dispatch", "--no-dispatch",
+        ):
             continue
         result.append(tok)
     return result
@@ -52,7 +60,11 @@ def _build_base_cmd(argv):
 
 def _sbatch_flags_for_args(args):
     """Return scheduler overrides requested by the pipeline CLI."""
-    return list(_LONG_SBATCH_FLAGS) if getattr(args, "long", False) else []
+    if getattr(args, "long", False):
+        return list(_LONG_SBATCH_FLAGS)
+    elif getattr(args, "short", False):
+        return list(_SHORT_SBATCH_FLAGS)
+    return []
 
 
 def _submit_sbatch_worker(sbatch_script, worker_args, sbatch_flags=(), wait=False):
@@ -194,6 +206,7 @@ def main():
         args.run_sft = False # avoid re-running SFT in workers
     else:
         all_files = args.metadata_file or []
+    all_files = list(dict.fromkeys(all_files))
     print(f"Metadata files for post-training: {all_files}")
     
     if args.run_all and args.dispatch:

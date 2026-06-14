@@ -1,6 +1,8 @@
 # ABOUTME: GRPO (RLVR) training using TRL's GRPOTrainer with standard HF/PEFT.
 # ABOUTME: Mirrors dpo_training.py pattern with verifiable reward functions.
 
+import time
+
 import torch
 import wandb
 
@@ -13,6 +15,7 @@ from tuning.training.callback_utils import (
     load_total_seconds_from_checkpoint,
     remove_default_wandb_callback,
 )
+from tuning.training.grpo_timing import GRPOStepTiming
 from tuning.training.passk_callback import PassAtKStoppingCallback
 from tuning.training.model_utils import (
     load_model_with_lora,
@@ -50,21 +53,146 @@ _enable_vllm_engine_stats()
 class _GRPOTrainer(GRPOTrainer):
     """GRPOTrainer with an extra metric: fraction of sequences masked by the vLLM IS ratio cap."""
 
+    TIMING_ENABLED = True  # Change to False to disable all GRPO timing metrics.
+
+    def __init__(self, *args, **kwargs):
+        self._step_timing = GRPOStepTiming() if self.TIMING_ENABLED else None
+        self._timing_in_rollout = False
+        super().__init__(*args, **kwargs)
+        if self.TIMING_ENABLED:
+            self._install_timing_wrappers()
+
+    def _install_timing_wrappers(self):
+        """Time vLLM and backward calls without copying TRL's training loop."""
+        if hasattr(self, "vllm_generation"):
+            for method_name, timing_name in (
+                ("sync_weights", "weight_sync"),
+                ("generate", "vllm_generate"),
+            ):
+                original = getattr(self.vllm_generation, method_name, None)
+                if original is None:
+                    continue
+
+                def timed_vllm_call(
+                    *args,
+                    _original=original,
+                    _timing_name=timing_name,
+                    **kwargs,
+                ):
+                    start = time.perf_counter()
+                    try:
+                        return _original(*args, **kwargs)
+                    finally:
+                        if self._timing_in_rollout and self.model.training:
+                            self._step_timing.add(
+                                _timing_name,
+                                time.perf_counter() - start,
+                            )
+
+                setattr(self.vllm_generation, method_name, timed_vllm_call)
+
+        original_backward = self.accelerator.backward
+
+        def timed_backward(*args, **kwargs):
+            start = time.perf_counter()
+            try:
+                return original_backward(*args, **kwargs)
+            finally:
+                if self.model.training:
+                    self._step_timing.add(
+                        "backward",
+                        time.perf_counter() - start,
+                    )
+
+        self.accelerator.backward = timed_backward
+
+    def _get_per_token_logps_and_entropies(self, *args, **kwargs):
+        if not self.TIMING_ENABLED:
+            return super()._get_per_token_logps_and_entropies(*args, **kwargs)
+        start = time.perf_counter()
+        try:
+            return super()._get_per_token_logps_and_entropies(*args, **kwargs)
+        finally:
+            if self._timing_in_rollout and self.model.training:
+                self._step_timing.add(
+                    "rollout_logps",
+                    time.perf_counter() - start,
+                )
+
+    def _calculate_rewards(self, *args, **kwargs):
+        if not self.TIMING_ENABLED:
+            return super()._calculate_rewards(*args, **kwargs)
+        start = time.perf_counter()
+        try:
+            return super()._calculate_rewards(*args, **kwargs)
+        finally:
+            if self._timing_in_rollout and self.model.training:
+                self._step_timing.add(
+                    "reward",
+                    time.perf_counter() - start,
+                )
+
+    def _generate_and_score_completions(self, *args, **kwargs):
+        if not self.TIMING_ENABLED:
+            return super()._generate_and_score_completions(*args, **kwargs)
+        is_training = self.model.training
+        previous_in_rollout = self._timing_in_rollout
+        if is_training:
+            self._timing_in_rollout = True
+        start = time.perf_counter()
+        output = None
+        try:
+            output = super()._generate_and_score_completions(*args, **kwargs)
+            return output
+        finally:
+            if is_training:
+                self._step_timing.add(
+                    "rollout",
+                    time.perf_counter() - start,
+                )
+                if output is not None:
+                    generated_tokens = output.get("num_items_in_batch", 0.0)
+                    if torch.is_tensor(generated_tokens):
+                        generated_tokens = generated_tokens.detach().item()
+                    self._step_timing.add("generated_tokens", generated_tokens)
+            self._timing_in_rollout = previous_in_rollout
+
     def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
-        if (
-            self.use_vllm
-            and self.vllm_importance_sampling_correction
-            and self.vllm_importance_sampling_mode in ["sequence_mask", "token_mask"]
-            and "importance_sampling_ratio" in inputs
-        ):
-            mode = "train" if self.model.training else "eval"
-            is_ratio = inputs["importance_sampling_ratio"]
-            frac_masked = (is_ratio == 0.0).float().mean()
-            gathered = self.accelerator.gather(frac_masked)
-            self._metrics[mode]["sampling/importance_sampling_ratio/frac_masked"].append(
-                gathered.nanmean().item()
+        start = time.perf_counter() if self.TIMING_ENABLED else None
+        try:
+            if (
+                self.use_vllm
+                and self.vllm_importance_sampling_correction
+                and self.vllm_importance_sampling_mode in ["sequence_mask", "token_mask"]
+                and "importance_sampling_ratio" in inputs
+            ):
+                mode = "train" if self.model.training else "eval"
+                is_ratio = inputs["importance_sampling_ratio"]
+                frac_masked = (is_ratio == 0.0).float().mean()
+                gathered = self.accelerator.gather(frac_masked)
+                self._metrics[mode]["sampling/importance_sampling_ratio/frac_masked"].append(
+                    gathered.nanmean().item()
+                )
+            return super().compute_loss(
+                model, inputs, return_outputs, num_items_in_batch,
             )
-        return super().compute_loss(model, inputs, return_outputs, num_items_in_batch)
+        finally:
+            if self.TIMING_ENABLED and self.model.training:
+                self._step_timing.add(
+                    "policy_forward_loss",
+                    time.perf_counter() - start,
+                )
+
+    def training_step(self, model, inputs, num_items_in_batch):
+        if not self.TIMING_ENABLED:
+            return super().training_step(model, inputs, num_items_in_batch)
+        start = time.perf_counter()
+        output = super().training_step(model, inputs, num_items_in_batch)
+        self._step_timing.add("step", time.perf_counter() - start)
+        if self._step % self.current_gradient_accumulation_steps == 0:
+            for name, value in self._step_timing.finish().items():
+                self._metrics["train"][name].append(value)
+        return output
 
 
 def train_model_grpo(
