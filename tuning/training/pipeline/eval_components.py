@@ -72,6 +72,11 @@ def _build_eval_components(args, stage, gpu_util):
         primary_eval = MATH500EvalStrategy(
             k_values=k_values, n_samples=n_samples, num_prompts=num_prompts,
         )
+    elif args.task_name == "amc":
+        from tuning.training.eval_strategy import AMCEvalStrategy
+        primary_eval = AMCEvalStrategy(
+            k_values=k_values, n_samples=n_samples, num_prompts=num_prompts,
+        )
     elif args.task_name == "ifbench":
         from tuning.training.eval_strategy import IFBenchStrategy
         strict = getattr(args, f"{prefix}_passk_strict", True)
@@ -95,6 +100,9 @@ def _build_monitor_evals(args, k_values, n_samples):
         if name == "math500":
             from tuning.training.eval_strategy import MATH500EvalStrategy
             monitor_evals.append(MATH500EvalStrategy(k_values=k_values, n_samples=n_samples))
+        elif name == "amc":
+            from tuning.training.eval_strategy import AMCEvalStrategy
+            monitor_evals.append(AMCEvalStrategy(k_values=k_values, n_samples=n_samples))
         elif name == "gsm8k":
             from tuning.training.eval_strategy import GSM8KEvalStrategy
             monitor_evals.append(GSM8KEvalStrategy(k_values=k_values, n_samples=n_samples))

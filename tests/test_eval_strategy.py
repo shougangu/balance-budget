@@ -518,3 +518,104 @@ def test_math500_wandb_metrics():
         assert "eval/math500_pass_at_1" in wandb_dict
         assert "eval/math500_avg_response_length_tokens" in wandb_dict
         assert "eval/avg_response_length_tokens" not in wandb_dict
+
+
+def test_amc_strategy_implements_interface():
+    """AMCEvalStrategy must implement all EvalStrategy abstract methods."""
+    from tuning.training.eval_strategy import AMCEvalStrategy, EvalStrategy
+    assert issubclass(AMCEvalStrategy, EvalStrategy)
+    with patch("tuning.training.eval_strategy.get_amc_test_dataset") as mock_dataset:
+        mock_dataset.return_value = Dataset.from_dict({
+            "messages": [[{"role": "user", "content": "test"}]],
+            "prompt": ["test"],
+            "reference_answer": ["27"],
+        })
+        strategy = AMCEvalStrategy(k_values=[1], n_samples=1, num_prompts=1)
+        assert hasattr(strategy, "get_test_messages")
+        assert hasattr(strategy, "score_responses")
+        assert hasattr(strategy, "stopping_metric")
+        assert hasattr(strategy, "wandb_metrics")
+        assert hasattr(strategy, "label_prefix")
+
+
+def test_amc_stopping_metric():
+    """AMC stopping metric should follow pass@k convention."""
+    from tuning.training.eval_strategy import AMCEvalStrategy
+    with patch("tuning.training.eval_strategy.get_amc_test_dataset") as mock_dataset:
+        mock_dataset.return_value = Dataset.from_dict({
+            "messages": [[{"role": "user", "content": "test"}]],
+            "prompt": ["test"],
+            "reference_answer": ["27"],
+        })
+        strategy = AMCEvalStrategy(k_values=[1, 5], n_samples=5, num_prompts=1)
+        assert strategy.stopping_metric() == "pass_at_1"
+
+
+def test_amc_label_prefix():
+    """AMC label_prefix should be 'amc-p@{stopping_k}'."""
+    from tuning.training.eval_strategy import AMCEvalStrategy
+    with patch("tuning.training.eval_strategy.get_amc_test_dataset") as mock_dataset:
+        mock_dataset.return_value = Dataset.from_dict({
+            "messages": [[{"role": "user", "content": "test"}]],
+            "prompt": ["test"],
+            "reference_answer": ["27"],
+        })
+        strategy = AMCEvalStrategy(k_values=[1], n_samples=1, num_prompts=1)
+        assert strategy.label_prefix == "amc-p@1"
+
+
+def test_amc_score_responses_boxed():
+    """score_responses should score \\boxed{} answers via math-verify."""
+    from tuning.training.eval_strategy import AMCEvalStrategy
+    with patch("tuning.training.eval_strategy.get_amc_test_dataset") as mock_dataset:
+        mock_dataset.return_value = Dataset.from_dict({
+            "messages": [[{"role": "user", "content": "Q1"}], [{"role": "user", "content": "Q2"}]],
+            "prompt": ["Q1", "Q2"],
+            "reference_answer": ["27", "8"],
+        })
+        tokenizer = MagicMock()
+        tokenizer.side_effect = lambda texts, **kw: {"input_ids": [[0] * 10] * len(texts)}
+        strategy = AMCEvalStrategy(k_values=[1], n_samples=1, num_prompts=2)
+        results = [
+            {"prompt": "Q1", "responses": [r"$\boxed{27}$"]},   # correct
+            {"prompt": "Q2", "responses": [r"$\boxed{12}$"]},   # incorrect
+        ]
+        scores = strategy.score_responses(results, tokenizer)
+        assert scores["pass_at_1"] == 0.5
+        assert scores["num_prompts_evaluated"] == 2
+
+
+def test_amc_score_responses_hash_fallback():
+    """score_responses should accept #### format via fallback."""
+    from tuning.training.eval_strategy import AMCEvalStrategy
+    with patch("tuning.training.eval_strategy.get_amc_test_dataset") as mock_dataset:
+        mock_dataset.return_value = Dataset.from_dict({
+            "messages": [[{"role": "user", "content": "Q1"}]],
+            "prompt": ["Q1"],
+            "reference_answer": ["27"],
+        })
+        tokenizer = MagicMock()
+        tokenizer.side_effect = lambda texts, **kw: {"input_ids": [[0] * 10] * len(texts)}
+        strategy = AMCEvalStrategy(k_values=[1], n_samples=1, num_prompts=1)
+        results = [
+            {"prompt": "Q1", "responses": ["Step 1: ...\n#### 27"]},
+        ]
+        scores = strategy.score_responses(results, tokenizer)
+        assert scores["pass_at_1"] == 1.0
+
+
+def test_amc_wandb_metrics():
+    """wandb_metrics should prefix scores with eval/amc_."""
+    from tuning.training.eval_strategy import AMCEvalStrategy
+    with patch("tuning.training.eval_strategy.get_amc_test_dataset") as mock_dataset:
+        mock_dataset.return_value = Dataset.from_dict({
+            "messages": [[{"role": "user", "content": "test"}]],
+            "prompt": ["test"],
+            "reference_answer": ["27"],
+        })
+        strategy = AMCEvalStrategy(k_values=[1], n_samples=1, num_prompts=1)
+        scores = {"pass_at_1": 0.75, "num_prompts_evaluated": 10, "avg_response_length_tokens": 50.0}
+        wandb_dict = strategy.wandb_metrics(scores)
+        assert "eval/amc_pass_at_1" in wandb_dict
+        assert "eval/amc_avg_response_length_tokens" in wandb_dict
+        assert "eval/avg_response_length_tokens" not in wandb_dict

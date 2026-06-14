@@ -100,6 +100,48 @@ def get_ifbench_test_dataset(num_prompts=None):
     return dataset
 
 
+AMC_NUM_PROMPTS = 500
+
+
+def get_amc_test_dataset(num_prompts=AMC_NUM_PROMPTS):
+    """Load AMC test set with messages, prompt, and reference_answer columns.
+
+    Source is AMC 10/12 competition problems with integer answers, scored with the
+    same math-verify path as MATH-500. The source is ordered AMC-10 first then
+    AMC-12, so it is shuffled with a fixed seed to give a level-balanced subset.
+    Uses the OPENMATH system prompt which asks the model to output $\\boxed{answer}$.
+    """
+    from datasets import load_dataset
+    amc = load_dataset("kaggle-aimo/amc_filtered", split="train").shuffle(seed=0)
+
+    messages_list = []
+    prompts = []
+    reference_answers = []
+
+    for row in amc:
+        problem = row["task"]
+        ref_answer = str(row["answer"])
+
+        prompt = COMPMATH_STRING.format(problem=problem)
+        messages_list.append([
+            {"role": "system", "content": SYSTEM_MESSAGE_OPENMATH},
+            {"role": "user", "content": prompt},
+        ])
+        prompts.append(prompt)
+        reference_answers.append(ref_answer)
+
+    dataset = Dataset.from_dict({
+        "messages": messages_list,
+        "prompt": prompts,
+        "reference_answer": reference_answers,
+    })
+
+    if num_prompts is not None:
+        dataset = dataset.select(range(min(num_prompts, len(dataset))))
+
+    return dataset
+
+
 def get_math500_test_dataset(num_prompts=None):
     """Load MATH-500 test set with messages, prompt, and reference_answer columns.
 

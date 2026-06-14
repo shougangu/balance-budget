@@ -1,5 +1,5 @@
 # ABOUTME: ABC for eval strategies injected into the generation eval callback.
-# ABOUTME: Includes IFEval, GSM8K, MATH-500, and IFBench pass@k implementations.
+# ABOUTME: Includes IFEval, GSM8K, MATH-500, AMC, and IFBench pass@k implementations.
 
 import numpy as np
 from abc import ABC, abstractmethod
@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import List, Dict
 
 from instruction_following_eval import evaluation_lib
-from tuning.data.test_dataset import get_ifeval_test_dataset, get_gsm8k_test_dataset, get_math500_test_dataset, get_ifbench_test_dataset
+from tuning.data.test_dataset import get_ifeval_test_dataset, get_gsm8k_test_dataset, get_math500_test_dataset, get_amc_test_dataset, get_ifbench_test_dataset
 from math_verify.errors import TimeoutException
 from tuning.evaluation.gsm8k_scoring import is_correct as gsm8k_is_correct
 from tuning.evaluation.math500_scoring import is_correct as math500_is_correct
@@ -373,6 +373,97 @@ class MATH500EvalStrategy(EvalStrategy):
             if key in scores:
                 metrics[f"eval/math500_{key}"] = scores[key]
         metrics["eval/math500_avg_response_length_tokens"] = scores.get("avg_response_length_tokens", 0.0)
+        return metrics
+
+
+class AMCEvalStrategy(EvalStrategy):
+    """AMC 10/12 evaluation using pass@k scoring with math-verify."""
+
+    def __init__(self, k_values=None, n_samples=1, num_prompts=None):
+        k_values = k_values or [1]
+        self.k_values = k_values
+        self._n_samples = n_samples
+        self.stopping_k = k_values[0]
+
+        if num_prompts is None:
+            self.test_dataset = get_amc_test_dataset()
+        else:
+            self.test_dataset = get_amc_test_dataset(num_prompts=num_prompts)
+        self.reference_answers = {
+            prompt: ref
+            for prompt, ref in zip(
+                self.test_dataset["prompt"],
+                self.test_dataset["reference_answer"],
+            )
+        }
+
+        print(f"[AMCEvalStrategy] k_values={k_values}, n_samples={n_samples}, "
+              f"num_prompts={len(self.test_dataset)}")
+
+    @property
+    def n_samples(self) -> int:
+        return self._n_samples
+
+    @property
+    def id(self) -> str:
+        return "amc"
+
+    def get_test_messages(self) -> List[List[dict]]:
+        return list(self.test_dataset["messages"])
+
+    def get_test_prompts(self) -> List[str]:
+        return list(self.test_dataset["prompt"])
+
+    def score_responses(self, results: List[Dict], tokenizer) -> Dict[str, float]:
+        all_results = []
+        response_token_lengths = []
+
+        for item in results:
+            prompt = item["prompt"]
+            responses = item["responses"]
+            ref = self.reference_answers[prompt]
+
+            encoded_batch = tokenizer(
+                responses, add_special_tokens=False, padding=False, truncation=False,
+            )
+            response_token_lengths.extend(len(ids) for ids in encoded_batch["input_ids"])
+
+            eval_results = []
+            for r in responses:
+                try:
+                    eval_results.append(math500_is_correct(r, ref))
+                except TimeoutException:
+                    print(f"[AMCEvalStrategy] Stale TimeoutException absorbed: ref={ref!r}")
+                    eval_results.append(False)
+            all_results.append(eval_results)
+
+            item["per_response_correct"] = eval_results
+
+        scores = {}
+        for k in self.k_values:
+            pass_at_k_scores = [pass_at_k(len(r), sum(r), k) for r in all_results]
+            scores[f"pass_at_{k}"] = np.mean(pass_at_k_scores)
+
+        scores["num_prompts_evaluated"] = len(all_results)
+        scores["avg_response_length_tokens"] = (
+            float(np.mean(response_token_lengths)) if response_token_lengths else 0.0
+        )
+        return scores
+
+    def stopping_metric(self) -> str:
+        return f"pass_at_{self.stopping_k}"
+
+    @property
+    def label_prefix(self) -> str:
+        return f"amc-p@{self.stopping_k}"
+
+    def wandb_metrics(self, scores: Dict[str, float]) -> Dict[str, float]:
+        metrics = {}
+        for k in self.k_values:
+            key = f"pass_at_{k}"
+            if key in scores:
+                metrics[f"eval/amc_{key}"] = scores[key]
+        metrics["eval/amc_avg_response_length_tokens"] = scores.get("avg_response_length_tokens", 0.0)
         return metrics
 
 
