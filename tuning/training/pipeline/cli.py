@@ -222,7 +222,7 @@ def _parse_args(argv=None):
     parser.add_argument("--dpo-eval-steps", type=int, default=256)
     parser.add_argument("--dpo-batch-size", type=int, default=4)
     parser.add_argument("--dpo-grad-accum", type=int, default=4)
-    parser.add_argument("--grpo-num-epochs", type=int, default=20)
+    parser.add_argument("--grpo-num-epochs", type=int, default=200)
     parser.add_argument("--grpo-num-gpus", type=int, default=2,
                         help="Total GPUs for GRPO. In colocate mode all are trainer ranks; in server mode "
                              "GPU 0 trains and GPUs 1..N-1 run data-parallel trl vllm-serve workers.")

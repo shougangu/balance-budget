@@ -39,7 +39,8 @@ HF_MODEL_MAP = {
     "qwen2-3B-instruct": "unsloth/Qwen2.5-3B-Instruct",
     "qwen2-2B": "unsloth/Qwen2.5-1.5B",
     "qwen2-2B-instruct": "unsloth/Qwen2.5-1.5B-Instruct",
-    "gemma3-1B": "unsloth/gemma-3-1b-pt",
+    # Local repaired copy: upstream unsloth/gemma-3-1b-pt ships model.safetensors.index.json referencing shards that don't exist
+    "gemma3-1B": "/project/6105902/shougan/persistent_cache/local_models/gemma-3-1b-pt",
     "gemma3-4B": "unsloth/gemma-3-4b-pt",
     "gemma3-12B": "unsloth/gemma-3-12b-pt",
 }
