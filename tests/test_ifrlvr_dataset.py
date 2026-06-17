@@ -1,7 +1,7 @@
 # ABOUTME: Tests for IF-RLVR dataset loader.
 # ABOUTME: Validates format, columns, and ground_truth preservation.
 
-from tuning.data.ifrlvr_rlvr import IfrlvrRLVR, MAX_PROMPT_CHARS
+from tuning.data.ifrlvr_rlvr import IfrlvrRLVR, MAX_PROMPT_TOKENS
 
 
 def test_ifrlvr_format_produces_prompt_and_ground_truth():
@@ -42,23 +42,51 @@ def _make_mock_rows(prompt_contents):
     return [{"messages": [{"content": c}], "ground_truth": "[]"} for c in prompt_contents]
 
 
+class FakeTokenizer:
+    def apply_chat_template(self, prompt, tokenize=False, add_generation_prompt=False):
+        return prompt[1]["content"]
+
+    def __call__(self, texts, **kwargs):
+        return {"input_ids": [[0] * len(text.split()) for text in texts]}
+
+
+class ScalingFakeTokenizer(FakeTokenizer):
+    def __init__(self, multiplier):
+        self.multiplier = multiplier
+
+    def __call__(self, texts, **kwargs):
+        return {"input_ids": [[0] * len(text.split()) * self.multiplier for text in texts]}
+
+
 def test_ifrlvr_filters_long_prompts():
-    ds = IfrlvrRLVR()
+    ds = IfrlvrRLVR(tokenizers=(("fake", FakeTokenizer()),))
     short = "This is a short prompt."
-    long = "x" * (MAX_PROMPT_CHARS + 1)
+    long = " ".join(["x"] * (MAX_PROMPT_TOKENS + 1))
     rows = ds._get_rows(_make_mock_rows([short, long]))
     contents = [r["prompt"][1]["content"] for r in rows]
-    assert all(len(c) <= MAX_PROMPT_CHARS for c in contents)
+    assert all(len(c.split()) <= MAX_PROMPT_TOKENS for c in contents)
     assert short in contents
     assert long not in contents
 
 
 def test_ifrlvr_keeps_prompts_exactly_at_limit():
-    ds = IfrlvrRLVR()
-    at_limit = "a" * MAX_PROMPT_CHARS
+    ds = IfrlvrRLVR(tokenizers=(("fake", FakeTokenizer()),))
+    at_limit = " ".join(["a"] * MAX_PROMPT_TOKENS)
     rows = ds._get_rows(_make_mock_rows([at_limit]))
     assert len(rows) == 1
     assert rows[0]["prompt"][1]["content"] == at_limit
+
+
+def test_ifrlvr_filters_when_any_tokenizer_exceeds_limit():
+    ds = IfrlvrRLVR(
+        max_prompt_tokens=3,
+        tokenizers=(
+            ("fits", FakeTokenizer()),
+            ("over", ScalingFakeTokenizer(multiplier=2)),
+        ),
+    )
+    rows = ds._get_rows(_make_mock_rows(["one two three"]))
+    assert rows == []
 
 
 def test_ifrlvr_deduplicates_prompts():
