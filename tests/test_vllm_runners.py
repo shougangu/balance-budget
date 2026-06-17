@@ -2,7 +2,8 @@
 # ABOUTME: vLLM is mocked; we test the dispatch shape, not real generation.
 
 import sys
-from unittest.mock import MagicMock
+from types import SimpleNamespace
+from unittest.mock import MagicMock, call
 
 sys.modules.setdefault("vllm", MagicMock())
 sys.modules.setdefault("vllm.lora.request", MagicMock())
@@ -69,6 +70,29 @@ def test_external_runner_uses_provided_llm_and_skips_lora():
     assert out == [{"prompt": "hi", "responses": ["ok"]}]
     args, kwargs = llm.chat.call_args
     assert kwargs["lora_request"] is None
+
+
+def test_external_runner_wakes_sleeping_trainer_vllm():
+    from tuning.training.passk.runners import ExternalVLLMRunner
+
+    fake_output = MagicMock()
+    fake_output.outputs = [MagicMock(text="ok")]
+    llm = MagicMock()
+    llm.chat.return_value = [fake_output]
+    vllm_generation = SimpleNamespace(enable_sleep_mode=True)
+
+    runner = ExternalVLLMRunner(
+        _make_config(), llm=llm, vllm_generation=vllm_generation,
+    )
+    out = runner.run(model=MagicMock(), eval_strategy=_make_eval_strategy(),
+                     adapter_path=None)
+
+    assert out == [{"prompt": "hi", "responses": ["ok"]}]
+    assert llm.wake_up.call_args_list == [
+        call(tags=["weights"]),
+        call(tags=["kv_cache"]),
+    ]
+    llm.sleep.assert_called_once_with(level=2)
 
 
 def test_ephemeral_runner_creates_and_destroys_llm(monkeypatch):

@@ -35,6 +35,7 @@ def test_grpo_config_defaults():
     assert config.loss_type == "dapo"
     assert config.scale_rewards == "group"
     assert config.use_vllm is True
+    assert config.vllm_enable_sleep_mode is True
     assert config.learning_rate == 1e-5
     assert config.num_train_epochs == 1
     assert config.per_device_train_batch_size == 4
@@ -53,6 +54,7 @@ def test_grpo_config_to_hf_args():
     assert d["epsilon_high"] == 0.28
     assert d["loss_type"] == "dapo"
     assert d["scale_rewards"] == "group"
+    assert d["vllm_enable_sleep_mode"] is True
     assert d["save_strategy"] == "steps"
     # Should not contain fields that are not GRPOConfig params
     assert "eval_accumulation_steps" not in d
@@ -74,6 +76,17 @@ def test_grpo_config_upcast_lm_head_fp32_excluded_from_hf_args():
     config = GRPOTrainingConfig(upcast_lm_head_fp32=True)
     d = config.to_hf_args(output_dir="/tmp/test")
     assert "upcast_lm_head_fp32" not in d
+
+
+def test_grpo_vllm_sleep_mode_cli_default_on():
+    args = _parse_args(["--model", "qwen2-3B", "--wandb-project", "test"])
+    assert args.grpo_vllm_sleep_mode is True
+
+
+def test_grpo_vllm_sleep_mode_cli_explicit_disable():
+    args = _parse_args(["--model", "qwen2-3B", "--wandb-project", "test",
+                        "--no-grpo-vllm-sleep-mode"])
+    assert args.grpo_vllm_sleep_mode is False
 
 
 def test_grpo_upcast_lm_head_fp32_cli_default_off():

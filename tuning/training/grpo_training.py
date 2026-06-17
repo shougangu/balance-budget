@@ -293,7 +293,10 @@ def train_model_grpo(
     for cb in callbacks or []:
         if isinstance(cb, PassAtKStoppingCallback):
             if is_colocate:
-                cb.set_trainer_vllm(trainer.vllm_generation.llm)
+                cb.set_trainer_vllm(
+                    trainer.vllm_generation.llm,
+                    vllm_generation=trainer.vllm_generation,
+                )
                 print(f"[GRPO] PassAtK callback will reuse GRPOTrainer's colocate vLLM engine")
             elif is_server:
                 # rank 0 owns vllm_client; other ranks pass None and receive results via broadcast
@@ -305,7 +308,17 @@ def train_model_grpo(
             cb._accelerator = trainer.accelerator
 
     if is_colocate and training_args.upcast_lm_head_fp32:
-        upcast_vllm_lm_head_to_fp32(trainer.vllm_generation.llm)
+        llm = trainer.vllm_generation.llm
+        if getattr(trainer.vllm_generation, "enable_sleep_mode", False):
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            llm.wake_up(tags=["weights"])
+            try:
+                upcast_vllm_lm_head_to_fp32(llm)
+            finally:
+                llm.sleep(level=2)
+        else:
+            upcast_vllm_lm_head_to_fp32(llm)
         print("[GRPO] upcast lm_head to fp32 on vLLM engine")
     elif is_server and training_args.upcast_lm_head_fp32:
         print("[GRPO] WARNING: trainer lm_head is fp32; server-side lm_head dtype "

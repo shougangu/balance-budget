@@ -217,6 +217,7 @@ def _build_post_training_configs(
         scale_rewards = args.grpo_scale_rewards
         training_args.scale_rewards = False if scale_rewards == "false" else scale_rewards
         training_args.vllm_gpu_memory_utilization = gpu_util
+        training_args.vllm_enable_sleep_mode = args.grpo_vllm_sleep_mode
         training_args.vllm_importance_sampling_correction = args.grpo_vllm_importance_sampling
         training_args.upcast_lm_head_fp32 = args.grpo_upcast_lm_head_fp32
         training_args.use_liger_kernel = args.grpo_use_liger_kernel

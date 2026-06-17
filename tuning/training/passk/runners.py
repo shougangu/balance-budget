@@ -94,15 +94,45 @@ class VLLMRunner:
             model.train()
 
 
+def _trainer_vllm_sleep_mode_enabled(vllm_generation) -> bool:
+    return bool(
+        vllm_generation is not None
+        and getattr(vllm_generation, "enable_sleep_mode", False)
+    )
+
+
+def _empty_cuda_cache():
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+
+@contextmanager
+def trainer_vllm_awake_for_passk(llm, vllm_generation):
+    """Wake TRL's colocated vLLM for direct pass@k calls, then sleep it."""
+    if not _trainer_vllm_sleep_mode_enabled(vllm_generation):
+        yield
+        return
+
+    _empty_cuda_cache()
+    llm.wake_up(tags=["weights"])
+    llm.wake_up(tags=["kv_cache"])
+    try:
+        yield
+    finally:
+        llm.sleep(level=2)
+
+
 class ExternalVLLMRunner(VLLMRunner):
     """Uses an externally-provided LLM (e.g. the trainer's own vLLM). No adapter save."""
 
-    def __init__(self, config: RunnerConfig, llm):
+    def __init__(self, config: RunnerConfig, llm, vllm_generation=None):
         super().__init__(config)
         self._llm = llm
+        self._vllm_generation = vllm_generation
 
     def run(self, model, eval_strategy, adapter_path):
-        return self._run_inference(self._llm, eval_strategy, adapter_path=None)
+        with trainer_vllm_awake_for_passk(self._llm, self._vllm_generation):
+            return self._run_inference(self._llm, eval_strategy, adapter_path=None)
 
 
 class ServerVLLMRunner(VLLMRunner):

@@ -114,6 +114,7 @@ class GRPOTrainingConfig(TrainingArgumentsConfig):
     use_vllm: bool = True
     vllm_mode: str = "colocate"
     vllm_gpu_memory_utilization: float = 0.65 # 0.7 is perfect for Q2 and L1
+    vllm_enable_sleep_mode: bool = True
     vllm_server_base_url: Optional[str] = None
     vllm_server_host: str = "127.0.0.1"
     vllm_server_port: int = 8000
@@ -151,6 +152,7 @@ class GRPOTrainingConfig(TrainingArgumentsConfig):
         d["use_vllm"] = self.use_vllm
         d["vllm_mode"] = self.vllm_mode
         d["vllm_gpu_memory_utilization"] = self.vllm_gpu_memory_utilization
+        d["vllm_enable_sleep_mode"] = self.vllm_enable_sleep_mode
         d["vllm_server_base_url"] = self.vllm_server_base_url
         d["vllm_server_host"] = self.vllm_server_host
         d["vllm_server_port"] = self.vllm_server_port

@@ -242,6 +242,10 @@ def _parse_args(argv=None):
                         help="Seconds the trainer waits for the vLLM server to be reachable (server mode only).")
     parser.add_argument("--grpo-vllm-server-gpu-util", type=float, default=0.9,
                         help="vLLM server gpu_memory_utilization (server mode only).")
+    parser.add_argument("--grpo-vllm-sleep-mode",
+                        action=argparse.BooleanOptionalAction, default=True,
+                        help="Enable TRL GRPO vLLM sleep mode in colocate mode. "
+                             "Offloads vLLM weights/cache during optimizer steps.")
     parser.add_argument("--grpo-eval-steps", type=int, default=64)
     parser.add_argument("--grpo-batch-size", type=int, default=4)
     parser.add_argument("--grpo-grad-accum", type=int, default=32)

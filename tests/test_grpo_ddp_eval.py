@@ -4,7 +4,7 @@
 import os
 import sys
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 from transformers import TrainerState
 
@@ -310,6 +310,35 @@ def test_run_eval_ddp_partitions_and_merges(monkeypatch):
 
     assert len(model_results) == 8
     assert scores == {"pass_at_1": 0.5}
+
+
+def test_run_eval_ddp_wakes_sleeping_trainer_vllm(monkeypatch):
+    cb = _make_callback(monkeypatch)
+
+    fake_llm = MagicMock()
+    fake_llm.chat.return_value = [
+        SimpleNamespace(outputs=[SimpleNamespace(text="r")]) for _ in range(8)
+    ]
+    cb.set_trainer_vllm(fake_llm)
+    cb._trainer_vllm_generation = SimpleNamespace(enable_sleep_mode=True)
+
+    with (
+        patch("torch.distributed.is_initialized", return_value=True),
+        patch("torch.distributed.get_rank", return_value=0),
+        patch("torch.distributed.get_world_size", return_value=1),
+        patch("torch.distributed.all_gather_object") as mock_gather,
+    ):
+        def fake_gather(out_list, local):
+            out_list[0] = local
+        mock_gather.side_effect = fake_gather
+
+        cb._run_eval_with_results_ddp(model=MagicMock(), eval_strategy=_FakeEval())
+
+    assert fake_llm.wake_up.call_args_list == [
+        call(tags=["weights"]),
+        call(tags=["kv_cache"]),
+    ]
+    fake_llm.sleep.assert_called_once_with(level=2)
 
 
 def test_run_eval_ddp_handles_empty_local_slice(monkeypatch):

@@ -879,6 +879,14 @@ class TestGRPOArgs:
                 "--grpo-num-gpus", "1",
             ])
 
+    def test_grpo_vllm_sleep_mode_default_on(self):
+        args = _parse_args(REQUIRED)
+        assert args.grpo_vllm_sleep_mode is True
+
+    def test_grpo_vllm_sleep_mode_can_be_disabled(self):
+        args = _parse_args(REQUIRED + ["--no-grpo-vllm-sleep-mode"])
+        assert args.grpo_vllm_sleep_mode is False
+
     def test_custom_grpo_warmup_ratio(self):
         args = _parse_args(REQUIRED + ["--grpo-warmup-ratio", "0.1"])
         assert args.grpo_warmup_ratio == 0.1

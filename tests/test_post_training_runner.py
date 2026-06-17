@@ -56,6 +56,7 @@ def _make_args(metadata_file, **overrides):
         grpo_loss_type="dapo", grpo_scale_rewards="group",
         grpo_gpu_util=None,
         grpo_vllm_importance_sampling=True,
+        grpo_vllm_sleep_mode=True,
         grpo_upcast_lm_head_fp32=False,
         grpo_use_liger_kernel=False,
         grpo_vllm_mode="colocate",
@@ -128,6 +129,17 @@ class TestRunPostTrainingGrpo:
         assert captured["checkpoint_path"] == CHECKPOINT_ROW["checkpoint_path"]
         rows = [json.loads(line) for line in open(f)]
         assert rows[0]["completed"] is True
+
+
+def test_build_grpo_config_forwards_vllm_sleep_mode():
+    from tuning.training.pipeline.stages import _build_post_training_configs
+
+    args = _make_args("/tmp/unused", grpo_vllm_sleep_mode=False)
+    configs = _build_post_training_configs(
+        args, "grpo", dict(CHECKPOINT_ROW), train_size=512,
+    )
+
+    assert configs.training_args.vllm_enable_sleep_mode is False
 
 
 class TestBuildPostTrainingConfigsContinueFlag:

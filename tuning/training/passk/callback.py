@@ -25,6 +25,7 @@ from .runners import (
     PersistentVLLMRunner,
     EphemeralVLLMRunner,
     DataParallelVLLMRunner,
+    trainer_vllm_awake_for_passk,
 )
 
 
@@ -180,8 +181,10 @@ class PassAtKStoppingCallback(TrainerCallback):
             return PersistentVLLMRunner(self._runner_config)
         return EphemeralVLLMRunner(self._runner_config)
 
-    def set_trainer_vllm(self, llm):
-        self._runner = ExternalVLLMRunner(self._runner_config, llm=llm)
+    def set_trainer_vllm(self, llm, vllm_generation=None):
+        self._runner = ExternalVLLMRunner(
+            self._runner_config, llm=llm, vllm_generation=vllm_generation,
+        )
 
     def set_trainer_vllm_client(self, client):
         """Route eval through the GRPO trainer's vLLM server (server mode).
@@ -305,11 +308,12 @@ class PassAtKStoppingCallback(TrainerCallback):
         ).model_dump())
 
         if local_messages:
-            outputs = llm.chat(
-                local_messages,
-                sampling_params,
-                chat_template=self._runner.config.chat_template,
-            )
+            with trainer_vllm_awake_for_passk(llm, self._trainer_vllm_generation):
+                outputs = llm.chat(
+                    local_messages,
+                    sampling_params,
+                    chat_template=self._runner.config.chat_template,
+                )
             local_pairs = [
                 (idx, [r.text for r in out.outputs])
                 for idx, out in zip(local_indices, outputs)
