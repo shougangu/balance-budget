@@ -41,6 +41,8 @@ def test_grpo_config_defaults():
     assert config.per_device_train_batch_size == 4
     assert config.gradient_accumulation_steps == 32
     assert config.vllm_max_model_length == 6144
+    assert config.zero_variance_filter is True
+    assert config.zero_variance_filter_epsilon == 0.0
 
 
 def test_grpo_config_to_hf_args():
@@ -60,6 +62,8 @@ def test_grpo_config_to_hf_args():
     assert d["save_strategy"] == "steps"
     # Should not contain fields that are not GRPOConfig params
     assert "eval_accumulation_steps" not in d
+    assert "zero_variance_filter" not in d
+    assert "zero_variance_filter_epsilon" not in d
 
 
 def test_grpo_config_crash_recovery_defaults():
@@ -78,6 +82,13 @@ def test_grpo_config_upcast_lm_head_fp32_excluded_from_hf_args():
     config = GRPOTrainingConfig(upcast_lm_head_fp32=True)
     d = config.to_hf_args(output_dir="/tmp/test")
     assert "upcast_lm_head_fp32" not in d
+
+
+def test_grpo_config_zero_variance_filter_excluded_from_hf_args():
+    config = GRPOTrainingConfig(zero_variance_filter=False, zero_variance_filter_epsilon=1e-6)
+    d = config.to_hf_args(output_dir="/tmp/test")
+    assert "zero_variance_filter" not in d
+    assert "zero_variance_filter_epsilon" not in d
 
 
 def test_grpo_vllm_sleep_mode_cli_default_on():
@@ -106,6 +117,24 @@ def test_grpo_upcast_lm_head_fp32_cli_explicit_disable():
     args = _parse_args(["--model", "qwen2-3B", "--wandb-project", "test",
                         "--no-grpo-upcast-lm-head-fp32"])
     assert args.grpo_upcast_lm_head_fp32 is False
+
+
+def test_grpo_zero_variance_filter_cli_default_on():
+    args = _parse_args(["--model", "qwen2-3B", "--wandb-project", "test"])
+    assert args.grpo_zero_variance_filter is True
+    assert args.grpo_zero_variance_filter_epsilon == 0.0
+
+
+def test_grpo_zero_variance_filter_cli_disable():
+    args = _parse_args(["--model", "qwen2-3B", "--wandb-project", "test",
+                        "--no-grpo-zero-variance-filter"])
+    assert args.grpo_zero_variance_filter is False
+
+
+def test_grpo_zero_variance_filter_cli_epsilon():
+    args = _parse_args(["--model", "qwen2-3B", "--wandb-project", "test",
+                        "--grpo-zero-variance-filter-epsilon", "1e-6"])
+    assert args.grpo_zero_variance_filter_epsilon == 1e-6
 
 
 def test_grpo_profile_cli_toggle_is_not_supported():

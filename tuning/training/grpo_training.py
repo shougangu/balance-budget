@@ -16,6 +16,10 @@ from tuning.training.callback_utils import (
     remove_default_wandb_callback,
 )
 from tuning.training.grpo_timing import GRPOStepTiming
+from tuning.training.grpo_effective_batch import (
+    nonzero_variance_row_mask,
+    select_row_aligned,
+)
 from tuning.training.passk_callback import PassAtKStoppingCallback
 from tuning.training.model_utils import (
     load_model_with_lora,
@@ -56,11 +60,100 @@ class _GRPOTrainer(GRPOTrainer):
     TIMING_ENABLED = True  # Change to False to disable all GRPO timing metrics.
 
     def __init__(self, *args, **kwargs):
+        self.zero_variance_filter = kwargs.pop("zero_variance_filter", True)
+        self.zero_variance_filter_epsilon = kwargs.pop("zero_variance_filter_epsilon", 0.0)
         self._step_timing = GRPOStepTiming() if self.TIMING_ENABLED else None
         self._timing_in_rollout = False
         super().__init__(*args, **kwargs)
         if self.TIMING_ENABLED:
             self._install_timing_wrappers()
+
+    def _compute_zero_variance_keep_mask(self, output, mode):
+        advantages = output.get("advantages")
+        if not torch.is_tensor(advantages) or advantages.ndim == 0:
+            return None, None
+
+        num_generations = self.num_generations if mode == "train" else self.num_generations_eval
+        gathered_advantages = self.accelerator.gather(advantages.detach())
+        try:
+            global_keep = nonzero_variance_row_mask(
+                gathered_advantages,
+                num_generations=num_generations,
+                epsilon=self.zero_variance_filter_epsilon,
+            )
+        except ValueError:
+            return None, None
+
+        local_rows = advantages.shape[0]
+        process_slice = slice(
+            self.accelerator.process_index * local_rows,
+            (self.accelerator.process_index + 1) * local_rows,
+        )
+        return global_keep[process_slice].to(device=advantages.device), global_keep
+
+    def _annotate_zero_variance_filter(self, output, mode):
+        if not self.zero_variance_filter or mode != "train":
+            return output
+
+        local_keep, global_keep = self._compute_zero_variance_keep_mask(output, mode)
+        if local_keep is None:
+            return output
+
+        output["zero_variance_filter_mask"] = local_keep
+
+        loss_mask = output["completion_mask"]
+        if "tool_mask" in output:
+            loss_mask = loss_mask * output["tool_mask"]
+        local_effective_tokens = loss_mask[local_keep].sum()
+        effective_tokens = self.accelerator.gather(local_effective_tokens).sum()
+        output["num_items_in_batch"] = effective_tokens.clamp(min=1)
+
+        group_keep = global_keep.view(-1, self.num_generations).any(dim=1)
+        self._metrics[mode]["effective_batch/nonzero_variance_prompt_frac"].append(
+            group_keep.float().mean().item()
+        )
+        self._metrics[mode]["effective_batch/dropped_prompt_count"].append(
+            (~group_keep).sum().item()
+        )
+        self._metrics[mode]["effective_batch/effective_completion_tokens"].append(
+            effective_tokens.item()
+        )
+        return output
+
+    def _zero_dummy_inputs(self, inputs, row_count):
+        dummy = select_row_aligned(inputs, slice(0, 1), row_count)
+        dummy["advantages"] = torch.zeros_like(dummy["advantages"])
+        dummy["completion_mask"] = torch.zeros_like(dummy["completion_mask"])
+        if "tool_mask" in dummy:
+            dummy["tool_mask"] = torch.zeros_like(dummy["tool_mask"])
+        if "zero_variance_filter_mask" in dummy:
+            dummy["zero_variance_filter_mask"] = torch.zeros_like(
+                dummy["zero_variance_filter_mask"],
+                dtype=torch.bool,
+            )
+        return dummy
+
+    def _filter_zero_variance_inputs(self, inputs):
+        keep_mask = inputs.get("zero_variance_filter_mask")
+        if not torch.is_tensor(keep_mask):
+            return inputs, False
+
+        keep_mask = keep_mask.bool()
+        row_count = keep_mask.shape[0]
+        local_kept = keep_mask.sum()
+        global_kept = self.accelerator.gather(local_kept).sum()
+        mode = "train" if self.model.training else "eval"
+
+        if global_kept.item() == 0:
+            self._metrics[mode]["effective_batch/empty_microbatch"].append(1.0)
+            return inputs, True
+
+        self._metrics[mode]["effective_batch/empty_microbatch"].append(0.0)
+        if local_kept.item() == 0:
+            return self._zero_dummy_inputs(inputs, row_count), False
+        if local_kept.item() == row_count:
+            return inputs, False
+        return select_row_aligned(inputs, keep_mask, row_count), False
 
     def _install_timing_wrappers(self):
         """Time vLLM and backward calls without copying TRL's training loop."""
@@ -134,7 +227,9 @@ class _GRPOTrainer(GRPOTrainer):
 
     def _generate_and_score_completions(self, *args, **kwargs):
         if not self.TIMING_ENABLED:
-            return super()._generate_and_score_completions(*args, **kwargs)
+            output = super()._generate_and_score_completions(*args, **kwargs)
+            mode = "train" if self.model.training else "eval"
+            return self._annotate_zero_variance_filter(output, mode)
         is_training = self.model.training
         previous_in_rollout = self._timing_in_rollout
         if is_training:
@@ -143,7 +238,8 @@ class _GRPOTrainer(GRPOTrainer):
         output = None
         try:
             output = super()._generate_and_score_completions(*args, **kwargs)
-            return output
+            mode = "train" if self.model.training else "eval"
+            return self._annotate_zero_variance_filter(output, mode)
         finally:
             if is_training:
                 self._step_timing.add(
@@ -160,6 +256,13 @@ class _GRPOTrainer(GRPOTrainer):
     def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
         start = time.perf_counter() if self.TIMING_ENABLED else None
         try:
+            if return_outputs:
+                return super().compute_loss(
+                    model, inputs, return_outputs, num_items_in_batch,
+                )
+            inputs, empty_effective_batch = self._filter_zero_variance_inputs(inputs)
+            if empty_effective_batch:
+                return torch.zeros((), device=self.accelerator.device, requires_grad=True)
             if (
                 self.use_vllm
                 and self.vllm_importance_sampling_correction
@@ -269,6 +372,8 @@ def train_model_grpo(
         args=GRPOConfig(
             **training_args.to_hf_args(output_dir=run_config.output_dir),
         ),
+        zero_variance_filter=training_args.zero_variance_filter,
+        zero_variance_filter_epsilon=training_args.zero_variance_filter_epsilon,
     )
 
     if trainer.log_completions:

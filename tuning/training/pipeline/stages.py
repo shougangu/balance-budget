@@ -221,6 +221,8 @@ def _build_post_training_configs(
         training_args.vllm_importance_sampling_correction = args.grpo_vllm_importance_sampling
         training_args.upcast_lm_head_fp32 = args.grpo_upcast_lm_head_fp32
         training_args.use_liger_kernel = args.grpo_use_liger_kernel
+        training_args.zero_variance_filter = args.grpo_zero_variance_filter
+        training_args.zero_variance_filter_epsilon = args.grpo_zero_variance_filter_epsilon
         training_args.vllm_mode = args.grpo_vllm_mode
         if args.grpo_vllm_mode == "server":
             training_args.dataloader_num_workers = 0

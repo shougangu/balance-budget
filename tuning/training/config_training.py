@@ -104,6 +104,7 @@ class DPOTrainingConfig(TrainingArgumentsConfig):
 
 class GRPOTrainingConfig(TrainingArgumentsConfig):
     num_generations: int = 8
+    num_generations_eval: int = 8
     num_iterations: int = 1
     # max_prompt_length: int = 512
     beta: float = 0.0
@@ -136,12 +137,17 @@ class GRPOTrainingConfig(TrainingArgumentsConfig):
     vllm_importance_sampling_correction: bool = True
     upcast_lm_head_fp32: bool = False  # MiniMax/ScaleRL stability: fp32 lm_head on trainer + vLLM
     use_liger_kernel: bool = False  # Fused Triton lm_head+GRPO loss; avoids materializing [B,T,V] logits
+    zero_variance_filter: bool = True  # Drop prompt groups with zero reward variance from policy loss
+    zero_variance_filter_epsilon: float = 0.0
 
     def to_hf_args(self, output_dir: str) -> dict:
         """Return kwargs for GRPOConfig constructor."""
         d = super().to_hf_args(output_dir)
         d.pop("upcast_lm_head_fp32", None)  # consumed by grpo_training.py, not GRPOConfig
+        d.pop("zero_variance_filter", None)  # consumed by grpo_training.py, not GRPOConfig
+        d.pop("zero_variance_filter_epsilon", None)  # consumed by grpo_training.py, not GRPOConfig
         d["num_generations"] = self.num_generations
+        d["num_generations_eval"] = self.num_generations_eval
         d["num_iterations"] = self.num_iterations
         d["max_completion_length"] = self.max_completion_length
         # d["max_prompt_length"] = self.max_prompt_length

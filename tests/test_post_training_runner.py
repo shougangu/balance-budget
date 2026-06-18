@@ -59,6 +59,8 @@ def _make_args(metadata_file, **overrides):
         grpo_vllm_sleep_mode=True,
         grpo_upcast_lm_head_fp32=False,
         grpo_use_liger_kernel=False,
+        grpo_zero_variance_filter=True,
+        grpo_zero_variance_filter_epsilon=0.0,
         grpo_vllm_mode="colocate",
         grpo_vllm_server_host="127.0.0.1",
         grpo_vllm_server_port=8000,

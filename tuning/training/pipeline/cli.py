@@ -271,6 +271,11 @@ def _parse_args(argv=None):
     parser.add_argument("--grpo-use-liger-kernel",
                         action=argparse.BooleanOptionalAction, default=False,
                         help="Fused Triton lm_head+GRPO loss (liger-kernel); cuts backward peak memory.")
+    parser.add_argument("--grpo-zero-variance-filter",
+                        action=argparse.BooleanOptionalAction, default=True,
+                        help="Drop prompt groups with zero reward variance from GRPO policy loss.")
+    parser.add_argument("--grpo-zero-variance-filter-epsilon", type=float, default=0.0,
+                        help="Advantage magnitude threshold for GRPO zero-variance filtering.")
     parser.add_argument("--simple-template", action=argparse.BooleanOptionalAction,
                         default=False)
 
