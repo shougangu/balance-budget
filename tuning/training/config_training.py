@@ -174,6 +174,21 @@ class GRPOTrainingConfig(TrainingArgumentsConfig):
         return d
 
 
+class JudgeConfig(BaseModel):
+    """Configuration for asynchronous LLM-as-a-judge quality eval."""
+    enabled: bool = False
+    model: str = "deepseek-v4-flash"
+    base_url: str = "https://api.deepseek.com"
+    api_key_env: str = "DEEPSEEK_API_KEY"
+    samples_per_prompt: int = 1  # 1 = first response; <=0 = all responses
+    concurrency: int = 16
+    timeout: float = 60.0
+    max_retries: int = 3
+    temperature: float = 0.0
+    max_tokens: int = 64
+    conditioned_metrics: bool = True
+
+
 class PassAtKConfig(BaseModel):
     """Configuration for generation-based evaluation callback."""
     target_pass_at_k: list[float] = [0.8]  # Target pass@k score to stop training (0.0 to 1.0)
@@ -188,6 +203,7 @@ class PassAtKConfig(BaseModel):
     max_checkpoint_gap: int | None = None  # Save a fallback checkpoint if no checkpoint for this many data points
     target_data_points: list[int] | None = None  # Save a checkpoint when cumulative training data points cross any of these absolute marks
     initial_global_step: int = 0  # Step offset for W&B logging continuity across chained runs
+    judge: Optional[JudgeConfig] = None  # Optional asynchronous LLM-as-a-judge quality eval
 
     def __str__(self):
         lines = [f"[{self.__class__.__name__}]"]

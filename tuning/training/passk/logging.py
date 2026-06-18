@@ -55,6 +55,34 @@ def log_eval_metrics(
         print(f"{_LOG_PREFIX} {label}: {score_summary}")
 
 
+def log_judge_quality(
+    *,
+    eval_id: str,
+    metrics: Dict[str, float],
+    global_step: int,
+    step_offset: int,
+    total_minutes: float,
+) -> None:
+    """Log asynchronous LLM-judge quality metrics at the eval's captured step."""
+    log_dict = {
+        "train/global_step": global_step,
+        "train/total_global_step": global_step + step_offset,
+        "train/total_minutes": total_minutes,
+    }
+    log_dict.update({
+        f"eval/{eval_id}_{name}": value
+        for name, value in metrics.items()
+    })
+    wandb.log(log_dict)
+
+    judged = metrics.get("quality_n_judged", 0)
+    failures = metrics.get("quality_n_judge_failures", 0)
+    quality = metrics.get("quality")
+    quality_str = "nan" if quality is None else f"{quality:.3f}"
+    print(f"{_LOG_PREFIX} Step {global_step}: {eval_id} judge quality="
+          f"{quality_str} ({judged} judged, {failures} failures)")
+
+
 def _log_raw_generation_table(
     *,
     eval_strategy,

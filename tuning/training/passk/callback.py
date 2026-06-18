@@ -16,7 +16,8 @@ from tuning.training.callback_utils import (
 )
 from tuning.training.eval_strategy import EvalStrategy
 from .decisions import CheckpointDecisionEngine
-from .logging import log_eval_metrics
+from .logging import log_eval_metrics, log_judge_quality
+from .judge import DeepSeekJudge, aggregate_quality
 from .runners import (
     RunnerConfig,
     VLLMRunner,
@@ -72,6 +73,25 @@ class PassAtKStoppingCallback(TrainerCallback):
         # Set by the GRPO setup when the callback reuses the trainer's vLLM engine
         # (colocate/server). Used to refresh the engine before the baseline eval.
         self._trainer_vllm_generation = None
+
+        self._judge = None
+        self._judge_samples_per_prompt = 1
+        self._judge_conditioned_metrics = True
+        judge_config = getattr(config, "judge", None)
+        if judge_config is not None and judge_config.enabled and self._is_rank_zero():
+            self._judge_samples_per_prompt = judge_config.samples_per_prompt
+            self._judge_conditioned_metrics = judge_config.conditioned_metrics
+            self._judge = DeepSeekJudge(
+                model=judge_config.model,
+                base_url=judge_config.base_url,
+                api_key_env=judge_config.api_key_env,
+                concurrency=judge_config.concurrency,
+                timeout=judge_config.timeout,
+                max_retries=judge_config.max_retries,
+                temperature=judge_config.temperature,
+                max_tokens=judge_config.max_tokens,
+            )
+            print(f"[PassAtKCallback] LLM judge enabled: {self._judge.model}")
 
         # Eval strategies
         self.primary_eval = primary_eval
@@ -352,8 +372,71 @@ class PassAtKStoppingCallback(TrainerCallback):
         world_size = getattr(args, "world_size", 1)
         return state.global_step * train_batch_size * grad_accum * world_size
 
+
+    def _select_judge_examples(self, raw_results):
+        pairs = []
+        correctness = []
+        samples_per_prompt = self._judge_samples_per_prompt
+        for item in raw_results:
+            prompt = item.get("prompt", "")
+            responses = item.get("responses", [])
+            if not isinstance(responses, list):
+                responses = [responses]
+            per_response_correct = item.get("per_response_correct", [])
+            if not isinstance(per_response_correct, list):
+                per_response_correct = [per_response_correct]
+
+            limit = len(responses) if samples_per_prompt <= 0 else min(
+                samples_per_prompt, len(responses),
+            )
+            for idx in range(limit):
+                response = responses[idx]
+                if response is None:
+                    continue
+                pairs.append((str(prompt), str(response)))
+                if idx < len(per_response_correct):
+                    correct = per_response_correct[idx]
+                    correctness.append(None if correct is None else bool(correct))
+                else:
+                    correctness.append(None)
+        return pairs, correctness
+
+    def _maybe_run_judge(
+        self, eval_strategy, raw_results, *, global_step: int, total_minutes: float,
+    ) -> None:
+        if self._judge is None:
+            return
+
+        pairs, correctness = self._select_judge_examples(raw_results)
+        if not pairs:
+            print("[PassAtKCallback] Judge enabled but no responses were available")
+            return
+
+        self._run_judge_job(
+            eval_strategy.id, pairs, correctness, global_step, total_minutes,
+        )
+
+    def _run_judge_job(
+        self, eval_id: str, pairs, correctness, global_step: int, total_minutes: float,
+    ) -> None:
+        try:
+            quality = self._judge.score_pairs(pairs)
+            metrics = aggregate_quality(
+                quality, correctness, conditioned=self._judge_conditioned_metrics,
+            )
+            log_judge_quality(
+                eval_id=eval_id,
+                metrics=metrics,
+                global_step=global_step,
+                step_offset=self._step_offset,
+                total_minutes=total_minutes,
+            )
+        except Exception as exc:
+            print(f"[PassAtKCallback] Warning: judge job failed: {exc}")
+
     def _eval_and_log(self, model, eval_strategy, state, *, is_primary: bool):
         scores, raw_results = self._run_eval_with_results(model, eval_strategy)
+        total_minutes = get_total_minutes_from_state(state)
         if self._is_rank_zero():
             log_eval_metrics(
                 eval_strategy=eval_strategy,
@@ -361,10 +444,16 @@ class PassAtKStoppingCallback(TrainerCallback):
                 raw_results=raw_results,
                 global_step=state.global_step,
                 step_offset=self._step_offset,
-                total_minutes=get_total_minutes_from_state(state),
+                total_minutes=total_minutes,
                 thresholds_remaining=self._decision_engine.target_thresholds,
                 is_primary=is_primary,
             )
+            if is_primary:
+                self._maybe_run_judge(
+                    eval_strategy, raw_results,
+                    global_step=state.global_step,
+                    total_minutes=total_minutes,
+                )
         return scores
 
     def on_evaluate(self, args: TrainingArguments, state: TrainerState,

@@ -350,6 +350,18 @@ def _parse_args(argv=None):
     parser.add_argument("--grpo-passk-num-inference-gpus", type=int, default=1)
     parser.add_argument("--grpo-passk-persistent-vllm",
                         action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument("--grpo-enable-judge",
+                        action=argparse.BooleanOptionalAction, default=False,
+                        help="Enable DeepSeek judge metrics for GRPO pass@k evals.")
+    parser.add_argument("--grpo-judge-model", default="deepseek-v4-flash")
+    parser.add_argument("--grpo-judge-base-url", default="https://api.deepseek.com")
+    parser.add_argument("--grpo-judge-api-key-env", default="DEEPSEEK_API_KEY")
+    parser.add_argument("--grpo-judge-samples-per-prompt", type=int, default=1,
+                        help="Responses judged per prompt; <=0 judges all responses.")
+    parser.add_argument("--grpo-judge-concurrency", type=int, default=16)
+    parser.add_argument("--grpo-judge-timeout", type=float, default=60.0)
+    parser.add_argument("--grpo-judge-max-retries", type=int, default=3)
+    parser.add_argument("--grpo-judge-max-tokens", type=int, default=64)
 
     args = parser.parse_args(argv)
 

@@ -38,7 +38,21 @@ def _build_eval_components(args, stage, gpu_util):
     if not getattr(args, f"{prefix}_enable_passk", False):
         return None, None, []
 
-    from tuning.training.config_training import PassAtKConfig
+    from tuning.training.config_training import JudgeConfig, PassAtKConfig
+    judge_config = None
+    if getattr(args, f"{prefix}_enable_judge", False):
+        judge_config = JudgeConfig(
+            enabled=True,
+            model=getattr(args, f"{prefix}_judge_model", "deepseek-v4-flash"),
+            base_url=getattr(args, f"{prefix}_judge_base_url", "https://api.deepseek.com"),
+            api_key_env=getattr(args, f"{prefix}_judge_api_key_env", "DEEPSEEK_API_KEY"),
+            samples_per_prompt=getattr(args, f"{prefix}_judge_samples_per_prompt", 1),
+            concurrency=getattr(args, f"{prefix}_judge_concurrency", 16),
+            timeout=getattr(args, f"{prefix}_judge_timeout", 60.0),
+            max_retries=getattr(args, f"{prefix}_judge_max_retries", 3),
+            max_tokens=getattr(args, f"{prefix}_judge_max_tokens", 64),
+        )
+
     passk_config = PassAtKConfig(
         target_pass_at_k=getattr(args, f"{prefix}_passk_targets"),
         early_tuples=getattr(args, f"{prefix}_passk_early") or None,
@@ -49,6 +63,7 @@ def _build_eval_components(args, stage, gpu_util):
         vllm_gpu_memory_utilization=gpu_util,
         max_checkpoint_gap=getattr(args, f"{prefix}_passk_max_checkpoint_gap", None),
         target_data_points=getattr(args, f"{prefix}_passk_target_data_points", None),
+        judge=judge_config,
     )
 
     k_values = getattr(args, f"{prefix}_passk_k_values", [1])
