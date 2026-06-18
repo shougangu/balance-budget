@@ -40,6 +40,7 @@ def test_grpo_config_defaults():
     assert config.num_train_epochs == 1
     assert config.per_device_train_batch_size == 4
     assert config.gradient_accumulation_steps == 32
+    assert config.vllm_max_model_length == 6144
 
 
 def test_grpo_config_to_hf_args():
@@ -55,6 +56,7 @@ def test_grpo_config_to_hf_args():
     assert d["loss_type"] == "dapo"
     assert d["scale_rewards"] == "group"
     assert d["vllm_enable_sleep_mode"] is True
+    assert d["vllm_max_model_length"] == 6144
     assert d["save_strategy"] == "steps"
     # Should not contain fields that are not GRPOConfig params
     assert "eval_accumulation_steps" not in d

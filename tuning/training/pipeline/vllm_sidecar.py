@@ -13,6 +13,9 @@ from pathlib import Path
 from typing import Callable
 
 
+DEFAULT_VLLM_MAX_MODEL_LEN = 6144
+
+
 @dataclass(frozen=True)
 class GRPOServerSplit:
     trainer_gpus: tuple[str, ...]
@@ -56,6 +59,7 @@ class GRPOVLLMServerSidecar:
         model_hf: str,
         split: GRPOServerSplit,
         gpu_memory_utilization: float,
+        max_model_len: int = DEFAULT_VLLM_MAX_MODEL_LEN,
         host: str = "127.0.0.1",
         startup_timeout: float = 300.0,
         popen_factory: Callable[..., subprocess.Popen] = subprocess.Popen,
@@ -63,6 +67,7 @@ class GRPOVLLMServerSidecar:
         self.model_hf = model_hf
         self.split = split
         self.gpu_memory_utilization = gpu_memory_utilization
+        self.max_model_len = max_model_len
         self.host = host
         self.startup_timeout = startup_timeout
         self._popen_factory = popen_factory
@@ -92,6 +97,7 @@ class GRPOVLLMServerSidecar:
             "--port", str(port),
             "--data-parallel-size", str(data_parallel_size),
             "--gpu-memory-utilization", str(self.gpu_memory_utilization),
+            "--max-model-len", str(self.max_model_len),
         ]
         env = os.environ.copy()
         env["CUDA_VISIBLE_DEVICES"] = ",".join(self.split.server_gpus)
@@ -99,7 +105,7 @@ class GRPOVLLMServerSidecar:
         print(
             "[orchestrator] Starting GRPO vLLM server: "
             f"gpus={env['CUDA_VISIBLE_DEVICES']} "
-            f"dp={data_parallel_size} "
+            f"dp={data_parallel_size} max_model_len={self.max_model_len} "
             f"http={self.host}:{port} group_port={group_port} "
             f"log={log_path}"
         )

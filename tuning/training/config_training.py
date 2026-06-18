@@ -7,6 +7,7 @@ import os
 BaseModel.model_config['protected_namespaces'] = ()
 
 EFFECTIVE_BATCH_SIZE = 16  # Increased for H100/L40 GPUs
+DEFAULT_VLLM_MAX_MODEL_LEN = 6144
 
 def sft_batch_size(dataset_size: int):
     return 2  # H100/L40 can handle larger per-device batch sizes
@@ -120,6 +121,7 @@ class GRPOTrainingConfig(TrainingArgumentsConfig):
     vllm_server_port: int = 8000
     vllm_server_timeout: float = 300.0
     vllm_group_port: int = 51216
+    vllm_max_model_length: int = DEFAULT_VLLM_MAX_MODEL_LEN
     learning_rate: float = 1e-5
     num_train_epochs: int = 1
     per_device_train_batch_size: int = 4
@@ -158,6 +160,7 @@ class GRPOTrainingConfig(TrainingArgumentsConfig):
         d["vllm_server_port"] = self.vllm_server_port
         d["vllm_server_timeout"] = self.vllm_server_timeout
         d["vllm_group_port"] = self.vllm_group_port
+        d["vllm_max_model_length"] = self.vllm_max_model_length
         d["log_completions"] = self.log_completions
         d["num_completions_to_print"] = self.num_completions_to_print
         d["vllm_importance_sampling_correction"] = self.vllm_importance_sampling_correction
@@ -171,6 +174,7 @@ class PassAtKConfig(BaseModel):
     early_tuples: list[tuple[int, float]] | None = None  # Each tuple: (patience, min_increase)
     temperature: float = 0.5  # Sampling temperature for generation
     max_tokens: int = 4096  # Maximum tokens to generate per response
+    vllm_max_model_len: int = DEFAULT_VLLM_MAX_MODEL_LEN
     enabled: bool = True  # Whether to enable the callback
     use_persistent_vllm: bool = False  # Keep vLLM engine alive between evals (saves cold-start time)
     vllm_gpu_memory_utilization: float = 0.4  # GPU memory fraction for vLLM (conservative for coexistence with training)

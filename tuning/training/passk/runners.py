@@ -8,6 +8,8 @@ from typing import Dict, List, Optional
 import torch
 from collections import defaultdict
 
+from tuning.training.config_training import DEFAULT_VLLM_MAX_MODEL_LEN
+
 
 @dataclass
 class RunnerConfig:
@@ -19,6 +21,7 @@ class RunnerConfig:
     max_tokens: int
     available_gpus: List[str]
     num_inference_gpus: int
+    max_model_len: int = DEFAULT_VLLM_MAX_MODEL_LEN
 
 
 class VLLMRunner:
@@ -195,6 +198,7 @@ def _make_llm(config: RunnerConfig):
         max_lora_rank=config.lora_max_rank,
         max_loras=1,
         gpu_memory_utilization=config.vllm_gpu_memory_utilization,
+        max_model_len=config.max_model_len,
         trust_remote_code=True,
         enforce_eager=True,
     )
@@ -299,7 +303,7 @@ def _run_data_parallel(eval_strategy, adapter_path: str, config: RunnerConfig) -
                 i, available_gpus[i], message_chunks[i], config.base_model_hf,
                 adapter_path, eval_strategy.n_samples, config.temperature,
                 config.max_tokens, config.chat_template, config.lora_max_rank,
-                config.vllm_gpu_memory_utilization, result_queue,
+                config.vllm_gpu_memory_utilization, config.max_model_len, result_queue,
                 stop_tokens, eval_seed,
             ),
         )

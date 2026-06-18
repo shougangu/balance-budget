@@ -27,7 +27,7 @@ def partition_prompts(messages: List, num_chunks: int) -> List[List]:
 
 def _data_parallel_worker(worker_id, cuda_device, messages_chunk, base_model_hf, adapter_path,
                           n_samples, temperature, max_tokens, chat_template,
-                          lora_max_rank, gpu_memory_utilization, result_queue,
+                          lora_max_rank, gpu_memory_utilization, max_model_len, result_queue,
                           stop_tokens=None, seed=None):
     """Worker function for data-parallel vLLM inference. Runs in a subprocess.
 
@@ -49,7 +49,8 @@ def _data_parallel_worker(worker_id, cuda_device, messages_chunk, base_model_hf,
             enable_lora=True,
             max_lora_rank=lora_max_rank,
             max_loras=1,
-            gpu_memory_utilization=0.75,
+            gpu_memory_utilization=gpu_memory_utilization,
+            max_model_len=max_model_len,
             trust_remote_code=True,
             enforce_eager=True,
         )

@@ -103,7 +103,7 @@ class TestConfigUnslothDefaults:
         assert "unsloth_standby" not in d
         assert "unsloth_num_chunks" not in d
         assert "unsloth_grpo_mini_batch" not in d
-        assert "vllm_max_model_length" not in d
+        assert d["vllm_max_model_length"] == 6144
 
     def test_unsloth_keeps_chunk_fields(self):
         c = GRPOTrainingConfig(grpo_backend="unsloth", unsloth_num_chunks=16,

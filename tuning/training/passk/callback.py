@@ -103,6 +103,7 @@ class PassAtKStoppingCallback(TrainerCallback):
             temperature=config.temperature,
             max_tokens=config.max_tokens,
             available_gpus=self._available_gpus,
+            max_model_len=config.vllm_max_model_len,
             num_inference_gpus=self.num_inference_gpus,
         )
         self._runner = self._build_runner(config)
