@@ -203,6 +203,7 @@ class PassAtKStoppingCallback(TrainerCallback):
         return EphemeralVLLMRunner(self._runner_config)
 
     def set_trainer_vllm(self, llm, vllm_generation=None):
+        self._trainer_vllm_generation = vllm_generation
         self._runner = ExternalVLLMRunner(
             self._runner_config, llm=llm, vllm_generation=vllm_generation,
         )
@@ -328,19 +329,19 @@ class PassAtKStoppingCallback(TrainerCallback):
             max_tokens=self.max_tokens,
         ).model_dump())
 
-        if local_messages:
-            with trainer_vllm_awake_for_passk(llm, self._trainer_vllm_generation):
+        with trainer_vllm_awake_for_passk(llm, self._trainer_vllm_generation):
+            if local_messages:
                 outputs = llm.chat(
                     local_messages,
                     sampling_params,
                     chat_template=self._runner.config.chat_template,
                 )
-            local_pairs = [
-                (idx, [r.text for r in out.outputs])
-                for idx, out in zip(local_indices, outputs)
-            ]
-        else:
-            local_pairs = []
+                local_pairs = [
+                    (idx, [r.text for r in out.outputs])
+                    for idx, out in zip(local_indices, outputs)
+                ]
+            else:
+                local_pairs = []
 
         gathered = [None] * world_size
         dist.all_gather_object(gathered, local_pairs)

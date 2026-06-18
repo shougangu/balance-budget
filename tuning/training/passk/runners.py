@@ -111,18 +111,30 @@ def _empty_cuda_cache():
 
 @contextmanager
 def trainer_vllm_awake_for_passk(llm, vllm_generation):
-    """Wake TRL's colocated vLLM for direct pass@k calls, then sleep it."""
-    if not _trainer_vllm_sleep_mode_enabled(vllm_generation):
+    """Refresh TRL's colocated vLLM for direct pass@k calls, then sleep it."""
+    if vllm_generation is None: # ie, no colocated gpu that must be synced
         yield
         return
 
-    _empty_cuda_cache()
-    llm.wake_up(tags=["weights"])
-    llm.wake_up(tags=["kv_cache"])
+    sync_weights = getattr(vllm_generation, "sync_weights", None)
+    if not callable(sync_weights):
+        raise RuntimeError(
+            "Pass@k eval is reusing a trainer vLLM object without sync_weights(). "
+            "Sleeping colocated vLLM engines must be refreshed through the trainer "
+            "generation path before direct eval generation."
+        )
+
+    sleep_mode_enabled = _trainer_vllm_sleep_mode_enabled(vllm_generation)
+    if sleep_mode_enabled:
+        _empty_cuda_cache()
     try:
+        sync_weights()
+        if sleep_mode_enabled:
+            llm.wake_up(tags=["kv_cache"])
         yield
     finally:
-        llm.sleep(level=2)
+        if sleep_mode_enabled:
+            llm.sleep(level=2)
 
 
 class ExternalVLLMRunner(VLLMRunner):

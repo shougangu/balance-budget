@@ -71,7 +71,7 @@ MODEL_TO_GPU_3 = {
     "qwen2-3B-instruct": 0.45,
     "qwen2-7B": 0.45,
     "qwen2-7B-instruct": 0.45,
-    "qwen2-14B": 0.3,
+    "qwen2-14B": 0.5,
     "qwen2-14B-instruct": 0.3,
     "qwen2-32B": 0.3,
     "qwen2-32B-instruct": 0.3,
@@ -272,7 +272,7 @@ def _parse_args(argv=None):
                         action=argparse.BooleanOptionalAction, default=False,
                         help="Fused Triton lm_head+GRPO loss (liger-kernel); cuts backward peak memory.")
     parser.add_argument("--grpo-zero-variance-filter",
-                        action=argparse.BooleanOptionalAction, default=True,
+                        action=argparse.BooleanOptionalAction, default=False,
                         help="Drop prompt groups with zero reward variance from GRPO policy loss.")
     parser.add_argument("--grpo-zero-variance-filter-epsilon", type=float, default=0.0,
                         help="Advantage magnitude threshold for GRPO zero-variance filtering.")

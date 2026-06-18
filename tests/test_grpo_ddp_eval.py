@@ -4,7 +4,7 @@
 import os
 import sys
 from types import SimpleNamespace
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 from transformers import TrainerState
 
@@ -312,15 +312,18 @@ def test_run_eval_ddp_partitions_and_merges(monkeypatch):
     assert scores == {"pass_at_1": 0.5}
 
 
-def test_run_eval_ddp_wakes_sleeping_trainer_vllm(monkeypatch):
+def test_run_eval_ddp_syncs_sleeping_trainer_vllm(monkeypatch):
     cb = _make_callback(monkeypatch)
 
     fake_llm = MagicMock()
     fake_llm.chat.return_value = [
         SimpleNamespace(outputs=[SimpleNamespace(text="r")]) for _ in range(8)
     ]
-    cb.set_trainer_vllm(fake_llm)
-    cb._trainer_vllm_generation = SimpleNamespace(enable_sleep_mode=True)
+    fake_vllm_generation = SimpleNamespace(
+        enable_sleep_mode=True,
+        sync_weights=MagicMock(),
+    )
+    cb.set_trainer_vllm(fake_llm, vllm_generation=fake_vllm_generation)
 
     with (
         patch("torch.distributed.is_initialized", return_value=True),
@@ -334,20 +337,22 @@ def test_run_eval_ddp_wakes_sleeping_trainer_vllm(monkeypatch):
 
         cb._run_eval_with_results_ddp(model=MagicMock(), eval_strategy=_FakeEval())
 
-    assert fake_llm.wake_up.call_args_list == [
-        call(tags=["weights"]),
-        call(tags=["kv_cache"]),
-    ]
+    fake_vllm_generation.sync_weights.assert_called_once_with()
+    fake_llm.wake_up.assert_called_once_with(tags=["kv_cache"])
     fake_llm.sleep.assert_called_once_with(level=2)
 
 
 def test_run_eval_ddp_handles_empty_local_slice(monkeypatch):
-    """Rank with empty slice (more ranks than prompts) skips chat and still gathers."""
+    """Rank with empty slice skips chat but still participates in weight sync."""
     cb = _make_callback(monkeypatch)
 
     fake_llm = MagicMock()
     fake_llm.chat.side_effect = AssertionError("chat should not be called on empty slice")
-    cb.set_trainer_vllm(fake_llm)
+    fake_vllm_generation = SimpleNamespace(
+        enable_sleep_mode=True,
+        sync_weights=MagicMock(),
+    )
+    cb.set_trainer_vllm(fake_llm, vllm_generation=fake_vllm_generation)
 
     class _FewPromptsEval(_FakeEval):
         def get_test_messages(self):
@@ -369,6 +374,9 @@ def test_run_eval_ddp_handles_empty_local_slice(monkeypatch):
         )
 
     assert len(model_results) == 1
+    fake_vllm_generation.sync_weights.assert_called_once_with()
+    fake_llm.wake_up.assert_called_once_with(tags=["kv_cache"])
+    fake_llm.sleep.assert_called_once_with(level=2)
 
 
 def test_dispatch_ddp_when_world_size_gt_1(monkeypatch):

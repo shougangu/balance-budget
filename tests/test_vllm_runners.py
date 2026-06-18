@@ -3,7 +3,7 @@
 
 import sys
 from types import SimpleNamespace
-from unittest.mock import MagicMock, call
+from unittest.mock import MagicMock
 
 sys.modules.setdefault("vllm", MagicMock())
 sys.modules.setdefault("vllm.lora.request", MagicMock())
@@ -72,14 +72,17 @@ def test_external_runner_uses_provided_llm_and_skips_lora():
     assert kwargs["lora_request"] is None
 
 
-def test_external_runner_wakes_sleeping_trainer_vllm():
+def test_external_runner_syncs_sleeping_trainer_vllm():
     from tuning.training.passk.runners import ExternalVLLMRunner
 
     fake_output = MagicMock()
     fake_output.outputs = [MagicMock(text="ok")]
     llm = MagicMock()
     llm.chat.return_value = [fake_output]
-    vllm_generation = SimpleNamespace(enable_sleep_mode=True)
+    vllm_generation = SimpleNamespace(
+        enable_sleep_mode=True,
+        sync_weights=MagicMock(),
+    )
 
     runner = ExternalVLLMRunner(
         _make_config(), llm=llm, vllm_generation=vllm_generation,
@@ -88,10 +91,8 @@ def test_external_runner_wakes_sleeping_trainer_vllm():
                      adapter_path=None)
 
     assert out == [{"prompt": "hi", "responses": ["ok"]}]
-    assert llm.wake_up.call_args_list == [
-        call(tags=["weights"]),
-        call(tags=["kv_cache"]),
-    ]
+    vllm_generation.sync_weights.assert_called_once_with()
+    llm.wake_up.assert_called_once_with(tags=["kv_cache"])
     llm.sleep.assert_called_once_with(level=2)
 
 
