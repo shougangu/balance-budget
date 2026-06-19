@@ -967,6 +967,36 @@ class TestTargetDataPointsArg:
 
 
 # ---------------------------------------------------------------------------
+# pass@k target total minutes CLI args
+# ---------------------------------------------------------------------------
+
+class TestTargetTotalMinutesArg:
+    def test_default_is_none(self):
+        args = _parse_args(REQUIRED)
+        assert args.sft_passk_target_total_minutes is None
+        assert args.dpo_passk_target_total_minutes is None
+        assert args.grpo_passk_target_total_minutes is None
+
+    def test_sft_values(self):
+        args = _parse_args(REQUIRED + [
+            "--sft-passk-target-total-minutes", "30", "60.5",
+        ])
+        assert args.sft_passk_target_total_minutes == [30.0, 60.5]
+
+    def test_dpo_values(self):
+        args = _parse_args(REQUIRED + [
+            "--dpo-passk-target-total-minutes", "30", "60",
+        ])
+        assert args.dpo_passk_target_total_minutes == [30.0, 60.0]
+
+    def test_grpo_values(self):
+        args = _parse_args(REQUIRED + [
+            "--grpo-passk-target-total-minutes", "30", "60",
+        ])
+        assert args.grpo_passk_target_total_minutes == [30.0, 60.0]
+
+
+# ---------------------------------------------------------------------------
 # --simple-template CLI arg
 # ---------------------------------------------------------------------------
 

@@ -305,6 +305,8 @@ def _parse_args(argv=None):
     parser.add_argument("--sft-passk-max-checkpoint-gap", type=int, default=None)
     parser.add_argument("--sft-passk-target-data-points", type=int, nargs="+",
                         default=None)
+    parser.add_argument("--sft-passk-target-total-minutes", type=float, nargs="+",
+                        default=None)
     
     parser.add_argument("--sft-passk-early", type=parse_early_tuple, nargs="*",
                         default=[])
@@ -322,6 +324,8 @@ def _parse_args(argv=None):
     parser.add_argument("--sft-ppl-early", type=parse_early_tuple, nargs="*", default=[])
 
     parser.add_argument("--dpo-passk-targets", type=float, nargs="+", default=[1.2])
+    parser.add_argument("--dpo-passk-target-total-minutes", type=float, nargs="+",
+                        default=None)
     parser.add_argument("--dpo-passk-early", type=parse_early_tuple, nargs="*",
                         default=[])
     parser.add_argument("--dpo-passk-k-values", type=int, nargs="+", default=[1])
@@ -339,6 +343,8 @@ def _parse_args(argv=None):
     parser.add_argument("--dpo-ppl-early", type=parse_early_tuple, nargs="*", default=[])
 
     parser.add_argument("--grpo-passk-targets", type=float, nargs="+", default=[1.2])
+    parser.add_argument("--grpo-passk-target-total-minutes", type=float, nargs="+",
+                        default=None)
     parser.add_argument("--grpo-passk-early", type=parse_early_tuple, nargs="*",
                         default=[])
     parser.add_argument("--grpo-passk-k-values", type=int, nargs="+", default=[1])

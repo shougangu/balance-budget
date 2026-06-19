@@ -15,7 +15,7 @@ from tuning.training.callback_utils import (
     save_sweetspot_checkpoint,
 )
 from tuning.training.eval_strategy import EvalStrategy
-from .decisions import CheckpointDecisionEngine
+from .decisions import CheckpointDecision, CheckpointDecisionEngine
 from .logging import log_eval_metrics, log_judge_quality
 from .judge import DeepSeekJudge, aggregate_quality
 from .runners import (
@@ -59,6 +59,7 @@ class PassAtKStoppingCallback(TrainerCallback):
             early_tuples=config.early_tuples,
             max_checkpoint_gap=getattr(config, "max_checkpoint_gap", None),
             target_data_points=getattr(config, "target_data_points", None),
+            target_total_minutes=getattr(config, "target_total_minutes", None),
         )
         self._step_offset = int(getattr(config, "initial_global_step", 0) or 0)
         self.tokenizer = tokenizer
@@ -183,6 +184,18 @@ class PassAtKStoppingCallback(TrainerCallback):
         # Baseline evaluation before training starts
         self.on_evaluate(args, state, control, **kwargs)
 
+    def on_step_end(self, args, state, control, **kwargs):
+        total_minutes = get_total_minutes_from_state(state)
+        crossed = self._decision_engine.consume_crossed_total_minute_targets(total_minutes)
+        if crossed:
+            control.should_evaluate = True
+            print(
+                "[PassAtKCallback] total_minutes target crossed; "
+                f"requesting eval for {max(crossed):g}m "
+                f"(actual {total_minutes:.2f}m)"
+            )
+        return control
+
     def on_train_end(self, args, state, control, **kwargs):
         """Cleanup persistent vLLM engine when training ends."""
         if self._last_eval_step != state.global_step:
@@ -236,19 +249,31 @@ class PassAtKStoppingCallback(TrainerCallback):
         self.tokenizer.save_pretrained(adapter_dir)
         print(f"[PassAtKCallback] LoRA adapter saved")
 
-    def _save_sweetspot_checkpoint(self, model, threshold, state: TrainerState, args: TrainingArguments):
-        """Save a checkpoint when a sweetspot threshold is reached."""
+    def _save_decision_checkpoint(
+        self,
+        model,
+        decision: CheckpointDecision,
+        state: TrainerState,
+        args: TrainingArguments,
+    ):
+        """Save the checkpoint requested by the decision engine."""
+        threshold_type = decision.metadata_type or self.primary_eval.stopping_metric()
+        threshold_value = (
+            decision.metadata_value
+            if decision.metadata_value is not None
+            else decision.label
+        )
         return save_sweetspot_checkpoint(
             model=model,
             tokenizer=self.tokenizer,
             model_name=self.model_name,
-            threshold_label=f"{self.primary_eval.label_prefix}-{threshold}",
+            threshold_label=f"{self.primary_eval.label_prefix}-{decision.label}",
             state=state,
             args=args,
             metadata_path=self.metadata_path,
             extra_metadata={
-                "threshold_type": self.primary_eval.stopping_metric(),
-                "threshold_value": threshold,
+                "threshold_type": threshold_type,
+                "threshold_value": threshold_value,
             },
             accelerator=self._accelerator,
         )
@@ -467,6 +492,7 @@ class PassAtKStoppingCallback(TrainerCallback):
             return control
 
         data_points_seen = self._compute_data_points_seen(args, state)
+        total_minutes = get_total_minutes_from_state(state)
 
         primary_scores = self._eval_and_log(model, self.primary_eval, state,
                                             is_primary=True)
@@ -481,10 +507,11 @@ class PassAtKStoppingCallback(TrainerCallback):
             history=self._primary_metric_history,
             data_points_seen=data_points_seen,
             last_checkpoint_data_points=self._last_checkpoint_data_points,
+            total_minutes=total_minutes,
         )
         for decision in decisions:
             if self._is_rank_zero():
-                self._save_sweetspot_checkpoint(model, decision.label, state, args)
+                self._save_decision_checkpoint(model, decision, state, args)
             if decision.advances_state:
                 self._last_checkpoint_data_points = data_points_seen
             if self._is_rank_zero():

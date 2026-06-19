@@ -244,6 +244,7 @@ def save_sweetspot_checkpoint(
         "global_step": state.global_step,
         "checkpoint_path": checkpoint_path,
         "data_points_seen": data_points_seen,
+        "total_minutes": get_total_minutes_from_state(state),
         **(extra_metadata or {}),
         "wandb_run_id": wandb_run_id,
         "sft_wandb_run_id": wandb_run_id,

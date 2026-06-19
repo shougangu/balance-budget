@@ -221,6 +221,7 @@ def test_save_sweetspot_records_wandb_run_id(tmp_path):
     assert len(rows) == 1
     assert rows[0]["wandb_run_id"] == "abc123"
     assert rows[0]["threshold_type"] == "pass_at_1"
+    assert rows[0]["total_minutes"] == 1.5
 
 
 def test_save_sweetspot_records_empty_wandb_run_id_when_no_active_run(tmp_path):

@@ -1,14 +1,16 @@
 # ABOUTME: Pure-logic engine that decides when to save sweetspot checkpoints.
-# ABOUTME: Owns threshold list, early-tuple list, max-gap counter — no W&B / model deps.
+# ABOUTME: Owns threshold, early-tuple, fixed target, max-gap decisions — no W&B / model deps.
 
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 
 @dataclass
 class CheckpointDecision:
     label: str
     advances_state: bool
+    metadata_type: Optional[str] = None
+    metadata_value: Any = None
 
 
 class CheckpointDecisionEngine:
@@ -18,6 +20,7 @@ class CheckpointDecisionEngine:
         early_tuples: Optional[List[Tuple[int, float]]],
         max_checkpoint_gap: Optional[int],
         target_data_points: Optional[List[int]] = None,
+        target_total_minutes: Optional[List[float]] = None,
     ):
         self.target_thresholds = sorted(target_thresholds, reverse=True)
         self.early_tuples = list(early_tuples) if early_tuples else None
@@ -25,6 +28,21 @@ class CheckpointDecisionEngine:
         self.target_data_points = (
             sorted(target_data_points) if target_data_points else None
         )
+        self.target_total_minutes = (
+            sorted(target_total_minutes) if target_total_minutes else None
+        )
+        self.pending_total_minute_targets: List[float] = []
+
+    def consume_crossed_total_minute_targets(
+        self, total_minutes: float,
+    ) -> List[float]:
+        if not self.target_total_minutes:
+            return []
+        crossed = [t for t in self.target_total_minutes if t <= total_minutes]
+        if crossed:
+            self.target_total_minutes = self.target_total_minutes[len(crossed):]
+            self.pending_total_minute_targets.extend(crossed)
+        return crossed
 
     def decide(
         self,
@@ -32,6 +50,7 @@ class CheckpointDecisionEngine:
         history: List[float],
         data_points_seen: int,
         last_checkpoint_data_points: int,
+        total_minutes: Optional[float] = None,
     ) -> List[CheckpointDecision]:
         decisions: List[CheckpointDecision] = []
 
@@ -76,6 +95,18 @@ class CheckpointDecisionEngine:
                     advances_state=True,
                 ))
                 self.target_data_points = self.target_data_points[len(crossed):]
+
+        if total_minutes is not None:
+            self.consume_crossed_total_minute_targets(total_minutes)
+        if self.pending_total_minute_targets:
+            target_minutes = max(self.pending_total_minute_targets)
+            self.pending_total_minute_targets.clear()
+            decisions.append(CheckpointDecision(
+                label=f"{target_minutes:g}m",
+                advances_state=True,
+                metadata_type="total_minutes",
+                metadata_value=target_minutes,
+            ))
 
         if (self.max_checkpoint_gap is not None
                 and data_points_seen > 0

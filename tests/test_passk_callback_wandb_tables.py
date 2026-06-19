@@ -109,6 +109,17 @@ def _patch_eval_runs(callback, primary_payload, monitor_payload=None):
     callback._run_eval = MagicMock(side_effect=lambda m, e: run_with_results(m, e)[0])
 
 
+def _state_with_total_minutes(minutes, global_step=5):
+    state = TrainerState(stateful_callbacks={
+        "OffsetAwareWandbCallback": {
+            "args": {"initial_global_step": 0},
+            "attributes": {"total_seconds": minutes * 60.0},
+        },
+    })
+    state.global_step = global_step
+    return state
+
+
 def test_on_evaluate_logs_primary_raw_generation_table():
     callback = _make_callback()
     primary_scores = {
@@ -212,6 +223,90 @@ def test_table_logging_failure_is_non_fatal():
     assert len(metric_logs) == 1
 
 
+def test_total_minutes_target_requests_eval_once_when_crossed():
+    callback = _make_callback()
+    callback._decision_engine.target_total_minutes = [30.0]
+    args = SimpleNamespace()
+
+    control = TrainerControl()
+    callback.on_step_end(args, _state_with_total_minutes(29.9), control)
+    assert not control.should_evaluate
+    assert callback._decision_engine.target_total_minutes == [30.0]
+    assert callback._decision_engine.pending_total_minute_targets == []
+
+    control = TrainerControl()
+    callback.on_step_end(args, _state_with_total_minutes(30.1), control)
+    assert control.should_evaluate is True
+    assert callback._decision_engine.target_total_minutes == []
+    assert callback._decision_engine.pending_total_minute_targets == [30.0]
+
+    control = TrainerControl()
+    callback.on_step_end(args, _state_with_total_minutes(31.0), control)
+    assert not control.should_evaluate
+    assert callback._decision_engine.pending_total_minute_targets == [30.0]
+
+
+def test_pending_total_minutes_checkpoint_saved_during_eval():
+    callback = _make_callback()
+    callback._decision_engine.pending_total_minute_targets = [30.0]
+    _patch_eval_runs(callback, (
+        {"pass_at_1": 0.1, "num_prompts_evaluated": 1},
+        [{"prompt": "Prompt A", "responses": ["resp"]}],
+    ))
+
+    args = SimpleNamespace(per_device_train_batch_size=2, gradient_accumulation_steps=1, world_size=1)
+    state = _state_with_total_minutes(30.1)
+    control = TrainerControl()
+
+    with (
+        patch("tuning.training.passk.logging.wandb.Table", side_effect=FakeTable),
+        patch("tuning.training.passk.logging.wandb.log"),
+        patch("tuning.training.passk.callback.save_sweetspot_checkpoint") as mock_save,
+    ):
+        callback.on_evaluate(args, state, control, model=MagicMock())
+
+    mock_save.assert_called_once()
+    assert mock_save.call_args.kwargs["threshold_label"] == "p@1-30m"
+    assert mock_save.call_args.kwargs["extra_metadata"] == {
+        "threshold_type": "total_minutes",
+        "threshold_value": 30.0,
+    }
+    assert callback._decision_engine.pending_total_minute_targets == []
+
+
+def test_multiple_total_minutes_targets_crossed_save_highest():
+    callback = _make_callback()
+    callback._decision_engine.target_total_minutes = [30.0, 60.0]
+    _patch_eval_runs(callback, (
+        {"pass_at_1": 0.1, "num_prompts_evaluated": 1},
+        [{"prompt": "Prompt A", "responses": ["resp"]}],
+    ))
+
+    args = SimpleNamespace(per_device_train_batch_size=2, gradient_accumulation_steps=1, world_size=1)
+    control = TrainerControl()
+    callback.on_step_end(args, _state_with_total_minutes(61.0), control)
+    assert control.should_evaluate is True
+    assert callback._decision_engine.target_total_minutes == []
+    assert callback._decision_engine.pending_total_minute_targets == [30.0, 60.0]
+
+    with (
+        patch("tuning.training.passk.logging.wandb.Table", side_effect=FakeTable),
+        patch("tuning.training.passk.logging.wandb.log"),
+        patch("tuning.training.passk.callback.save_sweetspot_checkpoint") as mock_save,
+    ):
+        callback.on_evaluate(
+            args, _state_with_total_minutes(61.0), TrainerControl(), model=MagicMock(),
+        )
+
+    mock_save.assert_called_once()
+    assert mock_save.call_args.kwargs["threshold_label"] == "p@1-60m"
+    assert mock_save.call_args.kwargs["extra_metadata"] == {
+        "threshold_type": "total_minutes",
+        "threshold_value": 60.0,
+    }
+    assert callback._decision_engine.pending_total_minute_targets == []
+
+
 # ---------------------------------------------------------------------------
 # Gap checkpoint tests (max_checkpoint_gap)
 # ---------------------------------------------------------------------------
@@ -252,16 +347,14 @@ def test_gap_checkpoint_saved_when_gap_exceeds_limit():
 
     with patch("tuning.training.passk.logging.wandb.Table", side_effect=FakeTable), \
          patch("tuning.training.passk.logging.wandb.log"), \
-         patch.object(callback, "_save_sweetspot_checkpoint") as mock_save:
+         patch("tuning.training.passk.callback.save_sweetspot_checkpoint") as mock_save:
         # Step 64 -> 1024 data points -> should trigger gap checkpoint
         state = TrainerState()
         state.global_step = 64
         callback.on_evaluate(args, state, control, model=MagicMock())
 
     mock_save.assert_called_once()
-    # threshold arg should indicate this is a gap checkpoint
-    call_args = mock_save.call_args
-    assert "gap" in str(call_args)
+    assert "gap" in mock_save.call_args.kwargs["threshold_label"]
 
 
 def test_no_gap_checkpoint_when_below_limit():
@@ -275,7 +368,7 @@ def test_no_gap_checkpoint_when_below_limit():
 
     with patch("tuning.training.passk.logging.wandb.Table", side_effect=FakeTable), \
          patch("tuning.training.passk.logging.wandb.log"), \
-         patch.object(callback, "_save_sweetspot_checkpoint") as mock_save:
+         patch("tuning.training.passk.callback.save_sweetspot_checkpoint") as mock_save:
         # Step 32 -> 512 data points -> below 1024 gap limit
         state = TrainerState()
         state.global_step = 32
@@ -295,7 +388,7 @@ def test_no_gap_checkpoint_when_disabled():
 
     with patch("tuning.training.passk.logging.wandb.Table", side_effect=FakeTable), \
          patch("tuning.training.passk.logging.wandb.log"), \
-         patch.object(callback, "_save_sweetspot_checkpoint") as mock_save:
+         patch("tuning.training.passk.callback.save_sweetspot_checkpoint") as mock_save:
         state = TrainerState()
         state.global_step = 128  # 2048 data points, way past any gap
         callback.on_evaluate(args, state, control, model=MagicMock())
@@ -316,7 +409,7 @@ def test_gap_resets_after_threshold_checkpoint():
 
     with patch("tuning.training.passk.logging.wandb.Table", side_effect=FakeTable), \
          patch("tuning.training.passk.logging.wandb.log"), \
-         patch.object(callback, "_save_sweetspot_checkpoint", return_value="/fake/path") as mock_save:
+         patch("tuning.training.passk.callback.save_sweetspot_checkpoint", return_value="/fake/path") as mock_save:
         # Step 64 -> 1024 data points. Threshold 0.05 is crossed,
         # so a threshold checkpoint is saved. No gap checkpoint needed.
         state = TrainerState()
@@ -325,5 +418,4 @@ def test_gap_resets_after_threshold_checkpoint():
 
     # Only the threshold checkpoint, no gap checkpoint
     assert mock_save.call_count == 1
-    # The call should be the threshold one (0.05), not a gap
-    assert mock_save.call_args[0][1] == "0.05"  # threshold arg (string label from decision engine)
+    assert mock_save.call_args.kwargs["threshold_label"] == "p@1-0.05"

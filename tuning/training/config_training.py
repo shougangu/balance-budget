@@ -202,6 +202,7 @@ class PassAtKConfig(BaseModel):
     num_inference_gpus: int = 1  # Number of GPUs for data-parallel vLLM inference (>1 forces ephemeral mode)
     max_checkpoint_gap: int | None = None  # Save a fallback checkpoint if no checkpoint for this many data points
     target_data_points: list[int] | None = None  # Save a checkpoint when cumulative training data points cross any of these absolute marks
+    target_total_minutes: list[float] | None = None  # Trigger eval/checkpoint when cumulative train/total_minutes crosses these marks
     initial_global_step: int = 0  # Step offset for W&B logging continuity across chained runs
     judge: Optional[JudgeConfig] = None  # Optional asynchronous LLM-as-a-judge quality eval
 

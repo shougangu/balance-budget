@@ -5,12 +5,13 @@ from tuning.training.passk.decisions import CheckpointDecision, CheckpointDecisi
 
 
 def _engine(thresholds=None, early_tuples=None, max_gap=None,
-            target_data_points=None):
+            target_data_points=None, target_total_minutes=None):
     return CheckpointDecisionEngine(
         target_thresholds=thresholds or [],
         early_tuples=early_tuples or None,
         max_checkpoint_gap=max_gap,
         target_data_points=target_data_points,
+        target_total_minutes=target_total_minutes,
     )
 
 
@@ -151,3 +152,60 @@ class TestFixedDataTargets:
                                data_points_seen=999999,
                                last_checkpoint_data_points=0)
         assert decisions == []
+
+
+class TestFixedTotalMinuteTargets:
+    def test_no_trigger_below_first_target(self):
+        eng = _engine(target_total_minutes=[30.0, 60.0])
+        crossed = eng.consume_crossed_total_minute_targets(29.9)
+        assert crossed == []
+        assert eng.target_total_minutes == [30.0, 60.0]
+        assert eng.pending_total_minute_targets == []
+
+    def test_step_end_consumes_crossed_target_and_defers_decision(self):
+        eng = _engine(target_total_minutes=[30.0, 60.0])
+        crossed = eng.consume_crossed_total_minute_targets(30.1)
+        assert crossed == [30.0]
+        assert eng.target_total_minutes == [60.0]
+        assert eng.pending_total_minute_targets == [30.0]
+
+    def test_pending_target_fires_on_decide(self):
+        eng = _engine(target_total_minutes=[30.0])
+        eng.consume_crossed_total_minute_targets(30.1)
+        decisions = eng.decide(primary_metric=0.0, history=[0.0],
+                               data_points_seen=4000,
+                               last_checkpoint_data_points=0)
+        assert decisions == [CheckpointDecision(
+            label="30m",
+            advances_state=True,
+            metadata_type="total_minutes",
+            metadata_value=30.0,
+        )]
+        assert eng.pending_total_minute_targets == []
+
+    def test_decide_can_consume_total_minutes_directly(self):
+        eng = _engine(target_total_minutes=[30.0])
+        decisions = eng.decide(primary_metric=0.0, history=[0.0],
+                               data_points_seen=4000,
+                               last_checkpoint_data_points=0,
+                               total_minutes=30.1)
+        assert decisions == [CheckpointDecision(
+            label="30m",
+            advances_state=True,
+            metadata_type="total_minutes",
+            metadata_value=30.0,
+        )]
+        assert eng.target_total_minutes == []
+
+    def test_multiple_crossings_one_eval_picks_highest(self):
+        eng = _engine(target_total_minutes=[30.0, 60.0])
+        decisions = eng.decide(primary_metric=0.0, history=[0.0],
+                               data_points_seen=4000,
+                               last_checkpoint_data_points=0,
+                               total_minutes=61.0)
+        assert decisions == [CheckpointDecision(
+            label="60m",
+            advances_state=True,
+            metadata_type="total_minutes",
+            metadata_value=60.0,
+        )]
