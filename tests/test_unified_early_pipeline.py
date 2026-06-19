@@ -251,6 +251,85 @@ class TestParallelArg:
         assert args.parallel == 3
 
 
+class TestLiveDispatchArg:
+    def test_default_live_dispatch_is_false(self):
+        assert _parse_args(REQUIRED).live_dispatch is False
+
+    def test_live_dispatch_parses_true(self):
+        assert _parse_args(REQUIRED + ["--live-dispatch"]).live_dispatch is True
+
+
+class TestSubmitPostTrainingWorkerForMetadata:
+    def _args(self, **overrides):
+        base = dict(
+            post_training_method="grpo",
+            grpo_num_gpus=1,
+            sbatch_script="tuning/slurm/unified_early_pipeline.sh",
+            long=False,
+            short=False,
+        )
+        base.update(overrides)
+        return SimpleNamespace(**base)
+
+    def test_includes_grpo_run_flags_and_metadata(self, monkeypatch):
+        from tuning.training.pipeline import orchestrator as orch
+        calls = []
+        monkeypatch.setattr(orch, "_submit_sbatch_worker",
+                            lambda script, argv, **kwargs: (calls.append((argv, kwargs)), "777")[1])
+        monkeypatch.setattr(orch.sys, "argv",
+                            ["pipeline.py", "--model", "llama3-3B", "--run-sft"])
+        job_id = orch.submit_post_training_worker_for_metadata(
+            self._args(), "/tmp/meta.jsonl",
+        )
+        assert job_id == "777"
+        argv = calls[0][0]
+        assert "--run-grpo" in argv
+        assert "--run-all" in argv
+        assert "--no-dispatch" in argv
+        assert "--metadata-file" in argv
+        assert "/tmp/meta.jsonl" in argv
+        # base cmd is stage-neutral: the SFT flag is stripped out
+        assert "--run-sft" not in argv
+        assert "--model" in argv
+        assert "llama3-3B" in argv
+
+    def test_includes_gres_for_multi_gpu_grpo(self, monkeypatch):
+        from tuning.training.pipeline import orchestrator as orch
+        calls = []
+        monkeypatch.setattr(orch, "_submit_sbatch_worker",
+                            lambda script, argv, **kwargs: (calls.append((argv, kwargs)), "777")[1])
+        monkeypatch.setattr(orch.sys, "argv", ["pipeline.py", "--model", "llama3-3B"])
+        orch.submit_post_training_worker_for_metadata(
+            self._args(grpo_num_gpus=4), "/tmp/meta.jsonl",
+        )
+        assert "--gres=gpu:4" in calls[0][1]["sbatch_flags"]
+
+    def test_single_gpu_grpo_has_no_gres(self, monkeypatch):
+        from tuning.training.pipeline import orchestrator as orch
+        calls = []
+        monkeypatch.setattr(orch, "_submit_sbatch_worker",
+                            lambda script, argv, **kwargs: (calls.append((argv, kwargs)), "777")[1])
+        monkeypatch.setattr(orch.sys, "argv", ["pipeline.py", "--model", "llama3-3B"])
+        orch.submit_post_training_worker_for_metadata(
+            self._args(grpo_num_gpus=1), "/tmp/meta.jsonl",
+        )
+        assert not any(f.startswith("--gres") for f in calls[0][1]["sbatch_flags"])
+
+    def test_sbatch_failure_logs_warning_and_returns_none(self, monkeypatch, capsys):
+        from tuning.training.pipeline import orchestrator as orch
+
+        def boom(*a, **k):
+            raise SystemExit("sbatch boom")
+
+        monkeypatch.setattr(orch, "_submit_sbatch_worker", boom)
+        monkeypatch.setattr(orch.sys, "argv", ["pipeline.py", "--model", "llama3-3B"])
+        result = orch.submit_post_training_worker_for_metadata(
+            self._args(), "/tmp/meta.jsonl",
+        )
+        assert result is None
+        assert "WARNING" in capsys.readouterr().out
+
+
 # ---------------------------------------------------------------------------
 # next_checkpoint / mark_completed
 # ---------------------------------------------------------------------------

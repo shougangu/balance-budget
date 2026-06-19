@@ -25,6 +25,7 @@ _TORCHRUN_ENV_VARS = (
     "TORCHELASTIC_USE_AGENT_STORE", "TORCHELASTIC_RUN_ID",
     "TORCHELASTIC_RESTART_COUNT", "TORCHELASTIC_MAX_RESTARTS",
     "TORCH_NCCL_ASYNC_ERROR_HANDLING",
+    "WANDB_SERVICE"
 )
 
 _LONG_SBATCH_FLAGS = (
@@ -112,8 +113,38 @@ def _dispatch_parallel_workers(parallel, base_cmd, pt_flag, metadata_files,
     for i in range(parallel):
         job_id = _submit_sbatch_worker(sbatch_script, worker_argv,
                                         sbatch_flags=sbatch_flags)
-        print(f"[orchestrator] Submitted worker {i+1}/{parallel}: job {job_id}_{args.wandb_project}.out")
+        project = getattr(args, "wandb_project", "wandb")
+        print(f"[orchestrator] Submitted worker {i+1}/{parallel}: job {job_id}_{project}.out")
 
+
+
+def submit_post_training_worker_for_metadata(args, metadata_file):
+    """Submit one GRPO post-training worker for a freshly saved metadata file.
+
+    Mirrors the worker-arg shape of _dispatch_parallel_workers but submits exactly
+    one worker and never aborts the caller: an sbatch failure is logged and
+    swallowed so a live-dispatch submission can't kill the running SFT job.
+    """
+    base_cmd = _build_base_cmd(sys.argv)
+    worker_argv = list(base_cmd[1:])
+    worker_argv += ["--run-grpo", "--run-all", "--no-dispatch"]
+    worker_argv += ["--metadata-file", metadata_file]
+
+    args.run_sft = False # ensure the sft + long combination doesn't occur for gpu
+    sbatch_flags = _sbatch_flags_for_args(args)
+    if args.grpo_num_gpus > 1:
+        sbatch_flags.append(f"--gres=gpu:{args.grpo_num_gpus}")
+
+    try:
+        job_id = _submit_sbatch_worker(
+            args.sbatch_script, worker_argv, sbatch_flags=sbatch_flags,
+        )
+    except SystemExit as exc:
+        print(f"[orchestrator] WARNING: live-dispatch sbatch submission failed "
+              f"for {metadata_file}: {exc}")
+        return None
+    print(f"[orchestrator] Live-dispatched GRPO worker for {metadata_file}: job {job_id}")
+    return job_id
 
 
 def _run_grpo_server_subprocess(base_cmd, pt_flag, metadata_file, args):

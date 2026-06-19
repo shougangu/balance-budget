@@ -27,6 +27,7 @@ def train_model_sft(
     passk_config = None,  # PassAtKConfig object
     primary_eval = None,  # Pre-built EvalStrategy
     monitor_evals = None,  # Additional EvalStrategy list
+    pipeline_args = None,  # Parsed pipeline CLI args, for callback-triggered live dispatch
 ):
     dataset = get_train_dataset(run_config)
     raw_eval_dataset = dataset["test"]
@@ -51,6 +52,7 @@ def train_model_sft(
             base_model_hf=run_config.model_name_hf,
             primary_eval=primary_eval,
             monitor_evals=monitor_evals or [],
+            pipeline_args=pipeline_args,
         )
         callbacks.append(passk_callback)
 

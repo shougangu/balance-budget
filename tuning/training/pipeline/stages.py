@@ -91,6 +91,7 @@ def run_sft(args):
             perplexity_config=ppl_config,
             primary_eval=primary_eval,
             monitor_evals=monitor_evals,
+            pipeline_args=args,
         )
 
     metadata_paths = [

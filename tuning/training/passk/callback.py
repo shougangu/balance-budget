@@ -53,7 +53,9 @@ class PassAtKStoppingCallback(TrainerCallback):
         base_model_hf: str,
         primary_eval: EvalStrategy,
         monitor_evals: list[EvalStrategy] = None,
+        pipeline_args=None,
     ):
+        self._pipeline_args = pipeline_args
         self._decision_engine = CheckpointDecisionEngine(
             target_thresholds=config.target_pass_at_k,
             early_tuples=config.early_tuples,
@@ -523,6 +525,32 @@ class PassAtKStoppingCallback(TrainerCallback):
                 self._last_checkpoint_data_points = data_points_seen
             if self._is_rank_zero():
                 print(f"[PassAtKCallback] Saved checkpoint: {decision.label}")
+                self._maybe_live_dispatch(decision)
 
         self._last_eval_step = state.global_step
         return control
+
+    def _maybe_live_dispatch(self, decision):
+        """Submit a GRPO post-training worker for a freshly saved checkpoint.
+
+        Only fires under --live-dispatch with post_training_method=='grpo' on rank 0.
+        eval_only checkpoints are skipped: they are pre-claimed so they never seed
+        post-training, so no worker should be dispatched for them. The worker is
+        submitted for the metadata file (it claims the next unclaimed row), so one
+        worker is submitted per non-eval-only checkpoint saved. Submission happens
+        after the checkpoint directory and its metadata row are fully written.
+        """
+        args = self._pipeline_args
+        if args is None or not getattr(args, "live_dispatch", False):
+            return
+        if getattr(args, "post_training_method", None) != "grpo":
+            return
+        if decision.eval_only:
+            return
+        if not self._is_rank_zero():
+            return
+
+        from tuning.training.pipeline.orchestrator import (
+            submit_post_training_worker_for_metadata,
+        )
+        submit_post_training_worker_for_metadata(args, self.metadata_path)

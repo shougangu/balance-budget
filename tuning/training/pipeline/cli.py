@@ -182,6 +182,10 @@ def _parse_args(argv=None):
                        help="Number of concurrent post-training workers.")
     stage.add_argument("--dispatch", action=argparse.BooleanOptionalAction,
                        default=True)
+    stage.add_argument("--live-dispatch", action="store_true", default=False,
+                       help="SFT submits a GRPO post-training worker immediately after "
+                            "each pass@k checkpoint is saved, instead of waiting for SFT "
+                            "to finish. SFT-to-GRPO only.")
     duration = stage.add_mutually_exclusive_group()
     duration.add_argument("--short", action="store_true", default=False,
                           help="Use the 3-hour sbatch script for better queue times.")
