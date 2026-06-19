@@ -200,3 +200,44 @@ def test_grpo_server_subprocess_uses_gpu0_and_injects_server_args(tmp_path, monk
     assert "34567" in cmd
     assert "--grpo-vllm-group-port" in cmd
     assert "45678" in cmd
+
+
+def test_grpo_server_subprocess_passes_precision_dtype_to_sidecar(tmp_path, monkeypatch):
+    from tuning.training.pipeline import orchestrator as orch
+
+    metadata_file = tmp_path / "meta.jsonl"
+    metadata_file.write_text("{}\n")
+    captured = {}
+
+    class FakeSidecar:
+        def __init__(self, **kwargs):
+            captured["sidecar"] = kwargs
+
+        def __enter__(self):
+            return SimpleNamespace(host="127.0.0.1", port=34567, group_port=45678)
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    monkeypatch.setattr(orch, "GRPOVLLMServerSidecar", FakeSidecar)
+    monkeypatch.setattr(orch.subprocess, "run", lambda *a, **k: MagicMock(returncode=0))
+
+    args = SimpleNamespace(
+        model="qwen2-2B",
+        grpo_vllm_mode="server",
+        grpo_num_gpus=2,
+        grpo_vllm_server_gpu_util=0.9,
+        grpo_vllm_server_timeout=300.0,
+        grpo_precision="bf16",
+    )
+
+    result = orch._run_post_training_subprocess(
+        "grpo",
+        ["tuning/training/unified_early_pipeline.py", "--model", "qwen2-2B", "--wandb-project", "test"],
+        "--run-grpo",
+        str(metadata_file),
+        args,
+    )
+
+    assert result.returncode == 0
+    assert captured["sidecar"]["dtype"] == "bfloat16"

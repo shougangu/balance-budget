@@ -1,7 +1,7 @@
 from pydantic import BaseModel, model_validator
 import tuning.config
 from tuning.config import MODELS_DIR
-from typing import Optional, Union
+from typing import Any, Literal, Optional, Union
 import os
 
 BaseModel.model_config['protected_namespaces'] = ()
@@ -20,7 +20,7 @@ def effective_batch_size(dataset_size: int):
 
 class ModelLoadConfig(BaseModel):
     max_seq_length: int = 1024 
-    dtype: Optional[str] = None 
+    dtype: Any | None = None
     load_in_4bit: bool = False 
 
 class LoraConfig(BaseModel):
@@ -139,6 +139,7 @@ class GRPOTrainingConfig(TrainingArgumentsConfig):
     use_liger_kernel: bool = False  # Fused Triton lm_head+GRPO loss; avoids materializing [B,T,V] logits
     zero_variance_filter: bool = True  # Drop prompt groups with zero reward variance from policy loss
     zero_variance_filter_epsilon: float = 0.0
+    precision: Literal["auto", "fp16", "bf16"] = "auto"
 
     def to_hf_args(self, output_dir: str) -> dict:
         """Return kwargs for GRPOConfig constructor."""
@@ -146,6 +147,7 @@ class GRPOTrainingConfig(TrainingArgumentsConfig):
         d.pop("upcast_lm_head_fp32", None)  # consumed by grpo_training.py, not GRPOConfig
         d.pop("zero_variance_filter", None)  # consumed by grpo_training.py, not GRPOConfig
         d.pop("zero_variance_filter_epsilon", None)  # consumed by grpo_training.py, not GRPOConfig
+        d.pop("precision", None)  # consumed by pipeline/stages.py and this method
         d["num_generations"] = self.num_generations
         d["num_generations_eval"] = self.num_generations_eval
         d["num_iterations"] = self.num_iterations
@@ -170,6 +172,12 @@ class GRPOTrainingConfig(TrainingArgumentsConfig):
         d["log_completions"] = self.log_completions
         d["num_completions_to_print"] = self.num_completions_to_print
         d["vllm_importance_sampling_correction"] = self.vllm_importance_sampling_correction
+        if self.precision == "fp16":
+            d["fp16"] = True
+            d["bf16"] = False
+        elif self.precision == "bf16":
+            d["fp16"] = False
+            d["bf16"] = True
         d.pop("eval_accumulation_steps", None)
         return d
 

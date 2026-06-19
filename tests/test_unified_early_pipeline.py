@@ -865,6 +865,7 @@ class TestGRPOArgs:
         assert args.grpo_lr_scheduler_type == "constant"
         assert args.grpo_zero_variance_filter is True
         assert args.grpo_zero_variance_filter_epsilon == 0.0
+        assert args.grpo_precision == "auto"
 
     def test_grpo_server_mode_accepts_dp_only_split(self):
         args = _parse_args(REQUIRED + [

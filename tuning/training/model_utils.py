@@ -4,8 +4,27 @@
 import json
 import os
 import torch
+import torch.nn.functional as F
 
 from tuning.training.callback_utils import save_trainer_state
+
+
+def _is_adapter_checkpoint(model_path):
+    """True when model_path is a saved LoRA adapter directory (no base weights)."""
+    return os.path.isfile(os.path.join(model_path, "adapter_config.json"))
+
+
+def _adapter_base_path(model_path):
+    """Return the base model path recorded in an adapter checkpoint's config."""
+    with open(os.path.join(model_path, "adapter_config.json")) as f:
+        adapter_config = json.load(f)
+    base_path = adapter_config.get("base_model_name_or_path")
+    if not base_path:
+        raise ValueError(
+            f"adapter_config.json in {model_path} has no base_model_name_or_path; "
+            "cannot resolve the base model to merge the adapter into."
+        )
+    return base_path
 
 
 def top_layer_indices(model_name_hf, fraction):
@@ -140,41 +159,71 @@ def upcast_lm_head_to_fp32(model):
     return model
 
 
-def upcast_vllm_lm_head_to_fp32(llm):
-    """Force vLLM's lm_head matmul + log_softmax to run in fp32.
+def install_vllm_fp32_logits_patch() -> bool:
+    """Patch vLLM LogitsProcessor to compute output projection logits in fp32.
 
-    Patches the model's LogitsProcessor._get_logits to (a) upcast hidden_states
-    and (b) use an fp32 lm_head weight. Tied embeddings (e.g., Qwen2.5-3B,
-    Qwen3-4B) need a separate fp32 weight buffer so embed_tokens forward stays
-    in its original dtype; untied models upcast lm_head.weight in place so TRL's
-    sync_weights writes fp32→fp32 each step.
+    This is installed before vLLM engine construction so the actual lm_head module
+    passed by vLLM is used, including tied embedding/output projection modules.
+    vLLM's LogitsProcessor.forward still owns scaling and soft-cap handling.
     """
-    import types
-    import torch.nn.functional as F
+    from vllm.model_executor.layers.logits_processor import LogitsProcessor
 
-    vmodel = llm.llm_engine.model_executor.driver_worker.model_runner.model
-    lm_head = vmodel.lm_head
-    embed = vmodel.model.embed_tokens
-    tied = lm_head is embed  # vLLM ties by module identity (Qwen2/3 ForCausalLM)
+    if getattr(LogitsProcessor, "_balance_budget_fp32_logits_patch", False):
+        return False
 
-    if tied:
-        weight_holder = {"w": lm_head.weight.data.detach().to(torch.float32).clone()}
-    else:
-        lm_head.weight.data = lm_head.weight.data.to(torch.float32)
-        weight_holder = {"w": lm_head.weight}
+    original_get_logits = LogitsProcessor._get_logits
 
-    lp = vmodel.logits_processor
-
-    def _fp32_get_logits(self, hidden_states, _lm_head, embedding_bias):
-        w = weight_holder["w"]
-        logits = F.linear(hidden_states.to(torch.float32), w, embedding_bias)
+    def _fp32_get_logits(self, hidden_states, lm_head, embedding_bias):
+        bias = embedding_bias.float() if embedding_bias is not None else None
+        logits = F.linear(hidden_states.float(), lm_head.weight.float(), bias)
         logits = self._gather_logits(logits)
         if logits is not None:
             logits = logits[..., : self.org_vocab_size]
         return logits
 
-    lp._get_logits = types.MethodType(_fp32_get_logits, lp)
-    return llm
+    LogitsProcessor._balance_budget_original_get_logits = original_get_logits
+    LogitsProcessor._get_logits = _fp32_get_logits
+    LogitsProcessor._balance_budget_fp32_logits_patch = True
+    return True
+
+
+def install_trl_vllm_dtype_patch(dtype_name: str) -> bool:
+    """Force TRL's colocated vLLM LLM constructor wrapper to receive dtype."""
+    import importlib
+
+    vllm_generation = None
+    for module_name in (
+        "trl.generation.vllm_generation",
+        "trl.extras.vllm_generation",
+        "trl.trainer.grpo_trainer",
+    ):
+        try:
+            candidate = importlib.import_module(module_name)
+        except ImportError:
+            continue
+        if hasattr(candidate, "LLM"):
+            vllm_generation = candidate
+            break
+
+    if vllm_generation is None:
+        raise RuntimeError("Could not find TRL's vLLM LLM constructor wrapper")
+
+    original_llm = getattr(
+        vllm_generation,
+        "_balance_budget_original_LLM",
+        vllm_generation.LLM,
+    )
+    if getattr(vllm_generation, "_balance_budget_vllm_dtype", None) == dtype_name:
+        return False
+
+    def _llm_with_dtype(*args, **kwargs):
+        kwargs["dtype"] = dtype_name
+        return original_llm(*args, **kwargs)
+
+    vllm_generation._balance_budget_original_LLM = original_llm
+    vllm_generation.LLM = _llm_with_dtype
+    vllm_generation._balance_budget_vllm_dtype = dtype_name
+    return True
 
 
 def save_trained_model(model, tokenizer, trainer, output_dir):

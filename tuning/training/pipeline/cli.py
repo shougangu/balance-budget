@@ -268,6 +268,9 @@ def _parse_args(argv=None):
     parser.add_argument("--grpo-upcast-lm-head-fp32",
                         action=argparse.BooleanOptionalAction, default=False,
                         help="MiniMax/ScaleRL fp32 lm_head on trainer + vLLM for GRPO stability.")
+    parser.add_argument("--grpo-precision", default="auto",
+                        choices=["auto", "fp16", "bf16"],
+                        help="GRPO model/vLLM dtype override for fp16/bf16 loading experiments.")
     parser.add_argument("--grpo-use-liger-kernel",
                         action=argparse.BooleanOptionalAction, default=False,
                         help="Fused Triton lm_head+GRPO loss (liger-kernel); cuts backward peak memory.")

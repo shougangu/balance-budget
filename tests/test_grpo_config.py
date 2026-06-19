@@ -43,6 +43,7 @@ def test_grpo_config_defaults():
     assert config.vllm_max_model_length == 6144
     assert config.zero_variance_filter is True
     assert config.zero_variance_filter_epsilon == 0.0
+    assert config.precision == "auto"
 
 
 def test_grpo_config_to_hf_args():
@@ -64,6 +65,7 @@ def test_grpo_config_to_hf_args():
     assert "eval_accumulation_steps" not in d
     assert "zero_variance_filter" not in d
     assert "zero_variance_filter_epsilon" not in d
+    assert "precision" not in d
 
 
 def test_grpo_config_crash_recovery_defaults():
@@ -117,6 +119,35 @@ def test_grpo_upcast_lm_head_fp32_cli_explicit_disable():
     args = _parse_args(["--model", "qwen2-3B", "--wandb-project", "test",
                         "--no-grpo-upcast-lm-head-fp32"])
     assert args.grpo_upcast_lm_head_fp32 is False
+
+
+def test_grpo_precision_cli_default_auto():
+    args = _parse_args(["--model", "qwen2-3B", "--wandb-project", "test"])
+    assert args.grpo_precision == "auto"
+
+
+def test_grpo_precision_cli_fp16():
+    args = _parse_args(["--model", "qwen2-3B", "--wandb-project", "test",
+                        "--grpo-precision", "fp16"])
+    assert args.grpo_precision == "fp16"
+
+
+def test_grpo_precision_cli_bf16():
+    args = _parse_args(["--model", "qwen2-3B", "--wandb-project", "test",
+                        "--grpo-precision", "bf16"])
+    assert args.grpo_precision == "bf16"
+
+
+def test_grpo_precision_fp16_sets_hf_mixed_precision():
+    d = GRPOTrainingConfig(precision="fp16").to_hf_args(output_dir="/tmp/test")
+    assert d["fp16"] is True
+    assert d["bf16"] is False
+
+
+def test_grpo_precision_bf16_sets_hf_mixed_precision():
+    d = GRPOTrainingConfig(precision="bf16").to_hf_args(output_dir="/tmp/test")
+    assert d["fp16"] is False
+    assert d["bf16"] is True
 
 
 def test_grpo_zero_variance_filter_cli_default_on():

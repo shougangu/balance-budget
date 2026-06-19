@@ -189,6 +189,11 @@ def _build_post_training_configs(
     model_load_config = ModelLoadConfig()
     model_load_config.max_seq_length = args.max_seq_length
 
+    if method == "grpo" and args.grpo_precision == "fp16":
+        model_load_config.dtype = torch.float16
+    elif method == "grpo" and args.grpo_precision == "bf16":
+        model_load_config.dtype = torch.bfloat16
+
     if method == "dpo":
         training_args = DPOTrainingConfig()
         training_args.num_train_epochs = args.dpo_num_epochs
@@ -220,6 +225,7 @@ def _build_post_training_configs(
         training_args.vllm_enable_sleep_mode = args.grpo_vllm_sleep_mode
         training_args.vllm_importance_sampling_correction = args.grpo_vllm_importance_sampling
         training_args.upcast_lm_head_fp32 = args.grpo_upcast_lm_head_fp32
+        training_args.precision = args.grpo_precision
         training_args.use_liger_kernel = args.grpo_use_liger_kernel
         training_args.zero_variance_filter = args.grpo_zero_variance_filter
         training_args.zero_variance_filter_epsilon = args.grpo_zero_variance_filter_epsilon

@@ -61,6 +61,7 @@ class GRPOVLLMServerSidecar:
         gpu_memory_utilization: float,
         max_model_len: int = DEFAULT_VLLM_MAX_MODEL_LEN,
         host: str = "127.0.0.1",
+        dtype: str | None = None,
         startup_timeout: float = 300.0,
         popen_factory: Callable[..., subprocess.Popen] = subprocess.Popen,
     ):
@@ -69,6 +70,7 @@ class GRPOVLLMServerSidecar:
         self.gpu_memory_utilization = gpu_memory_utilization
         self.max_model_len = max_model_len
         self.host = host
+        self.dtype = dtype
         self.startup_timeout = startup_timeout
         self._popen_factory = popen_factory
         self._proc: subprocess.Popen | None = None
@@ -99,6 +101,8 @@ class GRPOVLLMServerSidecar:
             "--gpu-memory-utilization", str(self.gpu_memory_utilization),
             "--max-model-len", str(self.max_model_len),
         ]
+        if self.dtype is not None:
+            cmd += ["--dtype", self.dtype]
         env = os.environ.copy()
         env["CUDA_VISIBLE_DEVICES"] = ",".join(self.split.server_gpus)
 
@@ -106,6 +110,7 @@ class GRPOVLLMServerSidecar:
             "[orchestrator] Starting GRPO vLLM server: "
             f"gpus={env['CUDA_VISIBLE_DEVICES']} "
             f"dp={data_parallel_size} max_model_len={self.max_model_len} "
+            f"dtype={self.dtype or 'auto'} "
             f"http={self.host}:{port} group_port={group_port} "
             f"log={log_path}"
         )

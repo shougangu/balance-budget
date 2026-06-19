@@ -25,8 +25,9 @@ from tuning.training.model_utils import (
     load_model_with_lora,
     save_trained_model,
     top_layer_indices,
+    install_trl_vllm_dtype_patch,
+    install_vllm_fp32_logits_patch,
     upcast_lm_head_to_fp32,
-    upcast_vllm_lm_head_to_fp32,
 )
 from tuning.training.server_rollouts import install_client_rendered_chat
 
@@ -351,6 +352,25 @@ def train_model_grpo(
         )
     ]
 
+
+    precision_dtype_names = {"fp16": "float16", "bf16": "bfloat16"}
+    vllm_dtype_name = precision_dtype_names.get(training_args.precision)
+    if training_args.use_vllm and training_args.vllm_mode == "colocate":
+        if training_args.upcast_lm_head_fp32:
+            installed = install_vllm_fp32_logits_patch()
+            action = "installed" if installed else "already installed"
+            print(f"[GRPO] {action} vLLM fp32 logits patch")
+        if vllm_dtype_name is not None:
+            install_trl_vllm_dtype_patch(vllm_dtype_name)
+            print(f"[GRPO] forcing colocated vLLM dtype={vllm_dtype_name}")
+    elif training_args.use_vllm and training_args.vllm_mode == "server":
+        if training_args.upcast_lm_head_fp32:
+            print("[GRPO] WARNING: server-mode fp32 logits patching must be "
+                  "configured in the vLLM server process")
+        if vllm_dtype_name is not None:
+            print(f"[GRPO] WARNING: server-mode vLLM dtype must be "
+                  f"configured in the vLLM server process (expected {vllm_dtype_name})")
+
     if passk_config is not None and passk_config.enabled:
         passk_callback = PassAtKStoppingCallback(
             config=passk_config,
@@ -412,22 +432,6 @@ def train_model_grpo(
                 cb._trainer_vllm_generation = trainer.vllm_generation
             cb._accelerator = trainer.accelerator
 
-    if is_colocate and training_args.upcast_lm_head_fp32:
-        llm = trainer.vllm_generation.llm
-        if getattr(trainer.vllm_generation, "enable_sleep_mode", False):
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-            llm.wake_up(tags=["weights"])
-            try:
-                upcast_vllm_lm_head_to_fp32(llm)
-            finally:
-                llm.sleep(level=2)
-        else:
-            upcast_vllm_lm_head_to_fp32(llm)
-        print("[GRPO] upcast lm_head to fp32 on vLLM engine")
-    elif is_server and training_args.upcast_lm_head_fp32:
-        print("[GRPO] WARNING: trainer lm_head is fp32; server-side lm_head dtype "
-              "is controlled by vLLM storage during weight sync")
 
     remove_default_wandb_callback(trainer)
 

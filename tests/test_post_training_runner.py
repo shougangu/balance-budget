@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+import torch
 
 sys.modules.setdefault("instruction_following_eval", MagicMock())
 sys.modules.setdefault("instruction_following_eval.evaluation_lib", MagicMock())
@@ -67,6 +68,7 @@ def _make_args(metadata_file, **overrides):
         grpo_vllm_importance_sampling=True,
         grpo_vllm_sleep_mode=True,
         grpo_upcast_lm_head_fp32=False,
+        grpo_precision="auto",
         grpo_use_liger_kernel=False,
         grpo_zero_variance_filter=True,
         grpo_zero_variance_filter_epsilon=0.0,
@@ -177,3 +179,43 @@ class TestBuildPostTrainingConfigsContinueFlag:
 
     def test_dpo_continue_absent_defaults_false(self):
         assert self._build("dpo", dict(CHECKPOINT_ROW)) is False
+
+
+def test_build_grpo_config_precision_auto_keeps_model_dtype_none():
+    from tuning.training.pipeline.stages import _build_post_training_configs
+
+    args = _make_args("/tmp/unused", grpo_precision="auto")
+    configs = _build_post_training_configs(
+        args, "grpo", dict(CHECKPOINT_ROW), train_size=512,
+    )
+
+    assert configs.model_load_config.dtype is None
+    assert configs.training_args.precision == "auto"
+
+
+def test_build_grpo_config_precision_fp16_maps_model_and_hf_args():
+    from tuning.training.pipeline.stages import _build_post_training_configs
+
+    args = _make_args("/tmp/unused", grpo_precision="fp16")
+    configs = _build_post_training_configs(
+        args, "grpo", dict(CHECKPOINT_ROW), train_size=512,
+    )
+    hf_args = configs.training_args.to_hf_args(output_dir="/tmp/test")
+
+    assert configs.model_load_config.dtype is torch.float16
+    assert hf_args["fp16"] is True
+    assert hf_args["bf16"] is False
+
+
+def test_build_grpo_config_precision_bf16_maps_model_and_hf_args():
+    from tuning.training.pipeline.stages import _build_post_training_configs
+
+    args = _make_args("/tmp/unused", grpo_precision="bf16")
+    configs = _build_post_training_configs(
+        args, "grpo", dict(CHECKPOINT_ROW), train_size=512,
+    )
+    hf_args = configs.training_args.to_hf_args(output_dir="/tmp/test")
+
+    assert configs.model_load_config.dtype is torch.bfloat16
+    assert hf_args["fp16"] is False
+    assert hf_args["bf16"] is True

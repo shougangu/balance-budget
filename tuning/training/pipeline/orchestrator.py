@@ -119,12 +119,17 @@ def _dispatch_parallel_workers(parallel, base_cmd, pt_flag, metadata_files,
 def _run_grpo_server_subprocess(base_cmd, pt_flag, metadata_file, args):
     """Start the vLLM sidecar, then run the single-GPU GRPO trainer."""
     split = resolve_grpo_server_split(args.grpo_num_gpus)
-    with GRPOVLLMServerSidecar(
+    precision_dtype_names = {"fp16": "float16", "bf16": "bfloat16"}
+    sidecar_kwargs = dict(
         model_hf=HF_MODEL_MAP[args.model],
         split=split,
         gpu_memory_utilization=args.grpo_vllm_server_gpu_util,
         startup_timeout=args.grpo_vllm_server_timeout,
-    ) as server:
+    )
+    vllm_dtype = precision_dtype_names.get(getattr(args, "grpo_precision", "auto"))
+    if vllm_dtype is not None:
+        sidecar_kwargs["dtype"] = vllm_dtype
+    with GRPOVLLMServerSidecar(**sidecar_kwargs) as server:
         trainer_env = {k: v for k, v in os.environ.items() if k not in _TORCHRUN_ENV_VARS}
         trainer_env["CUDA_VISIBLE_DEVICES"] = ",".join(split.trainer_gpus)
         pt_cmd = [
