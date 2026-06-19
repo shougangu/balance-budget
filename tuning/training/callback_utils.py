@@ -51,10 +51,11 @@ def _read_timing_state(stateful_callbacks):
 class OffsetAwareWandbCallback(WandbCallback, ExportableState):
     """Log chained-run step offsets and completed training-step time to W&B."""
 
-    def __init__(self, initial_global_step=0, initial_total_seconds=0.0):
+    def __init__(self, initial_global_step=0, initial_total_seconds=0.0, time_multiplier=1.0):
         super().__init__()
         self.step_offset = int(initial_global_step or 0)
         self.total_seconds = _valid_seconds(initial_total_seconds) or 0.0
+        self.time_multiplier = time_multiplier
         self.step_start = None
 
     def state(self):
@@ -109,7 +110,7 @@ class OffsetAwareWandbCallback(WandbCallback, ExportableState):
 
     def on_step_end(self, args, state, control, **kwargs):
         if self.step_start is not None:
-            self.total_seconds += max(time.perf_counter() - self.step_start, 0.0)
+            self.total_seconds += max(time.perf_counter() - self.step_start, 0.0) * self.time_multiplier
             self.step_start = None
             self._sync_state(state)
         return super().on_step_end(args, state, control, **kwargs)

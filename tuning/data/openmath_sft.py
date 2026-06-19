@@ -7,7 +7,7 @@ from datasets import Dataset
 from tuning.data.hf_dataset import HFDataset
 from tuning.data.config import SYSTEM_MESSAGE_OPENMATH, COMPMATH_STRING
 
-MATH_SOURCES = {"math", "augmented_math"}
+MATH_SOURCES = {"math", "augmented_math", "augmented_gsm8k", "gsm8k"}
 
 
 class OpenMathSFT(HFDataset):
@@ -64,7 +64,7 @@ if __name__ == "__main__":
     openmath.format_dataset()
     openmath.save_dataset_to_disk(save_name="sft-openmath")
 
-    openmath_lenp95 = OpenMathSFT()
-    openmath_lenp95.load_from_huggingface("nvidia/OpenMathInstruct-2", split="train")
-    openmath_lenp95.format_dataset(length_percentile=95)
-    openmath_lenp95.save_dataset_to_disk(save_name="sft-openmath-lenp95")
+    # openmath_lenp95 = OpenMathSFT()
+    # openmath_lenp95.load_from_huggingface("nvidia/OpenMathInstruct-2", split="train")
+    # openmath_lenp95.format_dataset(length_percentile=95)
+    # openmath_lenp95.save_dataset_to_disk(save_name="sft-openmath-lenp95")

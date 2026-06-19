@@ -349,6 +349,7 @@ def train_model_grpo(
         OffsetAwareWandbCallback(
             initial_global_step=initial_global_step or 0,
             initial_total_seconds=initial_total_seconds,
+            time_multiplier=2.0,
         )
     ]
 

@@ -33,6 +33,10 @@ _LONG_SBATCH_FLAGS = (
     "--time=1-00:00:00",
 )
 
+_SFT_LONG_SBATCH_FLAGS = (
+    "--partition=gpubase_h100_b4,gpubase_h100_b5",
+    "--time=2-10:00:00",
+)
 _SHORT_SBATCH_FLAGS = (
     "--partition=gpubase_h100_b1,gpubase_h100_b2,gpubase_h100_b3,gpubase_h100_b4,gpubase_h100_b5",
     "--time=3:00:00"
@@ -61,7 +65,9 @@ def _build_base_cmd(argv):
 
 def _sbatch_flags_for_args(args):
     """Return scheduler overrides requested by the pipeline CLI."""
-    if getattr(args, "long", False):
+    if getattr(args, "long", False) and getattr(args, "run_sft", False):
+        return list(_SFT_LONG_SBATCH_FLAGS)
+    elif getattr(args, "long", False):
         return list(_LONG_SBATCH_FLAGS)
     elif getattr(args, "short", False):
         return list(_SHORT_SBATCH_FLAGS)

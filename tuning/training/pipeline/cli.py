@@ -17,7 +17,7 @@ SBATCH_WORKER_SCRIPT_SHORT = "tuning/slurm/unified_early_pipeline_short.sh"
 MODEL_TO_GPU_1 = {
     "llama3-1B": 0.75,
     "llama3-1B-instruct": 0.75,
-    "llama3-3B": 0.75,
+    "llama3-3B": 0.8,
     "llama3-3B-instruct": 0.75,
     "llama3-8B": 0.6,
     "llama3-8B-instruct": 0.6,
@@ -33,7 +33,7 @@ MODEL_TO_GPU_1 = {
     "qwen2-32B-instruct": 0.4,
     "gemma3-1B": 0.75,
     "gemma3-4B": 0.65,
-    "gemma3-12B": 0.55,
+    "gemma3-12B": 0.8, # from q14
 }
 
 MODEL_TO_GPU_2 = {
@@ -63,21 +63,20 @@ MODEL_TO_GPU_3 = {
     "llama3-1B-instruct": 0.7,
     "llama3-3B": 0.45, #0.6
     "llama3-3B-instruct": 0.45,
-    "llama3-8B": 0.43,
+    "llama3-8B": 0.6, # +0.1 from l8b \delta 6b = 12gb/80 = 0.15
     "llama3-8B-instruct": 0.43,
     "qwen2-2B": 0.45, # 0.45 -> #0.25 after [600, 2048, 8192] -> 5, 10, 31 GB needed
     "qwen2-2B-instruct": 0.45,
     "qwen2-3B": 0.45,
     "qwen2-3B-instruct": 0.45,
-    "qwen2-7B": 0.45,
+    "qwen2-7B": 0.5,
     "qwen2-7B-instruct": 0.45,
     "qwen2-14B": 0.5,
     "qwen2-14B-instruct": 0.3,
     "qwen2-32B": 0.3,
     "qwen2-32B-instruct": 0.3,
-    "gemma3-1B": 0.7,
     "gemma3-4B": 0.38,
-    "gemma3-12B": 0.4,
+    "gemma3-12B": 0.5, # from q14
 }
 
 MODEL_TO_SIMPLERL_TIER = {
@@ -226,7 +225,7 @@ def _parse_args(argv=None):
     parser.add_argument("--dpo-eval-steps", type=int, default=256)
     parser.add_argument("--dpo-batch-size", type=int, default=4)
     parser.add_argument("--dpo-grad-accum", type=int, default=4)
-    parser.add_argument("--grpo-num-epochs", type=int, default=200)
+    parser.add_argument("--grpo-num-epochs", type=int, default=20)
     parser.add_argument("--grpo-num-gpus", type=int, default=2,
                         help="Total GPUs for GRPO. In colocate mode all are trainer ranks; in server mode "
                              "GPU 0 trains and GPUs 1..N-1 run data-parallel trl vllm-serve workers.")
@@ -253,14 +252,14 @@ def _parse_args(argv=None):
     parser.add_argument("--grpo-eval-steps", type=int, default=64)
     parser.add_argument("--grpo-batch-size", type=int, default=4)
     parser.add_argument("--grpo-grad-accum", type=int, default=32)
-    parser.add_argument("--grpo-num-generations", type=int, default=8)
+    parser.add_argument("--grpo-num-generations", type=int, default=16)
     parser.add_argument("--grpo-num-iterations", type=int, default=1,
                         help="μ in the GRPO paper: inner optimization passes per rollout batch.")
     parser.add_argument("--grpo-max-completion-length", type=int, default=2048)
     parser.add_argument("--grpo-beta", type=float, default=0.0)
     parser.add_argument("--grpo-temperature", type=float, default=1.0)
     parser.add_argument("--grpo-learning-rate", type=float, default=1e-5)
-    parser.add_argument("--grpo-warmup-ratio", type=float, default=0.05)
+    parser.add_argument("--grpo-warmup-ratio", type=float, default=0.00)
     parser.add_argument("--grpo-lr-scheduler-type", type=str, default="constant")
     parser.add_argument("--grpo-loss-type", default="dapo",
                         choices=["grpo", "dr_grpo", "dapo", "bnpo", "cispo"])
@@ -307,8 +306,7 @@ def _parse_args(argv=None):
                         default=True)
 
     parser.add_argument("--sft-passk-targets", type=float, nargs="+",
-                        default=[0.0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45,
-                                 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95])
+                        default=[1.1])
     parser.add_argument("--sft-passk-max-checkpoint-gap", type=int, default=None)
     parser.add_argument("--sft-passk-target-data-points", type=int, nargs="+",
                         default=None)

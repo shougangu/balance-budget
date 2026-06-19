@@ -314,6 +314,14 @@ class TestOffsetAwareWandbCallback:
         assert cb.total_seconds == 7.5
         assert state.stateful_callbacks["OffsetAwareWandbCallback"] == cb.state()
 
+    def test_time_multiplier_scales_elapsed_time(self):
+        cb = OffsetAwareWandbCallback(initial_total_seconds=5.0, time_multiplier=2.0)
+        state = TrainerState(global_step=1)
+
+        _fire_step(cb, state, start=10.0, end=12.5)
+
+        assert cb.total_seconds == 10.0
+
     def test_unfinished_step_is_not_counted_or_persisted(self):
         cb = OffsetAwareWandbCallback(initial_total_seconds=5.0)
         state = TrainerState(global_step=1)
