@@ -11,6 +11,7 @@ class CheckpointDecision:
     advances_state: bool
     metadata_type: Optional[str] = None
     metadata_value: Any = None
+    eval_only: bool = False
 
 
 class CheckpointDecisionEngine:
@@ -21,6 +22,7 @@ class CheckpointDecisionEngine:
         max_checkpoint_gap: Optional[int],
         target_data_points: Optional[List[int]] = None,
         target_total_minutes: Optional[List[float]] = None,
+        eval_only_minutes: Optional[List[float]] = None,
     ):
         self.target_thresholds = sorted(target_thresholds, reverse=True)
         self.early_tuples = list(early_tuples) if early_tuples else None
@@ -31,6 +33,7 @@ class CheckpointDecisionEngine:
         self.target_total_minutes = (
             sorted(target_total_minutes) if target_total_minutes else None
         )
+        self.eval_only_minutes = set(eval_only_minutes or [])
         self.pending_total_minute_targets: List[float] = []
 
     def consume_crossed_total_minute_targets(
@@ -99,14 +102,23 @@ class CheckpointDecisionEngine:
         if total_minutes is not None:
             self.consume_crossed_total_minute_targets(total_minutes)
         if self.pending_total_minute_targets:
-            target_minutes = max(self.pending_total_minute_targets)
-            self.pending_total_minute_targets.clear()
-            decisions.append(CheckpointDecision(
-                label=f"{target_minutes:g}m",
-                advances_state=True,
-                metadata_type="total_minutes",
-                metadata_value=target_minutes,
-            ))
+            pending = self.pending_total_minute_targets
+            self.pending_total_minute_targets = []
+            # Emit a separate decision per kind so an eval-only crossing never
+            # collapses/suppresses a real (GRPO-bound) checkpoint when both
+            # cross in the same eval.
+            for eval_only in (False, True):
+                group = [t for t in pending
+                         if (t in self.eval_only_minutes) == eval_only]
+                if group:
+                    target_minutes = max(group)
+                    decisions.append(CheckpointDecision(
+                        label=f"{target_minutes:g}m",
+                        advances_state=True,
+                        metadata_type="total_minutes",
+                        metadata_value=target_minutes,
+                        eval_only=eval_only,
+                    ))
 
         if (self.max_checkpoint_gap is not None
                 and data_points_seen > 0

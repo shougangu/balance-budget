@@ -64,6 +64,7 @@ def _build_eval_components(args, stage, gpu_util):
         max_checkpoint_gap=getattr(args, f"{prefix}_passk_max_checkpoint_gap", None),
         target_data_points=getattr(args, f"{prefix}_passk_target_data_points", None),
         target_total_minutes=getattr(args, f"{prefix}_passk_target_total_minutes", None),
+        eval_only_minutes=getattr(args, f"{prefix}_passk_eval_only_minutes", None),
         judge=judge_config,
     )
 

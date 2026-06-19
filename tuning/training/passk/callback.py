@@ -60,6 +60,7 @@ class PassAtKStoppingCallback(TrainerCallback):
             max_checkpoint_gap=getattr(config, "max_checkpoint_gap", None),
             target_data_points=getattr(config, "target_data_points", None),
             target_total_minutes=getattr(config, "target_total_minutes", None),
+            eval_only_minutes=getattr(config, "eval_only_minutes", None),
         )
         self._step_offset = int(getattr(config, "initial_global_step", 0) or 0)
         self.tokenizer = tokenizer
@@ -263,6 +264,15 @@ class PassAtKStoppingCallback(TrainerCallback):
             if decision.metadata_value is not None
             else decision.label
         )
+        extra_metadata = {
+            "threshold_type": threshold_type,
+            "threshold_value": threshold_value,
+        }
+        if decision.eval_only:
+            # Pre-claim the row so claim_next_checkpoint skips it: the checkpoint
+            # is saved and evaluated but never seeds post-training.
+            extra_metadata["eval_only"] = True
+            extra_metadata["claimed"] = True
         return save_sweetspot_checkpoint(
             model=model,
             tokenizer=self.tokenizer,
@@ -271,10 +281,7 @@ class PassAtKStoppingCallback(TrainerCallback):
             state=state,
             args=args,
             metadata_path=self.metadata_path,
-            extra_metadata={
-                "threshold_type": threshold_type,
-                "threshold_value": threshold_value,
-            },
+            extra_metadata=extra_metadata,
             accelerator=self._accelerator,
         )
 

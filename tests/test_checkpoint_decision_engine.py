@@ -5,13 +5,15 @@ from tuning.training.passk.decisions import CheckpointDecision, CheckpointDecisi
 
 
 def _engine(thresholds=None, early_tuples=None, max_gap=None,
-            target_data_points=None, target_total_minutes=None):
+            target_data_points=None, target_total_minutes=None,
+            eval_only_minutes=None):
     return CheckpointDecisionEngine(
         target_thresholds=thresholds or [],
         early_tuples=early_tuples or None,
         max_checkpoint_gap=max_gap,
         target_data_points=target_data_points,
         target_total_minutes=target_total_minutes,
+        eval_only_minutes=eval_only_minutes,
     )
 
 
@@ -209,3 +211,57 @@ class TestFixedTotalMinuteTargets:
             metadata_type="total_minutes",
             metadata_value=60.0,
         )]
+
+
+class TestEvalOnlyMinutes:
+    def test_regular_target_is_not_eval_only(self):
+        eng = _engine(target_total_minutes=[30.0])
+        decisions = eng.decide(primary_metric=0.0, history=[0.0],
+                               data_points_seen=4000,
+                               last_checkpoint_data_points=0,
+                               total_minutes=30.1)
+        assert decisions == [CheckpointDecision(
+            label="30m",
+            advances_state=True,
+            metadata_type="total_minutes",
+            metadata_value=30.0,
+            eval_only=False,
+        )]
+
+    def test_eval_only_target_flagged(self):
+        eng = _engine(target_total_minutes=[30.0], eval_only_minutes=[30.0])
+        decisions = eng.decide(primary_metric=0.0, history=[0.0],
+                               data_points_seen=4000,
+                               last_checkpoint_data_points=0,
+                               total_minutes=30.1)
+        assert decisions == [CheckpointDecision(
+            label="30m",
+            advances_state=True,
+            metadata_type="total_minutes",
+            metadata_value=30.0,
+            eval_only=True,
+        )]
+
+    def test_mixed_crossing_emits_regular_and_eval_only(self):
+        eng = _engine(target_total_minutes=[30.0, 60.0],
+                      eval_only_minutes=[30.0])
+        decisions = eng.decide(primary_metric=0.0, history=[0.0],
+                               data_points_seen=4000,
+                               last_checkpoint_data_points=0,
+                               total_minutes=61.0)
+        assert decisions == [
+            CheckpointDecision(
+                label="60m",
+                advances_state=True,
+                metadata_type="total_minutes",
+                metadata_value=60.0,
+                eval_only=False,
+            ),
+            CheckpointDecision(
+                label="30m",
+                advances_state=True,
+                metadata_type="total_minutes",
+                metadata_value=30.0,
+                eval_only=True,
+            ),
+        ]

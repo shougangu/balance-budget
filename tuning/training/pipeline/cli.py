@@ -310,7 +310,9 @@ def _parse_args(argv=None):
                         default=None)
     parser.add_argument("--sft-passk-target-total-minutes", type=float, nargs="+",
                         default=None)
-    
+    parser.add_argument("--sft-passk-eval-only-minutes", type=float, nargs="+",
+                        default=None)
+
     parser.add_argument("--sft-passk-early", type=parse_early_tuple, nargs="*",
                         default=[])
     parser.add_argument("--sft-passk-k-values", type=int, nargs="+", default=[1])

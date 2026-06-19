@@ -358,6 +358,13 @@ class TestClaimNextCheckpoint:
         ])
         assert claim_next_checkpoint(str(f)) is None
 
+    def test_skips_eval_only_rows(self, tmp_path):
+        f = tmp_path / "meta.jsonl"
+        eval_only_row = {**PASSK_ROW, "eval_only": True, "claimed": True}
+        _write_jsonl(f, [eval_only_row, PPL_ROW])
+        result = claim_next_checkpoint(str(f))
+        assert result["checkpoint_path"] == "/models/cp2"
+
     def test_preserves_other_fields(self, tmp_path):
         f = tmp_path / "meta.jsonl"
         _write_jsonl(f, [PASSK_ROW])
