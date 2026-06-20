@@ -27,6 +27,7 @@ from tuning.training.model_utils import (
     top_layer_indices,
     install_trl_vllm_dtype_patch,
     install_vllm_fp32_logits_patch,
+    sync_colocated_vllm_chat_template,
     upcast_lm_head_to_fp32,
 )
 from tuning.training.server_rollouts import install_client_rendered_chat
@@ -399,6 +400,9 @@ def train_model_grpo(
 
     if trainer.log_completions:
         trainer.add_callback(CompletionsIntervalCallback(trainer, interval=64))
+
+    if sync_colocated_vllm_chat_template(trainer, tokenizer):
+        print("[GRPO] Colocated vLLM will use trainer tokenizer chat_template")
 
     vllm_mode = getattr(trainer, "vllm_mode", None)
     is_colocate = vllm_mode == "colocate" and hasattr(trainer, "vllm_generation")

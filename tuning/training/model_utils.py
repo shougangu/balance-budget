@@ -226,6 +226,32 @@ def install_trl_vllm_dtype_patch(dtype_name: str) -> bool:
     return True
 
 
+def sync_colocated_vllm_chat_template(trainer, tokenizer) -> bool:
+    """Give TRL's colocated vLLM backend the trainer tokenizer's chat template.
+
+    TRL leaves VLLMGeneration.chat_template as None for normal non-tools GRPO,
+    which makes vLLM read the template from model.name_or_path. Adapter-only
+    checkpoints load through their base model, so pass the active tokenizer
+    template explicitly.
+    """
+    if getattr(trainer, "vllm_mode", None) != "colocate":
+        return False
+
+    vllm_generation = getattr(trainer, "vllm_generation", None)
+    if vllm_generation is None:
+        return False
+
+    if getattr(vllm_generation, "chat_template", None) is not None:
+        return False
+
+    chat_template = getattr(tokenizer, "chat_template", None)
+    if chat_template is None:
+        return False
+
+    vllm_generation.chat_template = chat_template
+    return True
+
+
 def save_trained_model(model, tokenizer, trainer, output_dir):
     """Save merged model and training config to output_dir."""
     if hasattr(model, 'save_pretrained_merged'):

@@ -2,7 +2,7 @@
 # ABOUTME: Uses fake vLLM/TRL modules so no GPU vLLM import is required.
 
 import sys
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 
 import torch
 import torch.nn as nn
@@ -128,3 +128,36 @@ def test_trl_vllm_dtype_patch_is_idempotent(monkeypatch):
 
     vllm_generation.LLM("model")
     assert calls == [(("model",), {"dtype": "bfloat16"})]
+
+
+def test_sync_colocated_vllm_chat_template_sets_missing_template():
+    from tuning.training.model_utils import sync_colocated_vllm_chat_template
+
+    vllm_generation = SimpleNamespace(chat_template=None)
+    trainer = SimpleNamespace(vllm_mode="colocate", vllm_generation=vllm_generation)
+    tokenizer = SimpleNamespace(chat_template="checkpoint-template")
+
+    assert sync_colocated_vllm_chat_template(trainer, tokenizer) is True
+    assert vllm_generation.chat_template == "checkpoint-template"
+
+
+def test_sync_colocated_vllm_chat_template_skips_server_mode():
+    from tuning.training.model_utils import sync_colocated_vllm_chat_template
+
+    vllm_generation = SimpleNamespace(chat_template=None)
+    trainer = SimpleNamespace(vllm_mode="server", vllm_generation=vllm_generation)
+    tokenizer = SimpleNamespace(chat_template="checkpoint-template")
+
+    assert sync_colocated_vllm_chat_template(trainer, tokenizer) is False
+    assert vllm_generation.chat_template is None
+
+
+def test_sync_colocated_vllm_chat_template_preserves_trl_override():
+    from tuning.training.model_utils import sync_colocated_vllm_chat_template
+
+    vllm_generation = SimpleNamespace(chat_template="trl-template")
+    trainer = SimpleNamespace(vllm_mode="colocate", vllm_generation=vllm_generation)
+    tokenizer = SimpleNamespace(chat_template="checkpoint-template")
+
+    assert sync_colocated_vllm_chat_template(trainer, tokenizer) is False
+    assert vllm_generation.chat_template == "trl-template"
