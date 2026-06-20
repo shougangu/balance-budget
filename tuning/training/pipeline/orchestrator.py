@@ -35,7 +35,7 @@ _LONG_SBATCH_FLAGS = (
 
 _SFT_LONG_SBATCH_FLAGS = (
     "--partition=gpubase_h100_b4,gpubase_h100_b5",
-    "--time=2-10:00:00",
+    "--time=2-00:00:00",
 )
 _SHORT_SBATCH_FLAGS = (
     "--partition=gpubase_h100_b1,gpubase_h100_b2,gpubase_h100_b3,gpubase_h100_b4,gpubase_h100_b5",

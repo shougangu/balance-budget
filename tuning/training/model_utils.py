@@ -51,15 +51,23 @@ def load_model_with_lora(model_path, model_name, model_load_config, lora_config,
     Handles model-specific target_modules (e.g., qwen2-7B needs embed_tokens/lm_head).
     Does NOT mutate lora_config.target_modules.
     """
+    # An adapter checkpoint stores only the LoRA delta: load its base, then merge the
+    # adapter into the weights so the fresh adapter below starts from the same
+    # full-model point a merged checkpoint would have provided.
+    is_adapter = _is_adapter_checkpoint(model_path)
+    load_path = _adapter_base_path(model_path) if is_adapter else model_path
     if use_unsloth:
         from unsloth import FastLanguageModel
 
         model, tokenizer = FastLanguageModel.from_pretrained(
-            model_name=model_path,
+            model_name=load_path,
             max_seq_length=model_load_config.max_seq_length,
             dtype=model_load_config.dtype,
             load_in_4bit=model_load_config.load_in_4bit,
         )
+        if is_adapter:
+            from peft import PeftModel
+            model = PeftModel.from_pretrained(model, model_path).merge_and_unload()
 
         target_modules = list(lora_config.target_modules)
         # if model_name == "qwen2-7B":
@@ -79,7 +87,7 @@ def load_model_with_lora(model_path, model_name, model_load_config, lora_config,
         )
     else:
         from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
-        from peft import LoraConfig as PeftLoraConfig, get_peft_model
+        from peft import LoraConfig as PeftLoraConfig, PeftModel, get_peft_model
 
         tokenizer = AutoTokenizer.from_pretrained(model_path)
 
@@ -101,12 +109,18 @@ def load_model_with_lora(model_path, model_name, model_load_config, lora_config,
         local_rank = int(os.environ.get("LOCAL_RANK", -1))
         device_map = None if local_rank >= 0 else "auto"
 
+        # An adapter checkpoint stores only the LoRA delta: load its base, then merge
+        # the adapter into the weights so the fresh adapter below starts from the same
+        # full-model point a merged checkpoint would have provided.
+        load_path = _adapter_base_path(model_path) if is_adapter else model_path
         model = AutoModelForCausalLM.from_pretrained(
-            model_path,
+            load_path,
             quantization_config=quantization_config,
             torch_dtype=dtype,
             device_map=device_map,
         )
+        if is_adapter:
+            model = PeftModel.from_pretrained(model, model_path).merge_and_unload()
 
         if lora_config.use_gradient_checkpointing:
             model.gradient_checkpointing_enable() 
@@ -253,13 +267,12 @@ def sync_colocated_vllm_chat_template(trainer, tokenizer) -> bool:
 
 
 def save_trained_model(model, tokenizer, trainer, output_dir):
-    """Save merged model and training config to output_dir."""
-    if hasattr(model, 'save_pretrained_merged'):
-        model.save_pretrained_merged(output_dir, tokenizer, save_method="merged_16bit")
+    """Save the LoRA adapter, tokenizer, and training config to output_dir."""
+    if hasattr(model, 'save_pretrained'):
+        model.save_pretrained(output_dir)
     else:
-        merged = model.merge_and_unload()
-        merged.save_pretrained(output_dir)
-        tokenizer.save_pretrained(output_dir)
+        model.save_pretrained_merged(output_dir, tokenizer, save_method="lora")
+    tokenizer.save_pretrained(output_dir)
     with open(f"{output_dir}/training_config.json", "w") as f:
         json.dump(trainer.args.to_dict(), f, indent=4)
     save_trainer_state(trainer.state, output_dir)

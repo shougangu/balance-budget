@@ -25,7 +25,7 @@ MODEL_TO_GPU_1 = {
     "qwen2-2B-instruct": 0.65,
     "qwen2-3B": 0.65,
     "qwen2-3B-instruct": 0.65,
-    "qwen2-7B": 0.55,
+    "qwen2-7B": 0.8, # from q14
     "qwen2-7B-instruct": 0.55,
     "qwen2-14B": 0.8,
     "qwen2-14B-instruct": 0.4,
@@ -69,7 +69,7 @@ MODEL_TO_GPU_3 = {
     "qwen2-2B-instruct": 0.45,
     "qwen2-3B": 0.45,
     "qwen2-3B-instruct": 0.45,
-    "qwen2-7B": 0.5,
+    "qwen2-7B": 0.6,
     "qwen2-7B-instruct": 0.45,
     "qwen2-14B": 0.5,
     "qwen2-14B-instruct": 0.3,

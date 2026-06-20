@@ -207,7 +207,7 @@ def save_sweetspot_checkpoint(
     """Save a sweetspot checkpoint with metadata.
 
     Args:
-        model: The model to save (merged 16bit).
+        model: The model whose LoRA adapter to save.
         tokenizer: Tokenizer to save alongside.
         model_name: Base model name for checkpoint naming.
         threshold_label: Label for the threshold (e.g., "ppl-2.50", "pass@1-0.3").
@@ -215,7 +215,7 @@ def save_sweetspot_checkpoint(
         args: Current TrainingArguments.
         metadata_path: Path to append JSONL metadata to.
         extra_metadata: Additional metadata keys to include.
-        accelerator: If provided, unwrap the model and use PEFT save_pretrained instead of unsloth's merged_16bit save.
+        accelerator: If provided, unwrap the model before saving the adapter (DDP).
 
     Returns:
         Path to the saved checkpoint directory.
@@ -229,12 +229,12 @@ def save_sweetspot_checkpoint(
     checkpoint_path = os.path.join(MODELS_DIR, checkpoint_name)
 
     print(f"[Callback] Saving sweetspot checkpoint to {checkpoint_path}")
-    if accelerator is not None:
-        target = accelerator.unwrap_model(model)
+    target = accelerator.unwrap_model(model) if accelerator is not None else model
+    if hasattr(target, 'save_pretrained'):
         target.save_pretrained(checkpoint_path)
-        tokenizer.save_pretrained(checkpoint_path)
     else:
-        model.save_pretrained_merged(checkpoint_path, tokenizer, save_method="merged_16bit")
+        target.save_pretrained_merged(checkpoint_path, tokenizer, save_method="lora")
+    tokenizer.save_pretrained(checkpoint_path)
 
     os.makedirs(checkpoint_path, exist_ok=True)
     with open(f"{checkpoint_path}/training_config.json", "w") as f:
