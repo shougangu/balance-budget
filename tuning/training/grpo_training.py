@@ -426,11 +426,16 @@ def train_model_grpo(
                 cb.set_trainer_vllm(
                     trainer.vllm_generation.llm,
                     vllm_generation=trainer.vllm_generation,
+                    trainer=trainer,
                 )
                 print(f"[GRPO] PassAtK callback will reuse GRPOTrainer's colocate vLLM engine")
             elif is_server:
                 # rank 0 owns vllm_client; other ranks pass None and receive results via broadcast
-                cb.set_trainer_vllm_client(server_client)
+                cb.set_trainer_vllm_client(
+                    server_client,
+                    vllm_generation=trainer.vllm_generation,
+                    trainer=trainer,
+                )
                 print(f"[GRPO] PassAtK callback will reuse GRPOTrainer's vLLM server "
                       f"(rank-0 client {'attached' if server_client is not None else 'absent'})")
             if is_colocate or is_server:

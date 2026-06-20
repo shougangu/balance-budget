@@ -133,7 +133,7 @@ def test_save_sweetspot_unwraps_when_accelerator_provided(tmp_path, monkeypatch)
 
 
 def test_save_sweetspot_no_unwrap_when_accelerator_none(tmp_path):
-    """Without accelerator (SFT/DPO callers), legacy merged save is used."""
+    """Without accelerator (SFT/DPO callers), the LoRA adapter is saved directly."""
     from tuning.training.callback_utils import save_sweetspot_checkpoint
 
     model = MagicMock(name="unsloth_model")
@@ -159,8 +159,8 @@ def test_save_sweetspot_no_unwrap_when_accelerator_none(tmp_path):
         extra_metadata={"threshold_type": "pass_at_1", "threshold_value": 0.5},
     )
 
-    model.save_pretrained_merged.assert_called_once()
-    model.save_pretrained.assert_not_called()
+    model.save_pretrained.assert_called_once()
+    model.save_pretrained_merged.assert_not_called()
 
 
 def _save_sweetspot_with_wandb(callback_utils, tmp_path, wandb_run):
@@ -343,6 +343,34 @@ def test_run_eval_ddp_syncs_sleeping_trainer_vllm(monkeypatch):
     fake_llm.sleep.assert_called_once_with(level=2)
 
 
+def test_run_eval_ddp_server_nonzero_rank_syncs_without_generate(monkeypatch):
+    cb = _make_callback(monkeypatch)
+
+    fake_vllm_generation = SimpleNamespace(sync_weights=MagicMock())
+    cb.set_trainer_vllm_client(client=None, vllm_generation=fake_vllm_generation)
+
+    broadcast_results = [
+        {"prompt": f"Prompt {i}", "responses": [f"resp_for_Prompt {i}"]}
+        for i in range(8)
+    ]
+
+    with patch("torch.distributed.is_initialized", return_value=True), \
+         patch("torch.distributed.get_rank", return_value=1), \
+         patch("torch.distributed.get_world_size", return_value=2), \
+         patch("torch.distributed.broadcast_object_list") as mock_broadcast:
+        def fake_broadcast(payload, src):
+            payload[0] = broadcast_results
+        mock_broadcast.side_effect = fake_broadcast
+
+        scores, model_results = cb._run_eval_with_results_ddp(
+            model=MagicMock(), eval_strategy=_FakeEval(),
+        )
+
+    fake_vllm_generation.sync_weights.assert_called_once_with()
+    assert scores == {"pass_at_1": 0.5}
+    assert model_results == broadcast_results
+
+
 def test_run_eval_ddp_handles_empty_local_slice(monkeypatch):
     """Rank with empty slice skips chat but still participates in weight sync."""
     cb = _make_callback(monkeypatch)
@@ -412,7 +440,7 @@ def test_dispatch_single_gpu_when_world_size_1(monkeypatch):
 
 
 def test_on_evaluate_gates_wandb_on_rank_nonzero(monkeypatch):
-    """Under DDP rank 1, log_eval_metrics and _save_sweetspot_checkpoint must NOT fire."""
+    """Under DDP rank 1, log_eval_metrics and checkpoint saving must NOT fire."""
     cb = _make_callback(monkeypatch)
     fake_llm = MagicMock()
     fake_llm.chat.return_value = [SimpleNamespace(outputs=[SimpleNamespace(text="r")])
@@ -434,7 +462,7 @@ def test_on_evaluate_gates_wandb_on_rank_nonzero(monkeypatch):
          patch("torch.distributed.get_world_size", return_value=2), \
          patch("torch.distributed.all_gather_object") as mock_gather, \
          patch("tuning.training.passk.callback.log_eval_metrics") as mock_log, \
-         patch.object(cb, "_save_sweetspot_checkpoint") as mock_save:
+         patch.object(cb, "_save_decision_checkpoint") as mock_save:
         def fake_gather(out_list, local):
             for i in range(len(out_list)):
                 out_list[i] = local if i == 1 else [(j, ["r"]) for j in range(0, 8, 2)]
@@ -469,7 +497,7 @@ def test_on_evaluate_runs_wandb_on_rank0(monkeypatch):
          patch("torch.distributed.get_world_size", return_value=2), \
          patch("torch.distributed.all_gather_object") as mock_gather, \
          patch("tuning.training.passk.callback.log_eval_metrics") as mock_log, \
-         patch.object(cb, "_save_sweetspot_checkpoint"):
+         patch.object(cb, "_save_decision_checkpoint"):
         def fake_gather(out_list, local):
             for i in range(len(out_list)):
                 out_list[i] = local if i == 0 else [(j, ["r"]) for j in range(1, 8, 2)]

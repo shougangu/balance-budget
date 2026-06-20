@@ -26,7 +26,6 @@ from .runners import (
     PersistentVLLMRunner,
     EphemeralVLLMRunner,
     DataParallelVLLMRunner,
-    trainer_vllm_awake_for_passk,
 )
 
 
@@ -218,21 +217,29 @@ class PassAtKStoppingCallback(TrainerCallback):
             return PersistentVLLMRunner(self._runner_config)
         return EphemeralVLLMRunner(self._runner_config)
 
-    def set_trainer_vllm(self, llm, vllm_generation=None):
+    def set_trainer_vllm(self, llm, vllm_generation=None, trainer=None):
         self._trainer_vllm_generation = vllm_generation
         self._runner = ExternalVLLMRunner(
-            self._runner_config, llm=llm, vllm_generation=vllm_generation,
+            self._runner_config,
+            llm=llm,
+            vllm_generation=vllm_generation,
+            trainer=trainer,
         )
 
-    def set_trainer_vllm_client(self, client):
+    def set_trainer_vllm_client(self, client, vllm_generation=None, trainer=None):
         """Route eval through the GRPO trainer's vLLM server (server mode).
 
         `client` is `trainer.vllm_generation.vllm_client` on rank 0 and None on
         other ranks. The DDP eval path runs `run()` only on rank 0 and
         broadcasts results, so non-rank-0 runners holding None never execute.
         """
+        self._trainer_vllm_generation = vllm_generation
         self._runner = ServerVLLMRunner(
-            self._runner_config, client=client, tokenizer=self.tokenizer,
+            self._runner_config,
+            client=client,
+            tokenizer=self.tokenizer,
+            vllm_generation=vllm_generation,
+            trainer=trainer,
         )
 
     def _save_lora_adapter(self, model, adapter_dir: str):
@@ -328,6 +335,7 @@ class PassAtKStoppingCallback(TrainerCallback):
         from collections import defaultdict
 
         if isinstance(self._runner, ServerVLLMRunner):
+            self._runner.sync_weights()
             rank = dist.get_rank()
             if rank == 0:
                 model_results = self._runner.run(model, eval_strategy, adapter_path=None)
@@ -348,8 +356,6 @@ class PassAtKStoppingCallback(TrainerCallback):
                 "(set via set_trainer_vllm) or the server client (set via "
                 "set_trainer_vllm_client)."
             )
-        llm = self._runner._llm
-
         rank = dist.get_rank()
         world_size = dist.get_world_size()
 
@@ -363,7 +369,7 @@ class PassAtKStoppingCallback(TrainerCallback):
             max_tokens=self.max_tokens,
         ).model_dump())
 
-        with trainer_vllm_awake_for_passk(llm, self._trainer_vllm_generation):
+        with self._runner.awake_for_passk() as llm:
             if local_messages:
                 outputs = llm.chat(
                     local_messages,

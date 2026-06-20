@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional
 
 import torch
+import torch.distributed as dist
 from collections import defaultdict
 
 from tuning.training.config_training import DEFAULT_VLLM_MAX_MODEL_LEN
@@ -109,11 +110,19 @@ def _empty_cuda_cache():
         torch.cuda.empty_cache()
 
 
+def _invalidate_trainer_vllm_step_cache(trainer):
+    if trainer is not None and hasattr(trainer, "_last_loaded_step"):
+        trainer._last_loaded_step = -1
+
+
 @contextmanager
-def trainer_vllm_awake_for_passk(llm, vllm_generation):
+def trainer_vllm_awake_for_passk(llm, vllm_generation, trainer=None):
     """Refresh TRL's colocated vLLM for direct pass@k calls, then sleep it."""
     if vllm_generation is None: # ie, no colocated gpu that must be synced
-        yield
+        try:
+            yield
+        finally:
+            _invalidate_trainer_vllm_step_cache(trainer)
         return
 
     sync_weights = getattr(vllm_generation, "sync_weights", None)
@@ -135,33 +144,61 @@ def trainer_vllm_awake_for_passk(llm, vllm_generation):
     finally:
         if sleep_mode_enabled:
             llm.sleep(level=2)
+        _invalidate_trainer_vllm_step_cache(trainer)
 
 
 class ExternalVLLMRunner(VLLMRunner):
     """Uses an externally-provided LLM (e.g. the trainer's own vLLM). No adapter save."""
 
-    def __init__(self, config: RunnerConfig, llm, vllm_generation=None):
+    def __init__(self, config: RunnerConfig, llm, vllm_generation=None, trainer=None):
         super().__init__(config)
         self._llm = llm
         self._vllm_generation = vllm_generation
+        self._trainer = trainer
+
+    @contextmanager
+    def awake_for_passk(self):
+        with trainer_vllm_awake_for_passk(
+            self._llm, self._vllm_generation, trainer=self._trainer,
+        ):
+            yield self._llm
 
     def run(self, model, eval_strategy, adapter_path):
-        with trainer_vllm_awake_for_passk(self._llm, self._vllm_generation):
-            return self._run_inference(self._llm, eval_strategy, adapter_path=None)
+        with self.awake_for_passk() as llm:
+            return self._run_inference(llm, eval_strategy, adapter_path=None)
 
 
 class ServerVLLMRunner(VLLMRunner):
     """Uses TRL's VLLMClient to talk to a trl-vllm-serve HTTP endpoint.
 
     Single-rank: DDP callers must invoke from rank 0 and broadcast results. The
-    server holds the merged base+LoRA weights from the trainer's last sync_weights()
+    server holds the merged base+LoRA weights from the trainer's sync_weights()
     call, so no adapter save is required.
     """
 
-    def __init__(self, config: RunnerConfig, client, tokenizer):
+    def __init__(
+        self, config: RunnerConfig, client, tokenizer, vllm_generation=None,
+        trainer=None,
+    ):
         super().__init__(config)
         self._client = client
         self._tokenizer = tokenizer
+        self._vllm_generation = vllm_generation
+        self._trainer = trainer
+
+    def sync_weights(self):
+        if self._vllm_generation is None:
+            return
+
+        sync_weights = getattr(self._vllm_generation, "sync_weights", None)
+        if not callable(sync_weights):
+            raise RuntimeError(
+                "Pass@k eval is reusing a trainer vLLM server without "
+                "sync_weights(). Server-mode eval must refresh the HTTP server "
+                "through TRL's VLLMGeneration before direct generation."
+            )
+        sync_weights()
+        _invalidate_trainer_vllm_step_cache(self._trainer)
 
     def run(self, model, eval_strategy, adapter_path):
         if self._client is None:
@@ -170,6 +207,9 @@ class ServerVLLMRunner(VLLMRunner):
                 "only happen on rank 0 under DDP."
             )
         import tuning.config as tuning_config
+
+        if not (dist.is_initialized() and dist.get_world_size() > 1):
+            self.sync_weights()
 
         messages = eval_strategy.get_test_messages()
         prompts = [

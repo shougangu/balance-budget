@@ -83,9 +83,13 @@ def test_external_runner_syncs_sleeping_trainer_vllm():
         enable_sleep_mode=True,
         sync_weights=MagicMock(),
     )
+    trainer = SimpleNamespace(_last_loaded_step=128)
 
     runner = ExternalVLLMRunner(
-        _make_config(), llm=llm, vllm_generation=vllm_generation,
+        _make_config(),
+        llm=llm,
+        vllm_generation=vllm_generation,
+        trainer=trainer,
     )
     out = runner.run(model=MagicMock(), eval_strategy=_make_eval_strategy(),
                      adapter_path=None)
@@ -94,6 +98,67 @@ def test_external_runner_syncs_sleeping_trainer_vllm():
     vllm_generation.sync_weights.assert_called_once_with()
     llm.wake_up.assert_called_once_with(tags=["kv_cache"])
     llm.sleep.assert_called_once_with(level=2)
+    assert trainer._last_loaded_step == -1
+
+
+def test_server_runner_syncs_trainer_weights_before_generate(monkeypatch):
+    from tuning.training.passk import runners as runners_mod
+
+    monkeypatch.setattr(runners_mod.dist, "is_initialized", lambda: False)
+
+    call_order = []
+    vllm_generation = SimpleNamespace(
+        sync_weights=MagicMock(side_effect=lambda: call_order.append("sync")),
+    )
+    client = MagicMock()
+
+    def fake_generate(**kwargs):
+        call_order.append("generate")
+        return {"completion_ids": [[1], [2]]}
+
+    client.generate.side_effect = fake_generate
+
+    tokenizer = MagicMock()
+    tokenizer.apply_chat_template.side_effect = (
+        lambda messages, **kwargs: f"rendered:{messages[0]['content']}"
+    )
+    tokenizer.batch_decode.return_value = ["ok0", "ok1"]
+
+    runner = runners_mod.ServerVLLMRunner(
+        _make_config(),
+        client=client,
+        tokenizer=tokenizer,
+        vllm_generation=vllm_generation,
+    )
+    out = runner.run(
+        model=MagicMock(), eval_strategy=_make_eval_strategy(n=2), adapter_path=None,
+    )
+
+    assert call_order == ["sync", "generate"]
+    assert out == [{"prompt": "hi", "responses": ["ok0", "ok1"]}]
+    assert client.generate.call_args.kwargs["prompts"] == ["rendered:hi"]
+    vllm_generation.sync_weights.assert_called_once_with()
+
+
+def test_server_runner_requires_sync_weights_when_generation_is_provided(monkeypatch):
+    from tuning.training.passk import runners as runners_mod
+
+    monkeypatch.setattr(runners_mod.dist, "is_initialized", lambda: False)
+
+    client = MagicMock()
+    tokenizer = MagicMock()
+    tokenizer.apply_chat_template.return_value = "rendered"
+    runner = runners_mod.ServerVLLMRunner(
+        _make_config(),
+        client=client,
+        tokenizer=tokenizer,
+        vllm_generation=SimpleNamespace(),
+    )
+
+    with __import__("pytest").raises(RuntimeError, match="without sync_weights"):
+        runner.run(model=MagicMock(), eval_strategy=_make_eval_strategy(), adapter_path=None)
+
+    client.generate.assert_not_called()
 
 
 def test_ephemeral_runner_creates_and_destroys_llm(monkeypatch):
