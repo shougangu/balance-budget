@@ -288,6 +288,17 @@ class _GRPOTrainer(GRPOTrainer):
                     time.perf_counter() - start,
                 )
 
+    def prediction_step(self, model, inputs, prediction_loss_only, ignore_keys=None):
+        # Colocate sleep mode discards vLLM weights after every generation, and TRL only re-syncs
+        # them when global_step advances. The eval split runs at the global_step the preceding
+        # training rollout already synced, so the sync is skipped and each eval batch generates with
+        # stale (non-trained) weights, collapsing eval reward. Reset the sync marker so every eval
+        # batch reloads the current policy weights into vLLM, mirroring each training rollout.
+        vllm_generation = getattr(self, "vllm_generation", None)
+        if vllm_generation is not None and getattr(vllm_generation, "enable_sleep_mode", False):
+            self._last_loaded_step = -1
+        return super().prediction_step(model, inputs, prediction_loss_only, ignore_keys)
+
     def training_step(self, model, inputs, num_items_in_batch):
         if not self.TIMING_ENABLED:
             return super().training_step(model, inputs, num_items_in_batch)
