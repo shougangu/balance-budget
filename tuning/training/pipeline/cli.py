@@ -251,8 +251,8 @@ def _parse_args(argv=None):
                              "Offloads vLLM weights/cache during optimizer steps.")
     parser.add_argument("--grpo-eval-steps", type=int, default=64)
     parser.add_argument("--grpo-batch-size", type=int, default=4)
-    parser.add_argument("--grpo-grad-accum", type=int, default=32)
-    parser.add_argument("--grpo-num-generations", type=int, default=16)
+    parser.add_argument("--grpo-grad-accum", type=int, default=16)
+    parser.add_argument("--grpo-num-generations", type=int, default=8)
     parser.add_argument("--grpo-num-iterations", type=int, default=1,
                         help="μ in the GRPO paper: inner optimization passes per rollout batch.")
     parser.add_argument("--grpo-max-completion-length", type=int, default=2048)
