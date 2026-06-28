@@ -80,6 +80,31 @@ def test_ifeval_wandb_metrics():
         assert "eval/avg_response_length_tokens" in wandb_dict
 
 
+def test_prompt_limit_caps_messages_and_prompts_consistently():
+    """Setting prompt_limit slices messages and prompts to the same first-N subset."""
+    from tuning.training.eval_strategy import GSM8KEvalStrategy
+    with patch("tuning.training.eval_strategy.get_gsm8k_test_dataset") as mock_dataset:
+        mock_dataset.return_value = Dataset.from_dict({
+            "messages": [[{"role": "user", "content": f"q{i}"}] for i in range(5)],
+            "prompt": [f"q{i}" for i in range(5)],
+            "reference_answer": [str(i) for i in range(5)],
+        })
+        strategy = GSM8KEvalStrategy(k_values=[1], n_samples=1, num_prompts=5)
+
+        assert len(strategy.get_test_messages()) == 5
+        assert len(strategy.get_test_prompts()) == 5
+
+        strategy.prompt_limit = 2
+        messages = strategy.get_test_messages()
+        prompts = strategy.get_test_prompts()
+        assert len(messages) == 2
+        assert prompts == ["q0", "q1"]
+        assert [m[0]["content"] for m in messages] == ["q0", "q1"]
+
+        strategy.prompt_limit = None
+        assert len(strategy.get_test_prompts()) == 5
+
+
 def test_callback_accepts_eval_strategy():
     """PassAtKStoppingCallback should accept primary_eval and monitor_evals."""
     from tuning.training.passk_callback import PassAtKStoppingCallback

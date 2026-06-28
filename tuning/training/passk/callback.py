@@ -4,6 +4,7 @@
 import tempfile
 import os
 import datetime
+from contextlib import contextmanager
 from typing import List, Dict
 import torch.distributed as dist
 from transformers import TrainerCallback, TrainerControl, TrainerState
@@ -27,6 +28,13 @@ from .runners import (
     EphemeralVLLMRunner,
     DataParallelVLLMRunner,
 )
+
+
+# The pre-training base model never emits EOS, so every sample in the step-0
+# baseline eval runs to the full max_tokens cap, making it far slower than later
+# evals. Cap generation length and prompt count for the baseline only.
+FIRST_EVAL_MAX_TOKENS = 2048
+FIRST_EVAL_MAX_PROMPTS = 100
 
 
 class PassAtKStoppingCallback(TrainerCallback):
@@ -407,6 +415,32 @@ class PassAtKStoppingCallback(TrainerCallback):
         scores, _ = self._run_eval_with_results(model, eval_strategy)
         return scores
 
+    @contextmanager
+    def _first_eval_limits(self, *, active: bool):
+        """Lower max_tokens and prompt count for the baseline (step-0) eval.
+
+        max_tokens is overridden on both the DDP path (self.max_tokens) and the
+        shared RunnerConfig that every runner is built from; the prompt cap is
+        applied on each eval strategy so all generation paths respect it.
+        """
+        if not active:
+            yield
+            return
+        strategies = [self.primary_eval, *self.monitor_evals]
+        saved_max_tokens = self.max_tokens
+        saved_runner_max_tokens = self._runner_config.max_tokens
+        self.max_tokens = FIRST_EVAL_MAX_TOKENS
+        self._runner_config.max_tokens = FIRST_EVAL_MAX_TOKENS
+        for strategy in strategies:
+            strategy.prompt_limit = FIRST_EVAL_MAX_PROMPTS
+        try:
+            yield
+        finally:
+            self.max_tokens = saved_max_tokens
+            self._runner_config.max_tokens = saved_runner_max_tokens
+            for strategy in strategies:
+                strategy.prompt_limit = None
+
     def _compute_data_points_seen(self, args, state) -> int:
         train_batch_size = args.per_device_train_batch_size
         grad_accum = args.gradient_accumulation_steps
@@ -509,13 +543,15 @@ class PassAtKStoppingCallback(TrainerCallback):
         data_points_seen = self._compute_data_points_seen(args, state)
         total_minutes = get_total_minutes_from_state(state)
 
-        primary_scores = self._eval_and_log(model, self.primary_eval, state,
-                                            is_primary=True)
-        primary_metric = primary_scores[self.primary_eval.stopping_metric()]
-        self._primary_metric_history.append(primary_metric)
+        is_baseline_eval = state.global_step == 0 and self._step_offset == 0
+        with self._first_eval_limits(active=is_baseline_eval):
+            primary_scores = self._eval_and_log(model, self.primary_eval, state,
+                                                is_primary=True)
+            primary_metric = primary_scores[self.primary_eval.stopping_metric()]
+            self._primary_metric_history.append(primary_metric)
 
-        for monitor_eval in self.monitor_evals:
-            self._eval_and_log(model, monitor_eval, state, is_primary=False)
+            for monitor_eval in self.monitor_evals:
+                self._eval_and_log(model, monitor_eval, state, is_primary=False)
 
         decisions = self._decision_engine.decide(
             primary_metric=primary_metric,

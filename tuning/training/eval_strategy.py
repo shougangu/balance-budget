@@ -5,7 +5,7 @@ import numpy as np
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from pathlib import Path
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 from instruction_following_eval import evaluation_lib
 from tuning.data.test_dataset import get_ifeval_test_dataset, get_gsm8k_test_dataset, get_math500_test_dataset, get_amc_test_dataset, get_ifbench_test_dataset
@@ -70,6 +70,16 @@ def evaluate_multiple_responses_instruction(inp: evaluation_lib.InputExample, re
 
 class EvalStrategy(ABC):
     """Defines what prompts to generate and how to score responses."""
+
+    # When set, get_test_messages/get_test_prompts return only the first N
+    # entries. Used to cheapen the baseline eval of a non-stopping base model.
+    prompt_limit: Optional[int] = None
+
+    def _apply_prompt_limit(self, items: list) -> list:
+        if self.prompt_limit is None:
+            return items
+        return items[: self.prompt_limit]
+
     @abstractmethod
     def get_test_messages(self) -> List[List[dict]]:
         """Chat messages to send to vLLM."""
@@ -135,10 +145,10 @@ class IFEvalStrategy(EvalStrategy):
         return self._n_samples
 
     def get_test_messages(self) -> List[List[dict]]:
-        return list(self.test_dataset["messages"])
+        return self._apply_prompt_limit(list(self.test_dataset["messages"]))
 
     def get_test_prompts(self) -> List[str]:
-        return list(self.test_dataset["prompt"])
+        return self._apply_prompt_limit(list(self.test_dataset["prompt"]))
 
     def score_responses(self, results: List[Dict], tokenizer) -> Dict[str, float]:
         all_prompt_results = []
@@ -236,10 +246,10 @@ class GSM8KEvalStrategy(EvalStrategy):
         return "gsm8k"
     
     def get_test_messages(self) -> List[List[dict]]:
-        return list(self.test_dataset["messages"])
+        return self._apply_prompt_limit(list(self.test_dataset["messages"]))
 
     def get_test_prompts(self) -> List[str]:
-        return list(self.test_dataset["prompt"])
+        return self._apply_prompt_limit(list(self.test_dataset["prompt"]))
 
     def score_responses(self, results: List[Dict], tokenizer) -> Dict[str, float]:
         all_results = []
@@ -318,10 +328,10 @@ class MATH500EvalStrategy(EvalStrategy):
         return "math500"
 
     def get_test_messages(self) -> List[List[dict]]:
-        return list(self.test_dataset["messages"])
+        return self._apply_prompt_limit(list(self.test_dataset["messages"]))
 
     def get_test_prompts(self) -> List[str]:
-        return list(self.test_dataset["prompt"])
+        return self._apply_prompt_limit(list(self.test_dataset["prompt"]))
 
     def score_responses(self, results: List[Dict], tokenizer) -> Dict[str, float]:
         all_results = []
@@ -409,10 +419,10 @@ class AMCEvalStrategy(EvalStrategy):
         return "amc"
 
     def get_test_messages(self) -> List[List[dict]]:
-        return list(self.test_dataset["messages"])
+        return self._apply_prompt_limit(list(self.test_dataset["messages"]))
 
     def get_test_prompts(self) -> List[str]:
-        return list(self.test_dataset["prompt"])
+        return self._apply_prompt_limit(list(self.test_dataset["prompt"]))
 
     def score_responses(self, results: List[Dict], tokenizer) -> Dict[str, float]:
         all_results = []
@@ -501,10 +511,10 @@ class IFBenchStrategy(EvalStrategy):
         return "ifbench"
 
     def get_test_messages(self) -> List[List[dict]]:
-        return list(self.test_dataset["messages"])
+        return self._apply_prompt_limit(list(self.test_dataset["messages"]))
 
     def get_test_prompts(self) -> List[str]:
-        return list(self.test_dataset["prompt"])
+        return self._apply_prompt_limit(list(self.test_dataset["prompt"]))
 
     def score_responses(self, results: List[Dict], tokenizer) -> Dict[str, float]:
         from ifbench_eval.instructions_registry import INSTRUCTION_DICT as IFBENCH_DICT
