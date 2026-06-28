@@ -119,7 +119,8 @@ def _build_monitor_evals(args, k_values, n_samples):
             monitor_evals.append(MATH500EvalStrategy(k_values=k_values, n_samples=n_samples))
         elif name == "amc":
             from tuning.training.eval_strategy import AMCEvalStrategy
-            monitor_evals.append(AMCEvalStrategy(k_values=k_values, n_samples=n_samples))
+            # AMC is always scored at a fixed pass@k grid, independent of the primary task's k.
+            monitor_evals.append(AMCEvalStrategy(k_values=[1, 2, 4, 8], n_samples=8))
         elif name == "gsm8k":
             from tuning.training.eval_strategy import GSM8KEvalStrategy
             monitor_evals.append(GSM8KEvalStrategy(k_values=k_values, n_samples=n_samples))
