@@ -15,7 +15,6 @@ from tuning.training.pipeline.cli import (
     MODEL_TO_GPU_1,
     MODEL_TO_GPU_2,
     MODEL_TO_GPU_3,
-    MODEL_TO_SIMPLERL_TIER,
 )
 from tuning.utils.utils import GEMMA_3_CHAT_TEMPLATE, RESPONSE_DELIMITERS, STOP_TOKENS
 
@@ -42,12 +41,6 @@ def test_gemma3_in_cli_gpu_maps(model):
     assert 0.0 < MODEL_TO_GPU_1[model] <= 1.0
     assert 0.0 < MODEL_TO_GPU_2[model] <= 1.0
     assert 0.0 < MODEL_TO_GPU_3[model] <= 1.0
-
-
-@pytest.mark.parametrize("model", GEMMA3_MODELS)
-def test_gemma3_in_simplerl_tier_map(model):
-    assert model in MODEL_TO_SIMPLERL_TIER
-    assert MODEL_TO_SIMPLERL_TIER[model] in {"easy", "medium", "hard"}
 
 
 @pytest.mark.parametrize("model", GEMMA3_MODELS)

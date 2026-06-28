@@ -1,51 +1,22 @@
 # ABOUTME: Tests for SimpleRL-Zoo RLVR dataset integration.
-# ABOUTME: Covers alias resolution, CLI parsing, reward function dispatch, and dataset loading.
+# ABOUTME: Covers CLI parsing, reward function dispatch, tier loading, and combined-dataset merge.
 
 import argparse
 import sys
 from unittest.mock import MagicMock
 
 import pytest
+from datasets import Dataset, DatasetDict
 
 sys.modules.setdefault("instruction_following_eval", MagicMock())
 sys.modules.setdefault("instruction_following_eval.evaluation_lib", MagicMock())
 sys.modules.setdefault("unsloth", MagicMock())
 
-from tuning.training.pipeline.cli import (
-    _parse_args,
-    _resolve_simplerl_dataset,
-    MODEL_TO_GPU_1,
-    MODEL_TO_SIMPLERL_TIER,
-)
+from tuning.training.pipeline.cli import _parse_args
 from tuning.training.pipeline.stages import _build_reward_funcs
 
 
 REQUIRED = ["--model", "llama3-3B", "--wandb-project", "tuning"]
-
-
-class TestResolveSimplerlDataset:
-    def test_rewrites_simplerl_to_concrete_tier(self):
-        args = argparse.Namespace(dataset="simplerl", model="llama3-8B")
-        _resolve_simplerl_dataset(args)
-        assert args.dataset == "simplerl-medium"
-
-    def test_leaves_concrete_tier_unchanged(self):
-        args = argparse.Namespace(dataset="simplerl-hard", model="llama3-8B")
-        _resolve_simplerl_dataset(args)
-        assert args.dataset == "simplerl-hard"
-
-    def test_leaves_unrelated_dataset_unchanged(self):
-        args = argparse.Namespace(dataset="gsm8k", model="llama3-8B")
-        _resolve_simplerl_dataset(args)
-        assert args.dataset == "gsm8k"
-
-    def test_all_models_have_tier_mapping(self):
-        assert set(MODEL_TO_SIMPLERL_TIER.keys()) == set(MODEL_TO_GPU_1.keys())
-
-    def test_all_tier_values_are_valid(self):
-        valid_tiers = {"easy", "medium", "hard"}
-        for model, tier in MODEL_TO_SIMPLERL_TIER.items():
-            assert tier in valid_tiers, f"{model} maps to invalid tier {tier!r}"
 
 
 class TestParseArgsSimplerl:
@@ -163,3 +134,76 @@ class TestSimplerlTiers:
     def test_tier_subsets_are_abel_variants(self):
         for tier, subset in SIMPLERL_TIERS.items():
             assert "abel" in subset, f"{tier} subset should use abel variant"
+
+
+from tuning.data.simplerl_rlvr import combine_tiers
+
+
+def _tier(tier_name, n_train, n_test):
+    """Build a formatted-style DatasetDict whose prompts are tagged with the tier name."""
+    def rows(split, n):
+        return [
+            {
+                "prompt": [
+                    {"role": "system", "content": "sys"},
+                    {"role": "user", "content": f"{tier_name}-{split}-{i}"},
+                ],
+                "reference_answer": f"{tier_name}-ans-{i}",
+            }
+            for i in range(n)
+        ]
+    return DatasetDict({
+        "train": Dataset.from_list(rows("train", n_train)),
+        "test": Dataset.from_list(rows("test", n_test)),
+    })
+
+
+def _user_texts(split):
+    return [p[-1]["content"] for p in split["prompt"]]
+
+
+class TestCombineTiers:
+    def test_train_is_deduped_union_of_tiers(self):
+        a = _tier("a", 10, 5)
+        b = _tier("b", 10, 5)
+        combined = combine_tiers([a, b])
+        texts = _user_texts(combined["train"])
+        assert len(texts) == len(set(texts))
+        assert set(texts) == set(_user_texts(a["train"])) | set(_user_texts(b["train"]))
+
+    def test_shared_prompt_appears_once_with_first_tier_answer(self):
+        shared = {
+            "prompt": [
+                {"role": "system", "content": "sys"},
+                {"role": "user", "content": "shared"},
+            ],
+            "reference_answer": "first",
+        }
+        a = DatasetDict({
+            "train": Dataset.from_list([shared]),
+            "test": Dataset.from_list([]),
+        })
+        b = DatasetDict({
+            "train": Dataset.from_list([{**shared, "reference_answer": "second"}]),
+            "test": Dataset.from_list([]),
+        })
+        combined = combine_tiers([a, b])
+        assert len(combined["train"]) == 1
+        assert combined["train"][0]["reference_answer"] == "first"
+
+    def test_test_split_capped_at_200(self):
+        tiers = [_tier(name, 0, 150) for name in ("a", "b", "c")]
+        combined = combine_tiers(tiers)
+        assert len(combined["test"]) == 200
+
+    def test_test_split_mixes_tiers(self):
+        tiers = [_tier(name, 0, 150) for name in ("a", "b", "c")]
+        combined = combine_tiers(tiers)
+        seen_tiers = {t.split("-")[0] for t in _user_texts(combined["test"])}
+        assert len(seen_tiers) >= 2
+
+    def test_shuffle_is_deterministic(self):
+        tiers = [_tier(name, 50, 0) for name in ("a", "b", "c")]
+        first = _user_texts(combine_tiers(tiers)["train"])
+        second = _user_texts(combine_tiers(tiers)["train"])
+        assert first == second

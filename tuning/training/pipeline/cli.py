@@ -15,25 +15,25 @@ SBATCH_WORKER_SCRIPT_SHORT = "tuning/slurm/unified_early_pipeline_short.sh"
 
 
 MODEL_TO_GPU_1 = {
-    "llama3-1B": 0.75,
-    "llama3-1B-instruct": 0.75,
-    "llama3-3B": 0.8,
-    "llama3-3B-instruct": 0.75,
-    "llama3-8B": 0.6,
-    "llama3-8B-instruct": 0.6,
-    "qwen2-2B": 0.65,
-    "qwen2-2B-instruct": 0.65,
-    "qwen2-3B": 0.65,
-    "qwen2-3B-instruct": 0.65,
-    "qwen2-7B": 0.8, # from q14
-    "qwen2-7B-instruct": 0.55,
-    "qwen2-14B": 0.8,
-    "qwen2-14B-instruct": 0.4,
-    "qwen2-32B": 0.8,
-    "qwen2-32B-instruct": 0.4,
-    "gemma3-1B": 0.75,
-    "gemma3-4B": 0.65,
-    "gemma3-12B": 0.8, # from q14
+    "llama3-1B": 0.85
+    "llama3-1B-instruct": 0.85
+    "llama3-3B": 0.85
+    "llama3-3B-instruct": 0.85
+    "llama3-8B": 0.85
+    "llama3-8B-instruct": 0.85
+    "qwen2-2B": 0.85
+    "qwen2-2B-instruct": 0.85
+    "qwen2-3B": 0.85
+    "qwen2-3B-instruct": 0.85
+    "qwen2-7B": 0.85
+    "qwen2-7B-instruct": 0.85
+    "qwen2-14B": 0.85
+    "qwen2-14B-instruct": 0.85
+    "qwen2-32B": 0.85
+    "qwen2-32B-instruct": 0.85
+    "gemma3-1B": 0.85
+    "gemma3-4B": 0.85
+    "gemma3-12B": 0.85
 }
 
 MODEL_TO_GPU_2 = {
@@ -75,30 +75,9 @@ MODEL_TO_GPU_3 = {
     "qwen2-14B-instruct": 0.3,
     "qwen2-32B": 0.3,
     "qwen2-32B-instruct": 0.3,
+    "gemma3-1B": 0.7,
     "gemma3-4B": 0.38,
     "gemma3-12B": 0.5, # from q14
-}
-
-MODEL_TO_SIMPLERL_TIER = {
-    "llama3-1B": "medium",
-    "llama3-1B-instruct": "medium",
-    "llama3-3B": "medium",
-    "llama3-3B-instruct": "medium",
-    "llama3-8B": "medium",
-    "llama3-8B-instruct": "medium",
-    "qwen2-2B":  "medium",
-    "qwen2-2B-instruct":  "medium",
-    "qwen2-3B":  "medium",
-    "qwen2-3B-instruct":  "medium",
-    "qwen2-7B":  "medium",
-    "qwen2-7B-instruct":  "medium",
-    "qwen2-14B":  "medium",
-    "qwen2-14B-instruct":  "medium",
-    "qwen2-32B":  "medium",
-    "qwen2-32B-instruct":  "medium",
-    "gemma3-1B": "medium",
-    "gemma3-4B": "medium",
-    "gemma3-12B": "medium",
 }
 
 
@@ -138,14 +117,6 @@ def parse_early_tuple(s):
 def effective_eval_seed(seed: int, eval_seed: int | None) -> int:
     """Return eval_seed when set, else the master seed."""
     return eval_seed if eval_seed is not None else seed
-
-
-def _resolve_simplerl_dataset(args):
-    """Rewrite args.dataset='simplerl' to a concrete tier based on model strength."""
-    if args.dataset == "simplerl":
-        tier = MODEL_TO_SIMPLERL_TIER[args.model]
-        print(f"[simplerl] {args.model} -> simplerl-{tier}")
-        args.dataset = f"simplerl-{tier}"
 
 
 def _init_seeds(args):
@@ -250,8 +221,8 @@ def _parse_args(argv=None):
                         help="Enable TRL GRPO vLLM sleep mode in colocate mode. "
                              "Offloads vLLM weights/cache during optimizer steps.")
     parser.add_argument("--grpo-eval-steps", type=int, default=64)
-    parser.add_argument("--grpo-batch-size", type=int, default=4)
-    parser.add_argument("--grpo-grad-accum", type=int, default=16)
+    parser.add_argument("--grpo-batch-size", type=int, default=8)
+    parser.add_argument("--grpo-grad-accum", type=int, default=8)
     parser.add_argument("--grpo-num-generations", type=int, default=8)
     parser.add_argument("--grpo-num-iterations", type=int, default=1,
                         help="μ in the GRPO paper: inner optimization passes per rollout batch.")

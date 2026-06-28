@@ -6,7 +6,6 @@ from tuning.training.pipeline.cli import (
     MODEL_TO_GPU_1,
     MODEL_TO_GPU_2,
     MODEL_TO_GPU_3,
-    MODEL_TO_SIMPLERL_TIER,
 )
 
 
@@ -18,7 +17,6 @@ def test_all_registry_maps_share_model_set():
         ("MODEL_TO_GPU_1", MODEL_TO_GPU_1),
         ("MODEL_TO_GPU_2", MODEL_TO_GPU_2),
         ("MODEL_TO_GPU_3", MODEL_TO_GPU_3),
-        ("MODEL_TO_SIMPLERL_TIER", MODEL_TO_SIMPLERL_TIER),
     ]:
         assert set(mapping) == reference, (
             f"{name} model set differs from HF_MODEL_MAP; "
@@ -34,4 +32,3 @@ def test_qwen2_14b_fully_registered():
         assert model in MODEL_TO_GPU_1
         assert model in MODEL_TO_GPU_2
         assert model in MODEL_TO_GPU_3
-        assert model in MODEL_TO_SIMPLERL_TIER

@@ -8,7 +8,7 @@ from pathlib import Path
 
 from tuning.config import HF_MODEL_MAP
 from tuning.training.pipeline.checkpoint_metadata import parse_metadata_from_output
-from tuning.training.pipeline.cli import _parse_args, _resolve_simplerl_dataset
+from tuning.training.pipeline.cli import _parse_args
 from tuning.training.pipeline.vllm_sidecar import (
     GRPOVLLMServerSidecar,
     resolve_grpo_server_split,
@@ -35,7 +35,7 @@ _LONG_SBATCH_FLAGS = (
 
 _SFT_LONG_SBATCH_FLAGS = (
     "--partition=gpubase_h100_b4,gpubase_h100_b5",
-    "--time=2-00:00:00",
+    "--time=3-00:00:00",
 )
 _SHORT_SBATCH_FLAGS = (
     "--partition=gpubase_h100_b1,gpubase_h100_b2,gpubase_h100_b3,gpubase_h100_b4,gpubase_h100_b5",
@@ -66,7 +66,7 @@ def _build_base_cmd(argv):
 def _sbatch_flags_for_args(args):
     """Return scheduler overrides requested by the pipeline CLI."""
     if getattr(args, "long", False) and getattr(args, "run_sft", False):
-        return list(_SFT_LONG_SBATCH_FLAGS)
+        return list(_LONG_SBATCH_FLAGS)
     elif getattr(args, "long", False):
         return list(_LONG_SBATCH_FLAGS)
     elif getattr(args, "short", False):
@@ -206,7 +206,6 @@ def _run_post_training_subprocess(pt_method, base_cmd, pt_flag, metadata_file, a
 
 def main():
     args = _parse_args()
-    _resolve_simplerl_dataset(args)
     print(args)
 
     # run_all if and only if on an orchestrator state
