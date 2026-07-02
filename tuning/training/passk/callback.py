@@ -561,26 +561,30 @@ class PassAtKStoppingCallback(TrainerCallback):
             total_minutes=total_minutes,
         )
         for decision in decisions:
+            checkpoint_path = None
             if self._is_rank_zero():
-                self._save_decision_checkpoint(model, decision, state, args)
+                checkpoint_path = self._save_decision_checkpoint(
+                    model, decision, state, args)
             if decision.advances_state:
                 self._last_checkpoint_data_points = data_points_seen
             if self._is_rank_zero():
                 print(f"[PassAtKCallback] Saved checkpoint: {decision.label}")
-                self._maybe_live_dispatch(decision)
+                self._maybe_live_dispatch(decision, checkpoint_path)
 
         self._last_eval_step = state.global_step
         return control
 
-    def _maybe_live_dispatch(self, decision):
+    def _maybe_live_dispatch(self, decision, checkpoint_path):
         """Submit a GRPO post-training worker for a freshly saved checkpoint.
 
         Only fires under --live-dispatch with post_training_method=='grpo' on rank 0.
         eval_only checkpoints are skipped: they are pre-claimed so they never seed
         post-training, so no worker should be dispatched for them. The worker is
-        submitted for the metadata file (it claims the next unclaimed row), so one
+        pinned to checkpoint_path's metadata row via --claim-checkpoint, so one
         worker is submitted per non-eval-only checkpoint saved. Submission happens
         after the checkpoint directory and its metadata row are fully written.
+        Total-minutes checkpoints pass their target so the worker's Slurm
+        allocation is sized to the GRPO share remaining after that checkpoint.
         """
         args = self._pipeline_args
         if args is None or not getattr(args, "live_dispatch", False):
@@ -595,4 +599,10 @@ class PassAtKStoppingCallback(TrainerCallback):
         from tuning.training.pipeline.orchestrator import (
             submit_post_training_worker_for_metadata,
         )
-        submit_post_training_worker_for_metadata(args, self.metadata_path)
+        sft_total_minutes = (decision.metadata_value
+                             if decision.metadata_type == "total_minutes"
+                             else None)
+        submit_post_training_worker_for_metadata(
+            args, self.metadata_path, sft_total_minutes=sft_total_minutes,
+            checkpoint_path=checkpoint_path,
+        )

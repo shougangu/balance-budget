@@ -10,7 +10,8 @@ from types import SimpleNamespace
 
 from tuning.training.pipeline.cli import parse_early_tuple, _parse_args
 from tuning.training.pipeline.checkpoint_metadata import (
-    load_checkpoints, next_checkpoint, claim_next_checkpoint, mark_completed,
+    load_checkpoints, next_checkpoint, claim_next_checkpoint, claim_checkpoint,
+    mark_completed,
     print_metadata_paths, parse_metadata_from_output, record_wandb_run_id,
 )
 from tuning.training.pipeline.orchestrator import (
@@ -292,6 +293,20 @@ class TestSubmitPostTrainingWorkerForMetadata:
         assert "--run-sft" not in argv
         assert "--model" in argv
         assert "llama3-3B" in argv
+        assert "--claim-checkpoint" not in argv
+
+    def test_pins_worker_to_checkpoint_row(self, monkeypatch):
+        from tuning.training.pipeline import orchestrator as orch
+        calls = []
+        monkeypatch.setattr(orch, "_submit_sbatch_worker",
+                            lambda script, argv, **kwargs: (calls.append((argv, kwargs)), "777")[1])
+        monkeypatch.setattr(orch.sys, "argv", ["pipeline.py", "--model", "llama3-3B"])
+        orch.submit_post_training_worker_for_metadata(
+            self._args(), "/tmp/meta.jsonl", checkpoint_path="/models/cp_live",
+        )
+        argv = calls[0][0]
+        idx = argv.index("--claim-checkpoint")
+        assert argv[idx + 1] == "/models/cp_live"
 
     def test_includes_gres_for_multi_gpu_grpo(self, monkeypatch):
         from tuning.training.pipeline import orchestrator as orch
@@ -328,6 +343,59 @@ class TestSubmitPostTrainingWorkerForMetadata:
         )
         assert result is None
         assert "WARNING" in capsys.readouterr().out
+
+    def _submitted_flags(self, monkeypatch, sft_total_minutes, **arg_overrides):
+        from tuning.training.pipeline import orchestrator as orch
+        calls = []
+        monkeypatch.setattr(orch, "_submit_sbatch_worker",
+                            lambda script, argv, **kwargs: (calls.append((argv, kwargs)), "777")[1])
+        monkeypatch.setattr(orch.sys, "argv", ["pipeline.py", "--model", "llama3-3B"])
+        orch.submit_post_training_worker_for_metadata(
+            self._args(**arg_overrides), "/tmp/meta.jsonl",
+            sft_total_minutes=sft_total_minutes,
+        )
+        return calls[0][1]["sbatch_flags"]
+
+    @pytest.mark.parametrize("minutes", [0.0, 960.0])
+    def test_three_day_allocation_for_sft_minutes(self, monkeypatch, minutes):
+        assert self._submitted_flags(monkeypatch, minutes) == [
+            "--partition=gpubase_h100_b4,gpubase_h100_b5",
+            "--time=3-00:00:00",
+        ]
+
+    def test_twenty_four_hour_allocation_for_sft_minutes(self, monkeypatch):
+        assert self._submitted_flags(monkeypatch, 1920.0) == [
+            "--partition=gpubase_h100_b3,gpubase_h100_b4,gpubase_h100_b5",
+            "--time=1-00:00:00",
+        ]
+
+    @pytest.mark.parametrize("minutes", [60.0, 120.0, 180.0, 720.0])
+    def test_three_hour_allocation_for_sft_minutes(self, monkeypatch, minutes):
+        assert self._submitted_flags(monkeypatch, minutes) == [
+            "--partition=gpubase_h100_b1,gpubase_h100_b2,gpubase_h100_b3,gpubase_h100_b4,gpubase_h100_b5",
+            "--time=3:00:00",
+        ]
+
+    @pytest.mark.parametrize("minutes", [240.0, 480.0, 2880.0])
+    def test_twelve_hour_allocation_for_sft_minutes(self, monkeypatch, minutes):
+        assert self._submitted_flags(monkeypatch, minutes) == [
+            "--partition=gpubase_h100_b2,gpubase_h100_b3,gpubase_h100_b4,gpubase_h100_b5",
+            "--time=12:00:00",
+        ]
+
+    def test_unmapped_sft_minutes_uses_cli_duration_flags(self, monkeypatch):
+        assert self._submitted_flags(monkeypatch, 90.0) == []
+        assert self._submitted_flags(monkeypatch, 90.0, long=True) == [
+            "--partition=gpubase_h100_b3,gpubase_h100_b4,gpubase_h100_b5",
+            "--time=1-00:00:00",
+        ]
+
+    def test_no_sft_minutes_uses_cli_duration_flags(self, monkeypatch):
+        assert self._submitted_flags(monkeypatch, None) == []
+
+    def test_allocation_override_keeps_gres(self, monkeypatch):
+        flags = self._submitted_flags(monkeypatch, 60.0, grpo_num_gpus=2)
+        assert "--gres=gpu:2" in flags
 
 
 # ---------------------------------------------------------------------------
@@ -475,6 +543,41 @@ class TestClaimNextCheckpoint:
         assert result["checkpoint_path"] == "/models/cp2"
 
 
+class TestClaimCheckpoint:
+    def test_claims_matching_row_only(self, tmp_path):
+        f = tmp_path / "meta.jsonl"
+        _write_jsonl(f, [PASSK_ROW, PPL_ROW])
+        result = claim_checkpoint(str(f), "/models/cp2")
+        assert result["checkpoint_path"] == "/models/cp2"
+        with open(f) as fh:
+            lines = [json.loads(l) for l in fh]
+        assert lines[0].get("claimed", False) is False
+        assert lines[1]["claimed"] is True
+
+    def test_returns_none_when_row_already_claimed(self, tmp_path):
+        f = tmp_path / "meta.jsonl"
+        _write_jsonl(f, [{**PASSK_ROW, "claimed": True}, PPL_ROW])
+        assert claim_checkpoint(str(f), "/models/cp1") is None
+
+    def test_returns_none_when_row_completed(self, tmp_path):
+        f = tmp_path / "meta.jsonl"
+        _write_jsonl(f, [{**PASSK_ROW, "completed": True}, PPL_ROW])
+        assert claim_checkpoint(str(f), "/models/cp1") is None
+
+    def test_returns_none_when_path_absent(self, tmp_path):
+        f = tmp_path / "meta.jsonl"
+        _write_jsonl(f, [PASSK_ROW])
+        assert claim_checkpoint(str(f), "/models/nope") is None
+
+    def test_does_not_claim_other_rows_on_miss(self, tmp_path):
+        f = tmp_path / "meta.jsonl"
+        _write_jsonl(f, [{**PASSK_ROW, "claimed": True}, PPL_ROW])
+        claim_checkpoint(str(f), "/models/cp1")
+        with open(f) as fh:
+            lines = [json.loads(l) for l in fh]
+        assert lines[1].get("claimed", False) is False
+
+
 class TestWorkerExitCode:
     def test_run_dpo_exits_42_when_nothing_to_claim(self, tmp_path):
         from tuning.training.pipeline import stages
@@ -493,6 +596,19 @@ class TestWorkerExitCode:
         with pytest.raises(SystemExit) as exc:
             stages.run_grpo(args)
         assert exc.value.code == 42
+
+    def test_run_grpo_pinned_to_claimed_row_exits_42_without_stealing(self, tmp_path):
+        from tuning.training.pipeline import stages
+        f = tmp_path / "meta.jsonl"
+        _write_jsonl(f, [{**PASSK_ROW, "claimed": True}, PPL_ROW])
+        args = argparse.Namespace(metadata_file=[str(f)],
+                                  claim_checkpoint="/models/cp1")
+        with pytest.raises(SystemExit) as exc:
+            stages.run_grpo(args)
+        assert exc.value.code == 42
+        with open(f) as fh:
+            lines = [json.loads(l) for l in fh]
+        assert lines[1].get("claimed", False) is False
 
 
 class TestSubmitSbatchWorker:
@@ -867,6 +983,40 @@ class TestBuildBaseCmd:
         original = ["/usr/bin/python", "pipeline.py", "--model", "llama3-3B"]
         assert _build_base_cmd(original) == original
 
+    def test_strips_claim_checkpoint(self):
+        original = ["pipeline.py", "--model", "llama3-3B",
+                    "--claim-checkpoint", "/models/cp1"]
+        assert _build_base_cmd(original) == ["pipeline.py", "--model", "llama3-3B"]
+
+
+class TestPostTrainingSubprocessPinning:
+    def _run(self, monkeypatch, args):
+        from tuning.training.pipeline import orchestrator as orch
+        captured = {}
+
+        def fake_run(cmd, **kwargs):
+            captured["cmd"] = cmd
+            return SimpleNamespace(returncode=0)
+
+        monkeypatch.setattr(orch.subprocess, "run", fake_run)
+        orch._run_post_training_subprocess(
+            "grpo", ["pipeline.py", "--model", "llama3-3B"], "--run-grpo",
+            "/tmp/meta.jsonl", args,
+        )
+        return captured["cmd"]
+
+    def test_appends_claim_checkpoint_from_args(self, monkeypatch):
+        args = SimpleNamespace(grpo_vllm_mode="colocate", grpo_num_gpus=1,
+                               claim_checkpoint="/models/cp1")
+        cmd = self._run(monkeypatch, args)
+        idx = cmd.index("--claim-checkpoint")
+        assert cmd[idx + 1] == "/models/cp1"
+
+    def test_no_claim_flag_when_unset(self, monkeypatch):
+        args = SimpleNamespace(grpo_vllm_mode="colocate", grpo_num_gpus=1,
+                               claim_checkpoint=None)
+        assert "--claim-checkpoint" not in self._run(monkeypatch, args)
+
 
 # ---------------------------------------------------------------------------
 # Task-name dispatch
@@ -1206,9 +1356,72 @@ class TestSbatchScriptResolution:
             "--time=1-00:00:00",
         ]
 
+    def test_long_with_run_sft_uses_three_day_allocation(self):
+        args = _parse_args([
+            "--model", "llama3-3B", "--wandb-project", "p",
+            "--long", "--run-sft",
+        ])
+        assert _sbatch_flags_for_args(args) == [
+            "--partition=gpubase_h100_b4,gpubase_h100_b5",
+            "--time=3-00:00:00",
+        ]
+
     def test_short_and_long_are_mutually_exclusive(self):
         with pytest.raises(SystemExit):
             _parse_args([
                 "--model", "llama3-3B", "--wandb-project", "p",
                 "--short", "--long",
             ])
+
+
+class TestFixedEvalSampling:
+    """gsm8k/math500/amc are scored at fixed (n_samples, k_values) everywhere."""
+
+    def test_eval_sampling_overrides_gsm8k_and_math(self):
+        from tuning.training.pipeline.eval_components import _eval_sampling
+        assert _eval_sampling("gsm8k", [1, 2, 4, 8], 8) == ([1, 2, 4], 4)
+        assert _eval_sampling("math500", [1, 2, 4, 8], 8) == ([1, 2, 4], 4)
+
+    def test_eval_sampling_amc_fixed_grid(self):
+        from tuning.training.pipeline.eval_components import _eval_sampling
+        assert _eval_sampling("amc", [1], 1) == ([1, 2, 4, 8], 8)
+
+    def test_eval_sampling_passes_through_unlisted(self):
+        from tuning.training.pipeline.eval_components import _eval_sampling
+        assert _eval_sampling("ifeval", [1, 2], 3) == ([1, 2], 3)
+
+    def _components(self, extra):
+        from tuning.training.pipeline.eval_components import _build_eval_components
+        args = _parse_args(REQUIRED + [
+            "--sft-passk-k-values", "1", "2", "4", "8",
+            "--sft-passk-n-samples", "8",
+        ] + extra)
+        return _build_eval_components(args, "sft", 0.5)
+
+    def test_primary_gsm8k_pinned(self):
+        _, primary, _ = self._components(["--task-name", "gsm8k"])
+        assert primary.n_samples == 4
+        assert primary.k_values == [1, 2, 4]
+
+    def test_primary_math500_pinned(self):
+        _, primary, _ = self._components(["--task-name", "math500"])
+        assert primary.n_samples == 4
+        assert primary.k_values == [1, 2, 4]
+
+    def test_primary_ifeval_uses_cli(self):
+        _, primary, _ = self._components(["--task-name", "ifeval"])
+        assert primary.n_samples == 8
+        assert primary.k_values == [1, 2, 4, 8]
+
+    def test_monitor_gsm8k_and_math_pinned_amc_grid(self):
+        _, _, monitors = self._components([
+            "--task-name", "ifeval",
+            "--monitor-evals", "gsm8k", "math500", "amc",
+        ])
+        by_id = {type(m).__name__: m for m in monitors}
+        assert by_id["GSM8KEvalStrategy"].n_samples == 4
+        assert by_id["GSM8KEvalStrategy"].k_values == [1, 2, 4]
+        assert by_id["MATH500EvalStrategy"].n_samples == 4
+        assert by_id["MATH500EvalStrategy"].k_values == [1, 2, 4]
+        assert by_id["AMCEvalStrategy"].n_samples == 8
+        assert by_id["AMCEvalStrategy"].k_values == [1, 2, 4, 8]

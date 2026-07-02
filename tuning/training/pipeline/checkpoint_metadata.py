@@ -75,22 +75,34 @@ def _update_row(metadata_file, predicate, updates):
     return target
 
 
+def _claim_row(metadata_file, predicate):
+    row = _update_row(metadata_file, predicate, {"claimed": True})
+    if row:
+        print(f"Claimed checkpoint: {row['checkpoint_path']} "
+              f"(threshold {row.get('threshold_value')}, "
+              f"type {row.get('threshold_type')})")
+    return row
+
+
 def claim_next_checkpoint(metadata_file):
     """Pick the next unclaimed+uncompleted checkpoint and mark it claimed.
 
     No file locking: race window is near-simultaneous sbatch starts; worst case
     is one checkpoint trained twice. Fine for our use case.
     """
-    row = _update_row(
+    return _claim_row(
         metadata_file,
         lambda r: not r.get("claimed") and not r.get("completed"),
-        {"claimed": True},
     )
-    if row:
-        print(f"Claimed checkpoint: {row['checkpoint_path']} "
-              f"(threshold {row.get('threshold_value')}, "
-              f"type {row.get('threshold_type')})")
-    return row
+
+
+def claim_checkpoint(metadata_file, checkpoint_path):
+    """Claim the row for checkpoint_path; None when absent, claimed, or completed."""
+    return _claim_row(
+        metadata_file,
+        lambda r: (r["checkpoint_path"] == checkpoint_path
+                   and not r.get("claimed") and not r.get("completed")),
+    )
 
 
 def mark_completed(metadata_file, checkpoint_path):

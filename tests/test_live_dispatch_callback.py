@@ -83,9 +83,12 @@ def _grpo_args(**overrides):
     return SimpleNamespace(**base)
 
 
-def _drive_on_evaluate(callback, eval_only=False):
+def _drive_on_evaluate(callback, eval_only=False, metadata_type=None,
+                       metadata_value=None):
     """Run on_evaluate with one forced checkpoint decision, return the submit mock."""
-    decision = SimpleNamespace(label="0.3", advances_state=True, eval_only=eval_only)
+    decision = SimpleNamespace(label="0.3", advances_state=True, eval_only=eval_only,
+                               metadata_type=metadata_type,
+                               metadata_value=metadata_value)
     callback._eval_and_log = MagicMock(return_value={"pass_at_1": 0.5})
     callback._decision_engine.decide = MagicMock(return_value=[decision])
     callback._save_decision_checkpoint = MagicMock(return_value="/models/cp_live")
@@ -125,7 +128,17 @@ def test_live_dispatch_submits_after_save():
     args = _grpo_args()
     callback = _make_callback(pipeline_args=args)
     submit = _drive_on_evaluate(callback)
-    submit.assert_called_once_with(args, "/tmp/meta.jsonl")
+    submit.assert_called_once_with(args, "/tmp/meta.jsonl", sft_total_minutes=None,
+                                   checkpoint_path="/models/cp_live")
+
+
+def test_live_dispatch_forwards_total_minutes_target():
+    args = _grpo_args()
+    callback = _make_callback(pipeline_args=args)
+    submit = _drive_on_evaluate(callback, metadata_type="total_minutes",
+                                metadata_value=240.0)
+    submit.assert_called_once_with(args, "/tmp/meta.jsonl", sft_total_minutes=240.0,
+                                   checkpoint_path="/models/cp_live")
 
 
 def test_no_live_dispatch_for_eval_only_checkpoint():

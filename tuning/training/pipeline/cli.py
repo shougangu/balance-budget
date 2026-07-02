@@ -156,6 +156,10 @@ def _parse_args(argv=None):
                        help="SFT submits a GRPO post-training worker immediately after "
                             "each pass@k checkpoint is saved, instead of waiting for SFT "
                             "to finish. SFT-to-GRPO only.")
+    stage.add_argument("--claim-checkpoint", default=None, metavar="PATH",
+                       help="Claim this checkpoint row instead of the next unclaimed "
+                            "one. Live-dispatch sets it so each worker trains the "
+                            "checkpoint its Slurm allocation was sized for.")
     duration = stage.add_mutually_exclusive_group()
     duration.add_argument("--short", action="store_true", default=False,
                           help="Use the 3-hour sbatch script for better queue times.")

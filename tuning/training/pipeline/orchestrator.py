@@ -41,7 +41,28 @@ _SHORT_SBATCH_FLAGS = (
     "--partition=gpubase_h100_b1,gpubase_h100_b2,gpubase_h100_b3,gpubase_h100_b4,gpubase_h100_b5",
     "--time=3:00:00"
 )
+_TWELVE_HOUR_SBATCH_FLAGS = (
+    "--partition=gpubase_h100_b2,gpubase_h100_b3,gpubase_h100_b4,gpubase_h100_b5",
+    "--time=12:00:00",
+)
 
+# Live-dispatch allocation sized to the GRPO share left after an SFT checkpoint
+# at this total-minutes target: compute budgets are 240/960/3840 GPU-minutes and
+# GRPO accrues 2 GPU-minutes per wall minute, so the worker needs roughly
+# (budget - sft_minutes) / 2 wall minutes. Unmapped values use the CLI duration
+# flags.
+_LIVE_DISPATCH_SBATCH_FLAGS = {
+    0: _SFT_LONG_SBATCH_FLAGS,
+    60: _SHORT_SBATCH_FLAGS,
+    120: _SHORT_SBATCH_FLAGS,
+    180: _SHORT_SBATCH_FLAGS,
+    240: _TWELVE_HOUR_SBATCH_FLAGS,
+    480: _TWELVE_HOUR_SBATCH_FLAGS,
+    720: _SHORT_SBATCH_FLAGS,
+    960: _SFT_LONG_SBATCH_FLAGS,
+    1920: _LONG_SBATCH_FLAGS,
+    2880: _TWELVE_HOUR_SBATCH_FLAGS,
+}
 
 def _build_base_cmd(argv):
     """Build a stage-neutral subprocess command for worker launches."""
@@ -51,7 +72,7 @@ def _build_base_cmd(argv):
         if skip_next:
             skip_next = False
             continue
-        if tok in ("--parallel", "--metadata-file"):
+        if tok in ("--parallel", "--metadata-file", "--claim-checkpoint"):
             skip_next = True
             continue
         if tok in (
@@ -66,7 +87,7 @@ def _build_base_cmd(argv):
 def _sbatch_flags_for_args(args):
     """Return scheduler overrides requested by the pipeline CLI."""
     if getattr(args, "long", False) and getattr(args, "run_sft", False):
-        return list(_LONG_SBATCH_FLAGS)
+        return list(_SFT_LONG_SBATCH_FLAGS)
     elif getattr(args, "long", False):
         return list(_LONG_SBATCH_FLAGS)
     elif getattr(args, "short", False):
@@ -124,20 +145,34 @@ def _dispatch_parallel_workers(parallel, base_cmd, pt_flag, metadata_files,
 
 
 
-def submit_post_training_worker_for_metadata(args, metadata_file):
+def submit_post_training_worker_for_metadata(args, metadata_file,
+                                              sft_total_minutes=None,
+                                              checkpoint_path=None):
     """Submit one GRPO post-training worker for a freshly saved metadata file.
 
     Mirrors the worker-arg shape of _dispatch_parallel_workers but submits exactly
     one worker and never aborts the caller: an sbatch failure is logged and
     swallowed so a live-dispatch submission can't kill the running SFT job.
+
+    sft_total_minutes selects an allocation from _LIVE_DISPATCH_SBATCH_FLAGS
+    sized to the GRPO share remaining after that checkpoint; unmapped or missing
+    values fall back to the CLI duration flags via _sbatch_flags_for_args(args)
+    
+    checkpoint_path pins the worker
+    to that metadata row via --claim-checkpoint so the sized allocation trains
+    the checkpoint it was sized for.
     """
     base_cmd = _build_base_cmd(sys.argv)
     worker_argv = list(base_cmd[1:])
     worker_argv += ["--run-grpo", "--run-all", "--no-dispatch"]
     worker_argv += ["--metadata-file", metadata_file]
+    if checkpoint_path:
+        worker_argv += ["--claim-checkpoint", checkpoint_path]
 
     args.run_sft = False # ensure the sft + long combination doesn't occur for gpu
-    sbatch_flags = _sbatch_flags_for_args(args)
+    allocation = _LIVE_DISPATCH_SBATCH_FLAGS.get(sft_total_minutes)
+    sbatch_flags = (list(allocation) if allocation is not None
+                    else _sbatch_flags_for_args(args))
     if args.grpo_num_gpus > 1:
         sbatch_flags.append(f"--gres=gpu:{args.grpo_num_gpus}")
 
@@ -186,6 +221,9 @@ def _run_grpo_server_subprocess(base_cmd, pt_flag, metadata_file, args):
 
 def _run_post_training_subprocess(pt_method, base_cmd, pt_flag, metadata_file, args):
     """Run one claimed post-training subprocess, starting vLLM sidecar if needed."""
+    claim = getattr(args, "claim_checkpoint", None)
+    if claim:
+        base_cmd = base_cmd + ["--claim-checkpoint", claim]
     if pt_method == "grpo" and args.grpo_vllm_mode == "server":
         return _run_grpo_server_subprocess(base_cmd, pt_flag, metadata_file, args)
 

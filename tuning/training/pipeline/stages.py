@@ -21,7 +21,7 @@ from tuning.training.config_training import (
 from tuning.utils.gpu import cleanup_gpu
 
 from tuning.training.pipeline.checkpoint_metadata import (
-    claim_next_checkpoint, mark_completed, record_wandb_run_id,
+    claim_checkpoint, claim_next_checkpoint, mark_completed, record_wandb_run_id,
 )
 from tuning.training.pipeline.cli import (
     MODEL_TO_GPU_1, MODEL_TO_GPU_2, MODEL_TO_GPU_3, _init_seeds,
@@ -332,8 +332,10 @@ def run_post_training(args, method: Literal["dpo", "grpo"]):
     is_dist = dist.is_initialized() and dist.get_world_size() > 1
     rank = dist.get_rank() if is_dist else 0
 
+    pinned = getattr(args, "claim_checkpoint", None)
     if rank == 0:
-        checkpoint = claim_next_checkpoint(metadata_file)
+        checkpoint = (claim_checkpoint(metadata_file, pinned) if pinned
+                      else claim_next_checkpoint(metadata_file))
     else:
         checkpoint = None
     if is_dist:
