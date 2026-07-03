@@ -15,24 +15,24 @@ SBATCH_WORKER_SCRIPT_SHORT = "tuning/slurm/unified_early_pipeline_short.sh"
 
 
 MODEL_TO_GPU_1 = {
-    "llama3-1B": 0.85
-    "llama3-1B-instruct": 0.85
-    "llama3-3B": 0.85
-    "llama3-3B-instruct": 0.85
-    "llama3-8B": 0.85
-    "llama3-8B-instruct": 0.85
-    "qwen2-2B": 0.85
-    "qwen2-2B-instruct": 0.85
-    "qwen2-3B": 0.85
-    "qwen2-3B-instruct": 0.85
-    "qwen2-7B": 0.85
-    "qwen2-7B-instruct": 0.85
-    "qwen2-14B": 0.85
-    "qwen2-14B-instruct": 0.85
-    "qwen2-32B": 0.85
-    "qwen2-32B-instruct": 0.85
-    "gemma3-1B": 0.85
-    "gemma3-4B": 0.85
+    "llama3-1B": 0.85,
+    "llama3-1B-instruct": 0.85,
+    "llama3-3B": 0.85,
+    "llama3-3B-instruct": 0.85,
+    "llama3-8B": 0.85,
+    "llama3-8B-instruct": 0.85,
+    "qwen2-2B": 0.85,
+    "qwen2-2B-instruct": 0.85,
+    "qwen2-3B": 0.85,
+    "qwen2-3B-instruct": 0.85,
+    "qwen2-7B": 0.85,
+    "qwen2-7B-instruct": 0.85,
+    "qwen2-14B": 0.85,
+    "qwen2-14B-instruct": 0.85,
+    "qwen2-32B": 0.85,
+    "qwen2-32B-instruct": 0.85,
+    "gemma3-1B": 0.85,
+    "gemma3-4B": 0.85,
     "gemma3-12B": 0.85
 }
 
@@ -224,9 +224,9 @@ def _parse_args(argv=None):
                         action=argparse.BooleanOptionalAction, default=True,
                         help="Enable TRL GRPO vLLM sleep mode in colocate mode. "
                              "Offloads vLLM weights/cache during optimizer steps.")
-    parser.add_argument("--grpo-eval-steps", type=int, default=64)
-    parser.add_argument("--grpo-batch-size", type=int, default=8)
-    parser.add_argument("--grpo-grad-accum", type=int, default=8)
+    parser.add_argument("--grpo-eval-steps", type=int, default=128)
+    parser.add_argument("--grpo-batch-size", type=int, default=4)
+    parser.add_argument("--grpo-grad-accum", type=int, default=16)
     parser.add_argument("--grpo-num-generations", type=int, default=8)
     parser.add_argument("--grpo-num-iterations", type=int, default=1,
                         help="μ in the GRPO paper: inner optimization passes per rollout batch.")
