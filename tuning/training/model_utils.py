@@ -151,7 +151,10 @@ def upcast_lm_head_to_fp32(model):
 
     If lm_head shares storage with the input embeddings (tie_word_embeddings=True),
     the weight is cloned first so embed_tokens stays in its original dtype.
-    A forward pre-hook upcasts hidden_states so the matmul itself runs in fp32.
+    The forward override upcasts hidden_states and runs the matmul with autocast
+    disabled: mixed-precision training (bf16=True) wraps the model forward in
+    torch.autocast(bf16), which would otherwise cast the fp32 inputs of F.linear
+    back down to bf16 and silently undo the upcast.
     """
     import torch.nn as nn
 
@@ -162,14 +165,16 @@ def upcast_lm_head_to_fp32(model):
     src = lm_head.weight.data
     new_weight = src.detach().clone().to(torch.float32) if tied else src.to(torch.float32)
     lm_head.weight = nn.Parameter(new_weight, requires_grad=lm_head.weight.requires_grad)
+    if getattr(lm_head, "bias", None) is not None:
+        lm_head.bias = nn.Parameter(
+            lm_head.bias.data.to(torch.float32), requires_grad=lm_head.bias.requires_grad
+        )
 
-    def _cast_inputs_to_fp32(_module, inputs):
-        x = inputs[0]
-        if x.dtype != torch.float32:
-            return (x.to(torch.float32),) + inputs[1:]
-        return inputs
+    def _fp32_forward(x):
+        with torch.autocast(device_type=x.device.type, enabled=False):
+            return F.linear(x.to(torch.float32), lm_head.weight, lm_head.bias)
 
-    lm_head.register_forward_pre_hook(_cast_inputs_to_fp32)
+    lm_head.forward = _fp32_forward
     return model
 
 

@@ -66,6 +66,26 @@ def test_upcast_forward_yields_fp32_logits():
     assert logits.shape == (2, 4, 64)
 
 
+def test_upcast_forward_runs_fp32_under_bf16_autocast():
+    # accelerate wraps the training forward in torch.autocast(bf16) when bf16=True;
+    # autocast casts F.linear inputs down to bf16 even if they are fp32, so the
+    # upcast must disable autocast around the matmul or it is silently a no-op.
+    from tuning.training.model_utils import upcast_lm_head_to_fp32
+
+    torch.manual_seed(0)
+    model = _tiny_model(tied=False)
+    upcast_lm_head_to_fp32(model)
+
+    hidden = torch.randn(2, 4, 8, dtype=torch.bfloat16)
+    ref_fp32 = torch.nn.functional.linear(hidden.float(), model.lm_head.weight.detach())
+
+    with torch.autocast("cpu", dtype=torch.bfloat16):
+        logits = model.lm_head(hidden)
+
+    assert logits.dtype == torch.float32
+    assert torch.equal(logits, ref_fp32)
+
+
 def test_upcast_preserves_requires_grad_state():
     from tuning.training.model_utils import upcast_lm_head_to_fp32
 
