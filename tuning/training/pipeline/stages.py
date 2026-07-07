@@ -35,6 +35,8 @@ from tuning.training.pipeline.eval_components import (
 def _build_lora_config(args) -> LoraConfig:
     """LoraConfig with CLI-controllable knobs applied (gradient checkpointing, etc.)."""
     cfg = LoraConfig()
+    cfg.r = args.lora_rank
+    cfg.lora_alpha = round(32 * (args.lora_rank / 32) ** 0.5)  # rsLoRA-equivalent alpha/√r scaling
     if not getattr(args, "gradient_checkpointing", True):
         cfg.use_gradient_checkpointing = False
     return cfg
@@ -211,6 +213,7 @@ def _build_post_training_configs(
         training_args.num_generations = args.grpo_num_generations
         training_args.num_iterations = args.grpo_num_iterations
         training_args.max_completion_length = args.grpo_max_completion_length
+        training_args.vllm_max_model_length = 4096 + args.grpo_max_completion_length
         training_args.beta = args.grpo_beta
         training_args.temperature = args.grpo_temperature
         training_args.learning_rate = args.grpo_learning_rate

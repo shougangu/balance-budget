@@ -203,6 +203,7 @@ class PassAtKConfig(BaseModel):
     early_tuples: list[tuple[int, float]] | None = None  # Each tuple: (patience, min_increase)
     temperature: float = 0.5  # Sampling temperature for generation
     max_tokens: int = 4096  # Maximum tokens to generate per response
+    lora_max_rank: int = 32  # Max LoRA rank the eval vLLM must load (matches trained adapter rank)
     vllm_max_model_len: int = DEFAULT_VLLM_MAX_MODEL_LEN
     enabled: bool = True  # Whether to enable the callback
     use_persistent_vllm: bool = False  # Keep vLLM engine alive between evals (saves cold-start time)

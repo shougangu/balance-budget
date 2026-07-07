@@ -262,6 +262,8 @@ def _parse_args(argv=None):
 
     parser.add_argument("--grpo-gpu-util", type=float, default=None,
                         help="Override MODEL_TO_GPU_3 vLLM GPU utilisation for GRPO (0.0–1.0).")
+    parser.add_argument("--lora-rank", type=int, default=32,
+                        help="LoRA rank (r) for SFT and GRPO LoRA training.")
     parser.add_argument("--grpo-lora-target-modules", type=str, nargs="+", default=None)
     parser.add_argument("--grpo-lora-layers-fraction", type=float, default=1.0)
     parser.add_argument("--gradient-checkpointing",
@@ -295,6 +297,7 @@ def _parse_args(argv=None):
     parser.add_argument("--sft-passk-k-values", type=int, nargs="+", default=[1])
     parser.add_argument("--sft-passk-n-samples", type=int, default=1)
     parser.add_argument("--sft-passk-num-prompts", type=int, default=1500)
+    parser.add_argument("--sft-passk-max-tokens", type=int, default=4096)
     parser.add_argument("--sft-passk-temperature", type=float, default=0.5)
     parser.add_argument("--sft-passk-strict",
                         action=argparse.BooleanOptionalAction, default=False)
@@ -313,6 +316,7 @@ def _parse_args(argv=None):
     parser.add_argument("--dpo-passk-k-values", type=int, nargs="+", default=[1])
     parser.add_argument("--dpo-passk-n-samples", type=int, default=1)
     parser.add_argument("--dpo-passk-num-prompts", type=int, default=1500)
+    parser.add_argument("--dpo-passk-max-tokens", type=int, default=4096)
     parser.add_argument("--dpo-passk-temperature", type=float, default=0.5)
     parser.add_argument("--dpo-passk-strict",
                         action=argparse.BooleanOptionalAction, default=False)
@@ -332,6 +336,7 @@ def _parse_args(argv=None):
     parser.add_argument("--grpo-passk-k-values", type=int, nargs="+", default=[1])
     parser.add_argument("--grpo-passk-n-samples", type=int, default=1)
     parser.add_argument("--grpo-passk-num-prompts", type=int, default=1500)
+    parser.add_argument("--grpo-passk-max-tokens", type=int, default=4096)
     parser.add_argument("--grpo-passk-temperature", type=float, default=0.5)
     parser.add_argument("--grpo-passk-strict",
                         action=argparse.BooleanOptionalAction, default=False)

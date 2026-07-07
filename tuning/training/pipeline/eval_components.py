@@ -71,10 +71,14 @@ def _build_eval_components(args, stage, gpu_util):
             max_tokens=getattr(args, f"{prefix}_judge_max_tokens", 64),
         )
 
+    passk_max_tokens = getattr(args, f"{prefix}_passk_max_tokens")
     passk_config = PassAtKConfig(
         target_pass_at_k=getattr(args, f"{prefix}_passk_targets"),
         early_tuples=getattr(args, f"{prefix}_passk_early") or None,
         temperature=getattr(args, f"{prefix}_passk_temperature"),
+        max_tokens=passk_max_tokens,
+        lora_max_rank=args.lora_rank,
+        vllm_max_model_len=4096 + passk_max_tokens,
         enabled=True,
         num_inference_gpus=getattr(args, f"{prefix}_passk_num_inference_gpus"),
         use_persistent_vllm=getattr(args, f"{prefix}_passk_persistent_vllm"),
