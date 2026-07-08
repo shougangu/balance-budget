@@ -100,8 +100,8 @@ def claim_checkpoint(metadata_file, checkpoint_path):
     """Claim the row for checkpoint_path; None when absent, claimed, or completed."""
     return _claim_row(
         metadata_file,
-        lambda r: (r["checkpoint_path"] == checkpoint_path
-                   and not r.get("claimed") and not r.get("completed")),
+        lambda r: (r["checkpoint_path"] == checkpoint_path)
+                #    and not r.get("claimed") and not r.get("completed")),
     )
 
 

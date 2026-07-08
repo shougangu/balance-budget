@@ -778,6 +778,48 @@ class TestDispatchParallelWorkers:
         assert str(real_mf) in worker_argv
         assert missing_mf not in worker_argv
 
+    def test_forwards_claim_checkpoint_when_pinned(self, monkeypatch, tmp_path):
+        from tuning.training.pipeline import orchestrator as orch
+        calls = []
+        monkeypatch.setattr(orch, "_submit_sbatch_worker",
+                            lambda script, argv, **kwargs: (calls.append(argv), "999")[1])
+        mf = tmp_path / "meta.jsonl"
+        mf.write_text("{}\n")
+        args = SimpleNamespace(post_training_method="grpo", grpo_num_gpus=2,
+                               claim_checkpoint="/models/cp_pinned")
+        orch._dispatch_parallel_workers(
+            parallel=1,
+            base_cmd=orch._build_base_cmd(
+                ["pipeline.py", "--model", "llama3-3B",
+                 "--claim-checkpoint", "/models/cp_pinned"]),
+            pt_flag="--run-grpo",
+            metadata_files=[str(mf)],
+            sbatch_script="tuning/slurm/unified_early_pipeline.sh",
+            args=args,
+        )
+        worker_argv = calls[0]
+        idx = worker_argv.index("--claim-checkpoint")
+        assert worker_argv[idx + 1] == "/models/cp_pinned"
+
+    def test_no_claim_checkpoint_when_not_pinned(self, monkeypatch, tmp_path):
+        from tuning.training.pipeline import orchestrator as orch
+        calls = []
+        monkeypatch.setattr(orch, "_submit_sbatch_worker",
+                            lambda script, argv, **kwargs: (calls.append(argv), "999")[1])
+        mf = tmp_path / "meta.jsonl"
+        mf.write_text("{}\n")
+        args = SimpleNamespace(post_training_method="grpo", grpo_num_gpus=1,
+                               claim_checkpoint=None)
+        orch._dispatch_parallel_workers(
+            parallel=1,
+            base_cmd=["pipeline.py", "--model", "llama3-3B"],
+            pt_flag="--run-grpo",
+            metadata_files=[str(mf)],
+            sbatch_script="tuning/slurm/unified_early_pipeline.sh",
+            args=args,
+        )
+        assert "--claim-checkpoint" not in calls[0]
+
 
 # ---------------------------------------------------------------------------
 # print_metadata_paths / parse_metadata_from_output

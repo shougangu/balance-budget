@@ -53,16 +53,17 @@ _TWELVE_HOUR_SBATCH_FLAGS = (
 # (budget - sft_minutes) / 2 wall minutes. Unmapped values use the CLI duration
 # flags.
 _LIVE_DISPATCH_SBATCH_FLAGS = {
-    0: _SFT_LONG_SBATCH_FLAGS,
+    0: _LONG_SBATCH_FLAGS, # using 24*2 + 0 = 48 < 64 not sufficient, but 3d queues are too long
     60: _SHORT_SBATCH_FLAGS,
     120: _SHORT_SBATCH_FLAGS,
     180: _SHORT_SBATCH_FLAGS,
     240: _TWELVE_HOUR_SBATCH_FLAGS,
     480: _TWELVE_HOUR_SBATCH_FLAGS,
     720: _SHORT_SBATCH_FLAGS,
-    960: _SFT_LONG_SBATCH_FLAGS,
+    960: _LONG_SBATCH_FLAGS, # using 24 * 2 + 16 = 64 is not sufficient, but 3d queue are long
     1920: _LONG_SBATCH_FLAGS,
     2880: _TWELVE_HOUR_SBATCH_FLAGS,
+    3840: _SHORT_SBATCH_FLAGS
 }
 
 def _build_base_cmd(argv):
@@ -87,8 +88,9 @@ def _build_base_cmd(argv):
 
 def _sbatch_flags_for_args(args):
     """Return scheduler overrides requested by the pipeline CLI."""
+    # return list(_SFT_LONG_SBATCH_FLAGS)
     if getattr(args, "long", False) and getattr(args, "run_sft", False):
-        return list(_SFT_LONG_SBATCH_FLAGS)
+        return list(_SFT_LONG_SBATCH_FLAGS) # _SFT_LONG_SBATCH_FLAGS
     elif getattr(args, "long", False):
         return list(_LONG_SBATCH_FLAGS)
     elif getattr(args, "short", False):
@@ -138,6 +140,9 @@ def _dispatch_parallel_workers(parallel, base_cmd, pt_flag, metadata_files,
     for mf in metadata_files:
         if Path(mf).is_file():
             worker_argv += ["--metadata-file", mf]
+    claim = getattr(args, "claim_checkpoint", None)
+    if claim:
+        worker_argv += ["--claim-checkpoint", claim]
     for i in range(parallel):
         job_id = _submit_sbatch_worker(sbatch_script, worker_argv,
                                         sbatch_flags=sbatch_flags)

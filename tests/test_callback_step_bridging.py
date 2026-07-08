@@ -93,6 +93,29 @@ def _make_passk_callback(initial_global_step=0):
     )
 
 
+def _make_passk_callback_with_minutes(target_total_minutes, initial_global_step=0):
+    tokenizer = MagicMock()
+    tokenizer.chat_template = "test_template"
+    tokenizer.apply_chat_template.return_value = "formatted_prompt"
+    tokenizer.save_pretrained = MagicMock()
+
+    config = PassAtKConfig(
+        target_pass_at_k=[0.95],
+        enabled=True,
+        use_persistent_vllm=False,
+        num_inference_gpus=1,
+        initial_global_step=initial_global_step,
+        target_total_minutes=target_total_minutes,
+    )
+    return PassAtKStoppingCallback(
+        config=config,
+        tokenizer=tokenizer,
+        model_name="test-model",
+        base_model_hf="test/model",
+        primary_eval=_FakeEval(),
+    )
+
+
 def _patch_eval_runs(callback, scores, results):
     def run_with_results(model, eval_strategy):
         return (scores, results)
@@ -200,6 +223,108 @@ class TestPassAtKStepBridging:
         for payload in table_payloads:
             assert payload.get("train/total_global_step") == 105
             assert payload.get("train/total_minutes") == 0.0
+
+
+class TestChainedRunTargetFiltering:
+    """A forked/resumed run inherits its parent's clock; budget targets already
+    spent upstream must be dropped before the baseline eval so they don't emit a
+    zero-progress (step-0) or duplicate (resume) checkpoint."""
+
+    def _state_with_minutes(self, minutes):
+        return TrainerState(stateful_callbacks={
+            "OffsetAwareWandbCallback": OffsetAwareWandbCallback(
+                initial_total_seconds=minutes * 60.0,
+            ).state(),
+        })
+
+    def test_forked_run_drops_targets_at_or_below_inherited_clock(self):
+        callback = _make_passk_callback_with_minutes([240.0, 480.0])
+        callback.on_evaluate = MagicMock()
+        state = self._state_with_minutes(240.0)
+        state.global_step = 0
+
+        callback.on_train_begin(SimpleNamespace(), state, TrainerControl(),
+                                model=MagicMock())
+
+        assert callback._decision_engine.target_total_minutes == [480.0]
+
+    def test_sft_run_keeps_all_targets_including_zero_budget(self):
+        callback = _make_passk_callback_with_minutes([0.0, 60.0, 240.0])
+        callback.on_evaluate = MagicMock()
+        state = TrainerState()  # no timing state -> starting clock 0
+        state.global_step = 0
+
+        callback.on_train_begin(SimpleNamespace(), state, TrainerControl(),
+                                model=MagicMock())
+
+        assert callback._decision_engine.target_total_minutes == [0.0, 60.0, 240.0]
+
+    def test_resumed_run_drops_already_saved_target(self):
+        callback = _make_passk_callback_with_minutes([240.0])
+        callback.on_evaluate = MagicMock()
+        state = self._state_with_minutes(943.0)
+        state.global_step = 448
+
+        callback.on_train_begin(SimpleNamespace(), state, TrainerControl(),
+                                model=MagicMock())
+
+        assert callback._decision_engine.target_total_minutes == []
+
+
+class TestMinuteCrossingRankSynchronization:
+    """Every rank must reach the same total_minutes crossing decision.
+
+    total_minutes accumulates per-rank from wall-clock time, so the ranks' clocks
+    drift apart. If one rank crosses a target a step before its peer, that rank
+    enters eval while the other keeps training -> the two ranks issue different
+    NCCL collectives and the job deadlocks. on_step_end broadcasts rank 0's clock
+    so the crossing (and the target consumption) is identical on every rank.
+    """
+
+    def _run_on_step_end(self, callback, local_minutes, rank, rank0_minutes):
+        control = TrainerControl()
+
+        def fake_broadcast(payload, src=0):
+            # rank 0 is the source and keeps its value; peers receive rank 0's.
+            if rank != src:
+                payload[0] = rank0_minutes
+
+        with patch(
+            "tuning.training.passk.callback.get_total_minutes_from_state",
+            return_value=local_minutes,
+        ), patch("torch.distributed.is_initialized", return_value=True), \
+                patch("torch.distributed.get_world_size", return_value=2), \
+                patch("torch.distributed.get_rank", return_value=rank), \
+                patch("torch.distributed.broadcast_object_list",
+                      side_effect=fake_broadcast):
+            callback.on_step_end(SimpleNamespace(), SimpleNamespace(), control)
+        return control
+
+    def test_peer_clock_ahead_does_not_trigger_solo_eval(self):
+        """rank 1's clock crossed 960 but rank 0's has not: neither evaluates."""
+        cb0 = _make_passk_callback_with_minutes([960.0])
+        control0 = self._run_on_step_end(cb0, 959.0, rank=0, rank0_minutes=959.0)
+
+        cb1 = _make_passk_callback_with_minutes([960.0])
+        control1 = self._run_on_step_end(cb1, 961.0, rank=1, rank0_minutes=959.0)
+
+        assert control0.should_evaluate is False
+        assert control1.should_evaluate is False
+        assert cb0._decision_engine.target_total_minutes == [960.0]
+        assert cb1._decision_engine.target_total_minutes == [960.0]
+
+    def test_peer_clock_behind_still_follows_rank0_crossing(self):
+        """rank 0's clock crossed 960 but rank 1's has not: both evaluate."""
+        cb0 = _make_passk_callback_with_minutes([960.0])
+        control0 = self._run_on_step_end(cb0, 961.0, rank=0, rank0_minutes=961.0)
+
+        cb1 = _make_passk_callback_with_minutes([960.0])
+        control1 = self._run_on_step_end(cb1, 959.0, rank=1, rank0_minutes=961.0)
+
+        assert control0.should_evaluate is True
+        assert control1.should_evaluate is True
+        assert cb0._decision_engine.target_total_minutes == []
+        assert cb1._decision_engine.target_total_minutes == []
 
 
 # ---------------------------------------------------------------------------

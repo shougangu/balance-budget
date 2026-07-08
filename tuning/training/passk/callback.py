@@ -177,12 +177,37 @@ class PassAtKStoppingCallback(TrainerCallback):
         """True when not under DDP, or when this is rank 0 under DDP."""
         return not dist.is_initialized() or dist.get_rank() == 0
 
+    def _synchronized_total_minutes(self, state) -> float:
+        """Return rank 0's total_minutes on every rank.
+
+        total_minutes accumulates per-rank from wall-clock time, so the ranks'
+        clocks drift apart. Gating should_evaluate (and the decision engine's
+        target consumption) on a per-rank value lets one rank cross a target a
+        step before its peer: that rank enters eval while the other keeps
+        training, so they issue divergent NCCL collectives and deadlock.
+        Broadcasting rank 0's value keeps the crossing identical on every rank.
+        """
+        total_minutes = get_total_minutes_from_state(state)
+        if dist.is_initialized() and dist.get_world_size() > 1:
+            payload = [total_minutes]
+            dist.broadcast_object_list(payload, src=0)
+            total_minutes = payload[0]
+        return total_minutes
+
     def on_train_begin(self, args, state, control, **kwargs):
         if not self.model_name:
             self.model_name = kwargs.get("model")
         print(f"[PassAtKCallback] on_train_begin: model_name={self.model_name}")
         now = datetime.datetime.now().strftime("%m%d_%H%M%S")
         self.metadata_path = os.path.join(MODELS_METADATA_DIR, f"{self.model_name}_{self.primary_eval.id}_{self.primary_eval.stopping_metric()}-{now}.json")
+
+        starting_minutes = get_total_minutes_from_state(state)
+        engine = self._decision_engine
+        # if not starting from sft scratch, don't duplicate checkpoint
+        if starting_minutes > 0 and engine.target_total_minutes: 
+            engine.target_total_minutes = [
+                t for t in engine.target_total_minutes if t > starting_minutes
+            ]
 
         # When reusing the trainer's vLLM engine, refresh its weights from the trainer
         # model before the baseline eval. HF applies resume_from_checkpoint inside
@@ -195,7 +220,7 @@ class PassAtKStoppingCallback(TrainerCallback):
         self.on_evaluate(args, state, control, **kwargs)
 
     def on_step_end(self, args, state, control, **kwargs):
-        total_minutes = get_total_minutes_from_state(state)
+        total_minutes = self._synchronized_total_minutes(state)
         crossed = self._decision_engine.consume_crossed_total_minute_targets(total_minutes)
         if crossed:
             control.should_evaluate = True
