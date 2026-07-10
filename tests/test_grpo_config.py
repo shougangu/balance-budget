@@ -197,6 +197,12 @@ def test_grpo_eval_batch_explicit_override_wins():
     assert configs.training_args.per_device_eval_batch_size == 5
 
 
+def test_dataset_cli_accepts_dapo():
+    args = _parse_args(["--model", "qwen2-3B", "--wandb-project", "test",
+                        "--dataset", "dapo"])
+    assert args.dataset == "dapo"
+
+
 def test_grpo_profile_cli_toggle_is_not_supported():
     with pytest.raises(SystemExit):
         _parse_args([

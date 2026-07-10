@@ -167,7 +167,7 @@ def _parse_args(argv=None):
                           help="Dispatch jobs to the 24-hour H100 partition.")
     parser.add_argument("--sft-dataset", default="gsm8k", choices=["gsm8k", "tuluif", "openmath", "openmath-lenp95", "openmath-reasoning"])
     parser.add_argument("--dataset", default="gsm8k",
-                        choices=["tuluif", "gsm8k", "openmath", "ifrlvr",
+                        choices=["tuluif", "gsm8k", "openmath", "ifrlvr", "dapo",
                                  "simplerl", "simplerl-easy", "simplerl-medium",
                                  "simplerl-hard"])
     parser.add_argument("--train-size", type=int, default=10000)

@@ -122,7 +122,7 @@ def _build_reward_funcs(args):
     elif args.dataset == "ifrlvr":
         from tuning.training.reward_functions import ifrlvr_reward_func
         return [ifrlvr_reward_func]
-    elif args.dataset in {"simplerl", "simplerl-easy", "simplerl-medium", "simplerl-hard"}:
+    elif args.dataset in {"dapo", "simplerl", "simplerl-easy", "simplerl-medium", "simplerl-hard"}:
         return [math500_reward_func]
     else:
         raise ValueError(f"No reward function for task: {args.dataset}")
