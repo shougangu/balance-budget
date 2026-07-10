@@ -226,6 +226,11 @@ def _parse_args(argv=None):
                              "Offloads vLLM weights/cache during optimizer steps.")
     parser.add_argument("--grpo-eval-steps", type=int, default=128)
     parser.add_argument("--grpo-batch-size", type=int, default=4)
+    parser.add_argument("--grpo-eval-batch-size", type=int, default=None,
+                        help="Per-device eval batch for the GRPO logps forward pass. "
+                             "Defaults to the GRPOTrainingConfig value. Lower it for long "
+                             "--grpo-max-completion-length runs to avoid eval OOM; it must "
+                             "keep (value * num_gpus) divisible by num_generations_eval.")
     parser.add_argument("--grpo-grad-accum", type=int, default=16)
     parser.add_argument("--grpo-num-generations", type=int, default=8)
     parser.add_argument("--grpo-num-iterations", type=int, default=1,

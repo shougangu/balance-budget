@@ -209,6 +209,8 @@ def _build_post_training_configs(
         training_args.num_train_epochs = args.grpo_num_epochs
         training_args.eval_steps = args.grpo_eval_steps
         training_args.per_device_train_batch_size = args.grpo_batch_size
+        if args.grpo_eval_batch_size is not None:
+            training_args.per_device_eval_batch_size = args.grpo_eval_batch_size
         training_args.gradient_accumulation_steps = args.grpo_grad_accum
         training_args.num_generations = args.grpo_num_generations
         training_args.num_iterations = args.grpo_num_iterations

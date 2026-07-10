@@ -168,6 +168,35 @@ def test_grpo_zero_variance_filter_cli_epsilon():
     assert args.grpo_zero_variance_filter_epsilon == 1e-6
 
 
+def test_grpo_eval_batch_size_cli_default_none():
+    args = _parse_args(["--model", "qwen2-3B", "--wandb-project", "test"])
+    assert args.grpo_eval_batch_size is None
+
+
+def test_grpo_eval_batch_size_cli_explicit():
+    args = _parse_args(["--model", "qwen2-3B", "--wandb-project", "test",
+                        "--grpo-eval-batch-size", "3"])
+    assert args.grpo_eval_batch_size == 3
+
+
+def test_grpo_eval_batch_defaults_to_config_value_when_flag_absent():
+    from tuning.training.pipeline.stages import _build_post_training_configs
+    args = _parse_args(["--model", "llama3-8B", "--wandb-project", "test",
+                        "--grpo-batch-size", "1"])
+    checkpoint = {"checkpoint_path": "/x/llama3-8B_sft-0", "data_points_seen": 0}
+    configs = _build_post_training_configs(args, "grpo", checkpoint, train_size=1000)
+    assert configs.training_args.per_device_eval_batch_size == GRPOTrainingConfig().per_device_eval_batch_size
+
+
+def test_grpo_eval_batch_explicit_override_wins():
+    from tuning.training.pipeline.stages import _build_post_training_configs
+    args = _parse_args(["--model", "llama3-8B", "--wandb-project", "test",
+                        "--grpo-batch-size", "1", "--grpo-eval-batch-size", "5"])
+    checkpoint = {"checkpoint_path": "/x/llama3-8B_sft-0", "data_points_seen": 0}
+    configs = _build_post_training_configs(args, "grpo", checkpoint, train_size=1000)
+    assert configs.training_args.per_device_eval_batch_size == 5
+
+
 def test_grpo_profile_cli_toggle_is_not_supported():
     with pytest.raises(SystemExit):
         _parse_args([
