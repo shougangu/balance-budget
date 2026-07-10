@@ -168,8 +168,8 @@ def _parse_args(argv=None):
     parser.add_argument("--sft-dataset", default="gsm8k", choices=["gsm8k", "tuluif", "openmath", "openmath-lenp95", "openmath-reasoning"])
     parser.add_argument("--dataset", default="gsm8k",
                         choices=["tuluif", "gsm8k", "openmath", "ifrlvr", "dapo",
-                                 "simplerl", "simplerl-easy", "simplerl-medium",
-                                 "simplerl-hard"])
+                                 "mathmix", "simplerl", "simplerl-easy",
+                                 "simplerl-medium", "simplerl-hard"])
     parser.add_argument("--train-size", type=int, default=10000)
     parser.add_argument("--sft-data-size", type=int, default=None)
     parser.add_argument("--dpo-data-size", type=int, default=None)

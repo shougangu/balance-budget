@@ -24,3 +24,8 @@ def test_dapo_uses_math500_reward():
 def test_simplerl_uses_math500_reward():
     from tuning.training.reward_functions import math500_reward_func
     assert _build_reward_funcs(_args("simplerl")) == [math500_reward_func]
+
+
+def test_mathmix_uses_math500_reward():
+    from tuning.training.reward_functions import math500_reward_func
+    assert _build_reward_funcs(_args("mathmix")) == [math500_reward_func]
