@@ -10,6 +10,9 @@
 set -euo pipefail
 cd "$SLURM_SUBMIT_DIR"
 export PYTHONUNBUFFERED=1
+# Concurrent vLLM cold-starts corrupt a shared compile cache ("Bytes object
+# is corrupted"); give each job its own node-local cache root.
+export VLLM_CACHE_ROOT="${SLURM_TMPDIR:-/tmp}/vllm-cache-${SLURM_JOB_ID}"
 
 # Extract --wandb-project, --task-name, and --grpo-vllm-mode from arguments
 WANDB_PROJECT=""
