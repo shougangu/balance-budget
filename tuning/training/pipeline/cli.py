@@ -270,7 +270,7 @@ def _parse_args(argv=None):
 
     parser.add_argument("--grpo-gpu-util", type=float, default=None,
                         help="Override MODEL_TO_GPU_3 vLLM GPU utilisation for GRPO (0.0–1.0).")
-    parser.add_argument("--lora-rank", type=int, default=32,
+    parser.add_argument("--lora-rank", type=int, default=128,
                         help="LoRA rank (r) for SFT and GRPO LoRA training.")
     parser.add_argument("--grpo-lora-target-modules", type=str, nargs="+", default=None)
     parser.add_argument("--grpo-lora-layers-fraction", type=float, default=1.0)
