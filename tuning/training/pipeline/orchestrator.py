@@ -90,12 +90,17 @@ def _sbatch_flags_for_args(args):
     """Return scheduler overrides requested by the pipeline CLI."""
     # return list(_SFT_LONG_SBATCH_FLAGS)
     if getattr(args, "long", False) and getattr(args, "run_sft", False):
-        return list(_SFT_LONG_SBATCH_FLAGS) # _SFT_LONG_SBATCH_FLAGS
+        flags = list(_SFT_LONG_SBATCH_FLAGS) # _SFT_LONG_SBATCH_FLAGS
     elif getattr(args, "long", False):
-        return list(_LONG_SBATCH_FLAGS)
+        flags = list(_LONG_SBATCH_FLAGS)
     elif getattr(args, "short", False):
-        return list(_SHORT_SBATCH_FLAGS)
-    return []
+        flags = list(_SHORT_SBATCH_FLAGS)
+    else:
+        flags = []
+    qos = getattr(args, "qos", None)
+    if qos:
+        flags.append(f"--qos={qos}")
+    return flags
 
 
 def _submit_sbatch_worker(sbatch_script, worker_args, sbatch_flags=(), wait=False):
@@ -179,6 +184,9 @@ def submit_post_training_worker_for_metadata(args, metadata_file,
     allocation = _LIVE_DISPATCH_SBATCH_FLAGS.get(sft_total_minutes)
     sbatch_flags = (list(allocation) if allocation is not None
                     else _sbatch_flags_for_args(args))
+    qos = getattr(args, "qos", None)
+    if allocation is not None and qos:
+        sbatch_flags.append(f"--qos={qos}")
     if args.grpo_num_gpus > 1:
         sbatch_flags.append(f"--gres=gpu:{args.grpo_num_gpus}")
 

@@ -165,6 +165,9 @@ def _parse_args(argv=None):
                           help="Use the 3-hour sbatch script for better queue times.")
     duration.add_argument("--long", action="store_true", default=False,
                           help="Dispatch jobs to the 24-hour H100 partition.")
+    stage.add_argument("--qos", default=None,
+                       help="Slurm QOS for every sbatch job the pipeline submits "
+                            "(e.g. 'high' for the priority queue).")
     parser.add_argument("--sft-dataset", default="gsm8k", choices=["gsm8k", "tuluif", "openmath", "openmath-lenp95", "openmath-reasoning"])
     parser.add_argument("--dataset", default="gsm8k",
                         choices=["tuluif", "gsm8k", "openmath", "ifrlvr", "dapo",
@@ -236,7 +239,7 @@ def _parse_args(argv=None):
     parser.add_argument("--grpo-num-iterations", type=int, default=1,
                         help="μ in the GRPO paper: inner optimization passes per rollout batch.")
     parser.add_argument("--grpo-max-completion-length", type=int, default=2048)
-    parser.add_argument("--grpo-beta", type=float, default=0.0)
+    parser.add_argument("--grpo-beta", type=float, default=1e-4)
     parser.add_argument("--grpo-temperature", type=float, default=1.0)
     parser.add_argument("--grpo-learning-rate", type=float, default=1e-5)
     parser.add_argument("--grpo-warmup-ratio", type=float, default=0.00)

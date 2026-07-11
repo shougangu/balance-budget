@@ -36,9 +36,7 @@ def _build_lora_config(args) -> LoraConfig:
     """LoraConfig with CLI-controllable knobs applied (gradient checkpointing, etc.)."""
     cfg = LoraConfig()
     cfg.r = args.lora_rank
-    # kept lora_alpha = 32 constant, so the O(1/r) scaling factor renders the opt LR ind of rank
-    # according to LoRA without regret and others...
-    # cfg.lora_alpha = round(32 * (args.lora_rank / 32) ** 0.5)  # rsLoRA-equivalent alpha/√r scaling
+    cfg.lora_alpha = round(32 * (args.lora_rank / 32) ** 0.5)  # rsLoRA-equivalent alpha/√r scaling
     if not getattr(args, "gradient_checkpointing", True):
         cfg.use_gradient_checkpointing = False
     return cfg

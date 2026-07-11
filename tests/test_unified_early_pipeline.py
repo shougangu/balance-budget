@@ -227,10 +227,24 @@ class TestParseArgs:
         args = _parse_args(REQUIRED + ["--no-gradient-checkpointing"])
         assert args.gradient_checkpointing is False
 
+    def test_default_grpo_beta(self):
+        assert _parse_args(REQUIRED).grpo_beta == 1e-4
+
     def test_build_lora_config_default_keeps_unsloth_gc(self):
         from tuning.training.pipeline.stages import _build_lora_config
         cfg = _build_lora_config(_parse_args(REQUIRED))
         assert cfg.use_gradient_checkpointing == "unsloth"
+
+    def test_build_lora_config_alpha_scales_with_sqrt_rank(self):
+        from tuning.training.pipeline.stages import _build_lora_config
+        cfg = _build_lora_config(_parse_args(REQUIRED + ["--lora-rank", "128"]))
+        assert cfg.r == 128
+        assert cfg.lora_alpha == 64
+
+    def test_build_lora_config_alpha_at_default_rank(self):
+        from tuning.training.pipeline.stages import _build_lora_config
+        cfg = _build_lora_config(_parse_args(REQUIRED))
+        assert cfg.lora_alpha == 32
 
     def test_build_lora_config_disables_gc(self):
         from tuning.training.pipeline.stages import _build_lora_config
@@ -258,6 +272,23 @@ class TestLiveDispatchArg:
 
     def test_live_dispatch_parses_true(self):
         assert _parse_args(REQUIRED + ["--live-dispatch"]).live_dispatch is True
+
+
+class TestQosArg:
+    def test_default_qos_is_none(self):
+        assert _parse_args(REQUIRED).qos is None
+
+    def test_qos_appended_to_duration_flags(self):
+        args = _parse_args(REQUIRED + ["--long", "--qos", "high"])
+        assert "--qos=high" in _sbatch_flags_for_args(args)
+
+    def test_qos_without_duration_flags(self):
+        args = _parse_args(REQUIRED + ["--qos", "high"])
+        assert _sbatch_flags_for_args(args) == ["--qos=high"]
+
+    def test_no_qos_leaves_flags_unchanged(self):
+        args = _parse_args(REQUIRED + ["--long"])
+        assert not any(f.startswith("--qos") for f in _sbatch_flags_for_args(args))
 
 
 class TestSubmitPostTrainingWorkerForMetadata:
@@ -318,6 +349,19 @@ class TestSubmitPostTrainingWorkerForMetadata:
             self._args(grpo_num_gpus=4), "/tmp/meta.jsonl",
         )
         assert "--gres=gpu:4" in calls[0][1]["sbatch_flags"]
+
+    def test_includes_qos_in_live_dispatch_allocation(self, monkeypatch):
+        from tuning.training.pipeline import orchestrator as orch
+        calls = []
+        monkeypatch.setattr(orch, "_submit_sbatch_worker",
+                            lambda script, argv, **kwargs: (calls.append((argv, kwargs)), "777")[1])
+        monkeypatch.setattr(orch.sys, "argv", ["pipeline.py", "--model", "llama3-3B"])
+        orch.submit_post_training_worker_for_metadata(
+            self._args(qos="high"), "/tmp/meta.jsonl", sft_total_minutes=240,
+        )
+        flags = calls[0][1]["sbatch_flags"]
+        assert "--qos=high" in flags
+        assert flags.count("--qos=high") == 1
 
     def test_single_gpu_grpo_has_no_gres(self, monkeypatch):
         from tuning.training.pipeline import orchestrator as orch
@@ -1135,7 +1179,7 @@ class TestGRPOArgs:
         assert args.grpo_grad_accum == 32
         assert args.grpo_num_generations == 8
         assert args.grpo_max_completion_length == 2048
-        assert args.grpo_beta == 0.0
+        assert args.grpo_beta == 1e-4
         assert args.grpo_temperature == 1.0
         assert args.grpo_loss_type == "dapo"
         assert args.grpo_data_size is None
