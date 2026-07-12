@@ -35,17 +35,17 @@ class _FakeTokenizer:
 # ---------------------------------------------------------------------------
 
 def test_is_adapter_checkpoint_true_when_adapter_config_present(tmp_path):
-    from tuning.training.model_utils import _is_adapter_checkpoint
+    from tuning.training.model_utils import is_adapter_checkpoint
 
     (tmp_path / "adapter_config.json").write_text("{}")
-    assert _is_adapter_checkpoint(str(tmp_path)) is True
+    assert is_adapter_checkpoint(str(tmp_path)) is True
 
 
 def test_is_adapter_checkpoint_false_for_full_model_dir(tmp_path):
-    from tuning.training.model_utils import _is_adapter_checkpoint
+    from tuning.training.model_utils import is_adapter_checkpoint
 
     (tmp_path / "config.json").write_text("{}")
-    assert _is_adapter_checkpoint(str(tmp_path)) is False
+    assert is_adapter_checkpoint(str(tmp_path)) is False
 
 
 def test_adapter_base_path_reads_base_model_name(tmp_path):

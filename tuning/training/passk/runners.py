@@ -10,6 +10,7 @@ import torch.distributed as dist
 from collections import defaultdict
 
 from tuning.training.config_training import DEFAULT_VLLM_MAX_MODEL_LEN
+from tuning.training.model_utils import is_adapter_checkpoint
 
 
 @dataclass
@@ -25,6 +26,19 @@ class RunnerConfig:
     max_model_len: int = DEFAULT_VLLM_MAX_MODEL_LEN
 
 
+def _resolve_checkpoint(base_model_hf: str, checkpoint_path: Optional[str]):
+    """Map an eval checkpoint dir to (engine model path, LoRA adapter path).
+
+    Adapter checkpoints are served as base model + attached adapter; full-model
+    checkpoints (no adapter_config.json) are served directly with no LoRA.
+    """
+    if checkpoint_path is None:
+        return base_model_hf, None
+    if is_adapter_checkpoint(checkpoint_path):
+        return base_model_hf, checkpoint_path
+    return checkpoint_path, None
+
+
 class VLLMRunner:
     """Base class. Subclasses override `run`; `cleanup` is optional."""
 
@@ -32,7 +46,7 @@ class VLLMRunner:
         self.config = config
         self._lora_request_id = 0
 
-    def run(self, model, eval_strategy, adapter_path: Optional[str]) -> List[Dict]:
+    def run(self, model, eval_strategy, checkpoint_path: Optional[str]) -> List[Dict]:
         raise NotImplementedError
 
     def cleanup(self) -> None:
@@ -163,7 +177,7 @@ class ExternalVLLMRunner(VLLMRunner):
         ):
             yield self._llm
 
-    def run(self, model, eval_strategy, adapter_path):
+    def run(self, model, eval_strategy, checkpoint_path):
         with self.awake_for_passk() as llm:
             return self._run_inference(llm, eval_strategy, adapter_path=None)
 
@@ -200,7 +214,7 @@ class ServerVLLMRunner(VLLMRunner):
         sync_weights()
         _invalidate_trainer_vllm_step_cache(self._trainer)
 
-    def run(self, model, eval_strategy, adapter_path):
+    def run(self, model, eval_strategy, checkpoint_path):
         if self._client is None:
             raise RuntimeError(
                 "ServerVLLMRunner.run() called without a VLLMClient; this should "
@@ -237,22 +251,27 @@ class ServerVLLMRunner(VLLMRunner):
         return [{"prompt": p, "responses": resps} for p, resps in grouped.items()]
 
 
-def _make_llm(config: RunnerConfig):
-    """Construct a vLLM LLM with our standard LoRA settings.
+def _make_llm(config: RunnerConfig, model_path: Optional[str] = None, enable_lora: bool = True):
+    """Construct a vLLM LLM serving model_path (default: the base model).
 
     enforce_eager=True is required: CUDA-graph capture is incompatible with dynamic
-    LoRA adapter swapping.
+    LoRA adapter swapping. Full-model checkpoints disable LoRA support entirely.
     """
     from vllm import LLM
+    lora_kwargs = {}
+    if enable_lora:
+        lora_kwargs = {
+            "enable_lora": True,
+            "max_lora_rank": config.lora_max_rank,
+            "max_loras": 1,
+        }
     return LLM(
-        model=config.base_model_hf,
-        enable_lora=True,
-        max_lora_rank=config.lora_max_rank,
-        max_loras=1,
+        model=model_path or config.base_model_hf,
         gpu_memory_utilization=config.vllm_gpu_memory_utilization,
         max_model_len=config.max_model_len,
         trust_remote_code=True,
         enforce_eager=True,
+        **lora_kwargs,
     )
 
 
@@ -270,11 +289,14 @@ def _cleanup_llm(llm):
 class EphemeralVLLMRunner(VLLMRunner):
     """Creates a fresh vLLM engine per call; offloads training model to CPU."""
 
-    def run(self, model, eval_strategy, adapter_path):
+    def run(self, model, eval_strategy, checkpoint_path):
+        model_path, lora_path = _resolve_checkpoint(
+            self.config.base_model_hf, checkpoint_path)
         with self._with_model_offloaded(model):
-            llm = _make_llm(self.config)
+            llm = _make_llm(
+                self.config, model_path=model_path, enable_lora=lora_path is not None)
             try:
-                return self._run_inference(llm, eval_strategy, adapter_path)
+                return self._run_inference(llm, eval_strategy, lora_path)
             finally:
                 _cleanup_llm(llm)
 
@@ -286,10 +308,16 @@ class PersistentVLLMRunner(VLLMRunner):
         super().__init__(config)
         self._llm = None
 
-    def run(self, model, eval_strategy, adapter_path):
+    def run(self, model, eval_strategy, checkpoint_path):
+        if checkpoint_path is not None and not is_adapter_checkpoint(checkpoint_path):
+            raise RuntimeError(
+                "Persistent vLLM only swaps LoRA adapters and cannot serve the "
+                f"full-model checkpoint {checkpoint_path}; use ephemeral mode "
+                "(use_persistent_vllm=False) for full fine-tuning."
+            )
         if self._llm is None:
             self._llm = _make_llm(self.config)
-        return self._run_inference(self._llm, eval_strategy, adapter_path)
+        return self._run_inference(self._llm, eval_strategy, checkpoint_path)
 
     def cleanup(self):
         if self._llm is None:
@@ -308,7 +336,7 @@ class PersistentVLLMRunner(VLLMRunner):
             cleanup_gpu()
 
 
-def _run_data_parallel(eval_strategy, adapter_path: str, config: RunnerConfig) -> List[Dict]:
+def _run_data_parallel(eval_strategy, checkpoint_path: str, config: RunnerConfig) -> List[Dict]:
     """Spawn N subprocess workers, partition prompts, merge results.
 
     Lives at module level so closures over `self` aren't accidentally captured.
@@ -346,14 +374,15 @@ def _run_data_parallel(eval_strategy, adapter_path: str, config: RunnerConfig) -
     result_queue = ctx.Queue()
     stop_tokens = get_stop_tokens()
     eval_seed = tuning_config.get_eval_seed()
+    model_path, lora_path = _resolve_checkpoint(config.base_model_hf, checkpoint_path)
 
     processes = []
     for i in range(actual_num_workers):
         p = ctx.Process(
             target=_data_parallel_worker,
             args=(
-                i, available_gpus[i], message_chunks[i], config.base_model_hf,
-                adapter_path, eval_strategy.n_samples, config.temperature,
+                i, available_gpus[i], message_chunks[i], model_path,
+                lora_path, eval_strategy.n_samples, config.temperature,
                 config.max_tokens, config.chat_template, config.lora_max_rank,
                 config.vllm_gpu_memory_utilization, config.max_model_len, result_queue,
                 stop_tokens, eval_seed,
@@ -391,9 +420,9 @@ def _run_data_parallel(eval_strategy, adapter_path: str, config: RunnerConfig) -
 class DataParallelVLLMRunner(VLLMRunner):
     """Spawns N subprocess vLLM workers; offloads training model to CPU."""
 
-    def run(self, model, eval_strategy, adapter_path):
-        if adapter_path is None:
-            raise ValueError("DataParallelVLLMRunner requires an adapter_path "
+    def run(self, model, eval_strategy, checkpoint_path):
+        if checkpoint_path is None:
+            raise ValueError("DataParallelVLLMRunner requires a checkpoint_path "
                              "(no External-mode equivalent).")
         with self._with_model_offloaded(model):
-            return _run_data_parallel(eval_strategy, adapter_path, self.config)
+            return _run_data_parallel(eval_strategy, checkpoint_path, self.config)

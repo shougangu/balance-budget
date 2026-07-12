@@ -36,7 +36,7 @@ def test_base_runner_is_abstract():
         available_gpus=["0"], num_inference_gpus=1,
     )
     with __import__("pytest").raises(NotImplementedError):
-        VLLMRunner(cfg).run(model=None, eval_strategy=None, adapter_path=None)
+        VLLMRunner(cfg).run(model=None, eval_strategy=None, checkpoint_path=None)
 
 
 def _make_eval_strategy(n=1):
@@ -65,7 +65,7 @@ def test_external_runner_uses_provided_llm_and_skips_lora():
 
     runner = ExternalVLLMRunner(_make_config(), llm=llm)
     out = runner.run(model=MagicMock(), eval_strategy=_make_eval_strategy(),
-                     adapter_path=None)
+                     checkpoint_path=None)
 
     assert out == [{"prompt": "hi", "responses": ["ok"]}]
     args, kwargs = llm.chat.call_args
@@ -92,7 +92,7 @@ def test_external_runner_syncs_sleeping_trainer_vllm():
         trainer=trainer,
     )
     out = runner.run(model=MagicMock(), eval_strategy=_make_eval_strategy(),
-                     adapter_path=None)
+                     checkpoint_path=None)
 
     assert out == [{"prompt": "hi", "responses": ["ok"]}]
     vllm_generation.sync_weights.assert_called_once_with()
@@ -131,7 +131,7 @@ def test_server_runner_syncs_trainer_weights_before_generate(monkeypatch):
         vllm_generation=vllm_generation,
     )
     out = runner.run(
-        model=MagicMock(), eval_strategy=_make_eval_strategy(n=2), adapter_path=None,
+        model=MagicMock(), eval_strategy=_make_eval_strategy(n=2), checkpoint_path=None,
     )
 
     assert call_order == ["sync", "generate"]
@@ -156,7 +156,7 @@ def test_server_runner_requires_sync_weights_when_generation_is_provided(monkeyp
     )
 
     with __import__("pytest").raises(RuntimeError, match="without sync_weights"):
-        runner.run(model=MagicMock(), eval_strategy=_make_eval_strategy(), adapter_path=None)
+        runner.run(model=MagicMock(), eval_strategy=_make_eval_strategy(), checkpoint_path=None)
 
     client.generate.assert_not_called()
 
@@ -169,7 +169,7 @@ def test_ephemeral_runner_creates_and_destroys_llm(monkeypatch):
     fake_output.outputs = [MagicMock(text="ok")]
     fake_llm.chat.return_value = [fake_output]
 
-    monkeypatch.setattr(runners_mod, "_make_llm", lambda cfg: fake_llm)
+    monkeypatch.setattr(runners_mod, "_make_llm", lambda cfg, **kwargs: fake_llm)
     cleanup_calls = []
     monkeypatch.setattr(runners_mod, "_cleanup_llm",
                         lambda llm: cleanup_calls.append(llm))
@@ -179,7 +179,7 @@ def test_ephemeral_runner_creates_and_destroys_llm(monkeypatch):
 
     runner = runners_mod.EphemeralVLLMRunner(_make_config())
     out = runner.run(model=model, eval_strategy=_make_eval_strategy(),
-                     adapter_path="/tmp/adapter")
+                     checkpoint_path="/tmp/adapter")
 
     assert out == [{"prompt": "hi", "responses": ["ok"]}]
     assert cleanup_calls == [fake_llm]
@@ -188,7 +188,7 @@ def test_ephemeral_runner_creates_and_destroys_llm(monkeypatch):
     model.train.assert_called_once()
 
 
-def test_persistent_runner_keeps_llm_alive(monkeypatch):
+def test_persistent_runner_keeps_llm_alive(monkeypatch, tmp_path):
     from tuning.training.passk import runners as runners_mod
 
     fake_llm = MagicMock()
@@ -198,13 +198,14 @@ def test_persistent_runner_keeps_llm_alive(monkeypatch):
 
     make_calls = []
     monkeypatch.setattr(runners_mod, "_make_llm",
-                        lambda cfg: (make_calls.append(cfg), fake_llm)[1])
+                        lambda cfg, **kwargs: (make_calls.append(cfg), fake_llm)[1])
 
+    (tmp_path / "adapter_config.json").write_text("{}")
     runner = runners_mod.PersistentVLLMRunner(_make_config())
     runner.run(model=MagicMock(), eval_strategy=_make_eval_strategy(),
-               adapter_path="/tmp/a")
+               checkpoint_path=str(tmp_path))
     runner.run(model=MagicMock(), eval_strategy=_make_eval_strategy(),
-               adapter_path="/tmp/a")
+               checkpoint_path=str(tmp_path))
 
     assert len(make_calls) == 1
 
@@ -232,7 +233,7 @@ def test_data_parallel_runner_offloads_and_dispatches(monkeypatch):
 
     runner = runners_mod.DataParallelVLLMRunner(cfg)
     out = runner.run(model=model, eval_strategy=_make_eval_strategy(),
-                     adapter_path="/tmp/a")
+                     checkpoint_path="/tmp/a")
 
     assert out == [{"prompt": "hi", "responses": ["ok"]}]
     assert captured["adapter"] == "/tmp/a"
@@ -283,7 +284,7 @@ def test_callback_falls_back_from_persistent_to_ephemeral(monkeypatch):
         config=config, tokenizer=tokenizer, model_name="m",
         base_model_hf="m", primary_eval=eval_strategy, monitor_evals=[],
     )
-    monkeypatch.setattr(callback, "_save_adapter_if_needed",
+    monkeypatch.setattr(callback, "_save_checkpoint_if_needed",
                         lambda model, adapter_dir: "/tmp/a")
 
     scores, results = callback._run_eval_with_results(MagicMock(), eval_strategy)

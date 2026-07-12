@@ -50,6 +50,10 @@ def run_sft(args):
     _init_seeds(args)
     set_chat_template(args.model, simple=args.simple_template)
     gpu_util = MODEL_TO_GPU_1[args.model]
+    if args.sft_full_finetune:
+        # Full-FT evals offload the model to CPU but the optimizer states stay
+        # on the GPU, so the ephemeral vLLM engine gets a smaller share.
+        gpu_util = min(gpu_util, 0.55)
 
     sft_size = args.sft_data_size if args.sft_data_size is not None else args.train_size
     dataset_config = DatasetConfig(
@@ -76,10 +80,14 @@ def run_sft(args):
     training_args.warmup_ratio = args.sft_warmup_ratio
     training_args.lr_scheduler_type = args.sft_lr_scheduler_type
     training_args.learning_rate = args.sft_learning_rate
+    training_args.full_finetune = args.sft_full_finetune
+    training_args.optim = args.sft_optim
 
     passk_config, primary_eval, monitor_evals = _build_eval_components(args, "sft", gpu_util)
     ppl_config = _sft_ppl_config(args)
     tags = _sft_tags(passk_config, ppl_config, primary_eval) + args.tags
+    if args.sft_full_finetune:
+        tags = tags + ["fullft"]
 
     wandb_ctx = _init_wandb_run(args, run_config.model_name, "sft", tags, args.sft_resume)
     run_config.wandb_run_id = wandb_ctx.id if wandb_ctx else ""

@@ -9,7 +9,7 @@ import torch.nn.functional as F
 from tuning.training.callback_utils import save_trainer_state
 
 
-def _is_adapter_checkpoint(model_path):
+def is_adapter_checkpoint(model_path):
     """True when model_path is a saved LoRA adapter directory (no base weights)."""
     return os.path.isfile(os.path.join(model_path, "adapter_config.json"))
 
@@ -45,16 +45,23 @@ def top_layer_indices(model_name_hf, fraction):
     return indices
 
 
-def load_model_with_lora(model_path, model_name, model_load_config, lora_config, use_unsloth=True, layers_to_transform=None):
+def load_model_with_lora(model_path, model_name, model_load_config, lora_config, use_unsloth=True, layers_to_transform=None, full_finetune=False):
     """Load a pretrained model and apply LoRA configuration.
 
     Handles model-specific target_modules (e.g., qwen2-7B needs embed_tokens/lm_head).
     Does NOT mutate lora_config.target_modules.
+
+    full_finetune=True skips the LoRA adapter entirely so every weight trains;
+    it requires the plain HF branch (use_unsloth=False) and full-precision weights.
     """
+    if full_finetune and use_unsloth:
+        raise ValueError("full_finetune requires use_unsloth=False (plain HF/TRL path)")
+    if full_finetune and model_load_config.load_in_4bit:
+        raise ValueError("full_finetune cannot train 4bit-quantized weights; set load_in_4bit=False")
     # An adapter checkpoint stores only the LoRA delta: load its base, then merge the
     # adapter into the weights so the fresh adapter below starts from the same
     # full-model point a merged checkpoint would have provided.
-    is_adapter = _is_adapter_checkpoint(model_path)
+    is_adapter = is_adapter_checkpoint(model_path)
     load_path = _adapter_base_path(model_path) if is_adapter else model_path
     if use_unsloth:
         from unsloth import FastLanguageModel
@@ -125,6 +132,9 @@ def load_model_with_lora(model_path, model_name, model_load_config, lora_config,
         if lora_config.use_gradient_checkpointing:
             model.gradient_checkpointing_enable() 
             # "unsloth" mode, default for Unsloth, is still truthy, so we keep standard checkpointing here
+
+        if full_finetune:
+            return model, tokenizer
 
         target_modules = list(lora_config.target_modules)
         peft_config = PeftLoraConfig(

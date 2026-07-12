@@ -198,6 +198,11 @@ def _parse_args(argv=None):
     parser.add_argument("--sft-eval-steps", type=int, default=64)
     parser.add_argument("--sft-batch-size", type=int, default=16)
     parser.add_argument("--sft-grad-accum", type=int, default=1)
+    parser.add_argument("--sft-full-finetune", action="store_true", default=False,
+                        help="Train all weights instead of a LoRA adapter (plain HF/TRL path).")
+    parser.add_argument("--sft-optim", type=str, default="adamw_8bit",
+                        help="SFT optimizer, e.g. paged_adamw_8bit to page optimizer "
+                             "states to CPU when full fine-tuning is memory-tight.")
     parser.add_argument("--dpo-learning-rate", type=float, default=5e-6)
     parser.add_argument("--dpo-num-epochs", type=int, default=3)
     parser.add_argument("--dpo-eval-steps", type=int, default=256)

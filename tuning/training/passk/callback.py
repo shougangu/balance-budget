@@ -47,9 +47,10 @@ class PassAtKStoppingCallback(TrainerCallback):
 
     Supports two vLLM modes for inference during training:
     - Persistent mode (default): Keeps vLLM engine alive with base model loaded,
-      swaps LoRA adapters each eval. Eliminates cold-start overhead.
-    - Non-persistent mode: Creates/destroys vLLM each eval, but still uses
-      adapter-only saves instead of full merged model saves.
+      swaps LoRA adapters each eval. Eliminates cold-start overhead. LoRA only.
+    - Non-persistent mode: Creates/destroys vLLM each eval from a saved
+      checkpoint: a LoRA adapter for PEFT models, full weights for full
+      fine-tuning.
     """
 
     def __init__(
@@ -275,22 +276,22 @@ class PassAtKStoppingCallback(TrainerCallback):
             trainer=trainer,
         )
 
-    def _save_lora_adapter(self, model, adapter_dir: str):
-        """Save only the LoRA adapter weights (~50MB instead of ~2GB merged)."""
-        print(f"[PassAtKCallback] Saving LoRA adapter to {adapter_dir}...")
+    def _save_eval_checkpoint(self, model, checkpoint_dir: str):
+        """Save the model for vLLM eval: a LoRA adapter (~50MB) for PEFT models,
+        full weights for full fine-tuning."""
+        print(f"[PassAtKCallback] Saving eval checkpoint to {checkpoint_dir}...")
 
-        # Use standard PEFT save to ensure adapter_config.json is created for vLLM
+        # save_pretrained emits adapter_config.json for PEFT models so vLLM can
+        # attach the adapter; plain models emit a full checkpoint instead.
         if hasattr(model, 'save_pretrained'):
-            print(f"[PassAtKCallback] PEFT saving adaptor only")
-            # PEFT model - save adapter only
-            model.save_pretrained(adapter_dir)
+            model.save_pretrained(checkpoint_dir)
         else:
             # Fallback: use unsloth's method
             print(f"[PassAtKCallback] Model does not have save_pretrained, using merged method with lora save")
-            model.save_pretrained_merged(adapter_dir, self.tokenizer, save_method="lora")
-        # Save tokenizer so vLLM doesn't warn about missing tokenizer in adapter dir
-        self.tokenizer.save_pretrained(adapter_dir)
-        print(f"[PassAtKCallback] LoRA adapter saved")
+            model.save_pretrained_merged(checkpoint_dir, self.tokenizer, save_method="lora")
+        # Save tokenizer so vLLM doesn't warn about missing tokenizer in checkpoint dir
+        self.tokenizer.save_pretrained(checkpoint_dir)
+        print(f"[PassAtKCallback] Eval checkpoint saved")
 
     def _save_decision_checkpoint(
         self,
@@ -327,27 +328,27 @@ class PassAtKStoppingCallback(TrainerCallback):
             accelerator=self._accelerator,
         )
 
-    def _save_adapter_if_needed(self, model, adapter_dir: str):
+    def _save_checkpoint_if_needed(self, model, checkpoint_dir: str):
         if isinstance(self._runner, (ExternalVLLMRunner, ServerVLLMRunner)):
             return None
-        self._save_lora_adapter(model, adapter_dir)
-        return adapter_dir
+        self._save_eval_checkpoint(model, checkpoint_dir)
+        return checkpoint_dir
 
     def _run_eval_with_results(self, model, eval_strategy: EvalStrategy) -> tuple[Dict[str, float], List[Dict]]:
         """Run vLLM inference and score responses using the given eval strategy."""
         if dist.is_initialized() and dist.get_world_size() > 1:
             return self._run_eval_with_results_ddp(model, eval_strategy)
-        with tempfile.TemporaryDirectory() as adapter_dir:
-            adapter_path = self._save_adapter_if_needed(model, adapter_dir)
+        with tempfile.TemporaryDirectory() as checkpoint_dir:
+            checkpoint_path = self._save_checkpoint_if_needed(model, checkpoint_dir)
             try:
-                model_results = self._runner.run(model, eval_strategy, adapter_path)
+                model_results = self._runner.run(model, eval_strategy, checkpoint_path)
             except Exception as exc:
                 if isinstance(self._runner, PersistentVLLMRunner):
                     print(f"[PassAtKCallback] Persistent vLLM failed: {exc}, "
                           f"swapping to ephemeral runner and retrying")
                     self._runner.cleanup()
                     self._runner = EphemeralVLLMRunner(self._runner_config)
-                    model_results = self._runner.run(model, eval_strategy, adapter_path)
+                    model_results = self._runner.run(model, eval_strategy, checkpoint_path)
                 else:
                     raise
 
@@ -371,7 +372,7 @@ class PassAtKStoppingCallback(TrainerCallback):
             self._runner.sync_weights()
             rank = dist.get_rank()
             if rank == 0:
-                model_results = self._runner.run(model, eval_strategy, adapter_path=None)
+                model_results = self._runner.run(model, eval_strategy, checkpoint_path=None)
             else:
                 model_results = None
             payload = [model_results]

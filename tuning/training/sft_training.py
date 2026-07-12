@@ -37,6 +37,8 @@ def train_model_sft(
         model_name=run_config.model_name,
         model_load_config=model_load_config,
         lora_config=lora_config,
+        use_unsloth=not training_args.full_finetune,
+        full_finetune=training_args.full_finetune,
     )
     tokenizer = chat_template_func(tokenizer)
 
