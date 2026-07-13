@@ -27,6 +27,14 @@ def _adapter_base_path(model_path):
     return base_path
 
 
+def load_trainable_adapter(model, checkpoint_path, adapter_name="default"):
+    """Load and activate the trainable PEFT adapter at a checkpoint root."""
+    model.load_adapter(
+        os.fspath(checkpoint_path), adapter_name, is_trainable=True
+    )
+    model.set_adapter(adapter_name)
+
+
 def top_layer_indices(model_name_hf, fraction):
     """Return the layer indices for the top fraction of a model's transformer layers.
 

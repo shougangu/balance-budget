@@ -27,6 +27,7 @@ from tuning.training.model_utils import (
     top_layer_indices,
     install_trl_vllm_dtype_patch,
     install_vllm_fp32_logits_patch,
+    load_trainable_adapter,
     sync_colocated_vllm_chat_template,
     upcast_lm_head_to_fp32,
 )
@@ -34,6 +35,7 @@ from tuning.training.server_rollouts import install_client_rendered_chat
 
 from tuning.utils.utils import chat_template_func
 from trl import GRPOTrainer, GRPOConfig
+from transformers.trainer_utils import get_last_checkpoint
 from typing import Callable, List
 from tuning.config import HF_MODEL_MAP
 import subprocess
@@ -409,6 +411,18 @@ def train_model_grpo(
         zero_variance_filter_epsilon=training_args.zero_variance_filter_epsilon,
     )
 
+    resume_checkpoint = training_args.resume_from_checkpoint
+    if resume_checkpoint is True:
+        resume_checkpoint = get_last_checkpoint(run_config.output_dir)
+        if resume_checkpoint is None:
+            raise ValueError(
+                f"No valid checkpoint found in {run_config.output_dir}"
+            )
+    if resume_checkpoint:
+        # GRPO has now created ref from the original policy; restore default afterward.
+        load_trainable_adapter(trainer.model, resume_checkpoint)
+        print(f"[GRPO resume] loaded trainable policy from {resume_checkpoint}")
+
     if trainer.log_completions:
         trainer.add_callback(CompletionsIntervalCallback(trainer, interval=64))
 
@@ -458,7 +472,7 @@ def train_model_grpo(
 
     try:
         trainer_stats = trainer.train(
-            resume_from_checkpoint=training_args.resume_from_checkpoint,
+            resume_from_checkpoint=resume_checkpoint,
         )
     except KeyboardInterrupt:
         if wandb.run:
