@@ -3,6 +3,8 @@
 
 from contextlib import contextmanager
 from dataclasses import dataclass
+import ctypes as ct
+from functools import lru_cache
 from typing import Dict, List, Optional
 
 import torch
@@ -46,7 +48,9 @@ class VLLMRunner:
         self.config = config
         self._lora_request_id = 0
 
-    def run(self, model, eval_strategy, checkpoint_path: Optional[str]) -> List[Dict]:
+    def run(
+        self, model, eval_strategy, checkpoint_path: Optional[str], optimizer=None,
+    ) -> List[Dict]:
         raise NotImplementedError
 
     def cleanup(self) -> None:
@@ -110,6 +114,170 @@ class VLLMRunner:
         finally:
             model.to(original_device)
             model.train()
+
+
+def _unwrap_paged_optimizer(optimizer):
+    """Find a bitsandbytes paged optimizer through Accelerate wrappers."""
+    seen = set()
+    current = optimizer
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        page_manager = getattr(current, "page_mng", None)
+        if (
+            getattr(current, "is_paged", False)
+            and page_manager is not None
+            and callable(getattr(page_manager, "prefetch_all", None))
+        ):
+            return current
+        current = getattr(current, "optimizer", None)
+    return None
+
+
+class _CUMemLocation(ct.Structure):
+    """ctypes mirror of CUDA's two-int CUmemLocation structure."""
+
+    _fields_ = [("type", ct.c_int), ("id", ct.c_int)]
+
+
+_CU_MEM_LOCATION_TYPE_HOST = 0x2
+_CU_DEVICE_CPU = -1
+
+
+@lru_cache(maxsize=1)
+def _load_cuda_driver():
+    """Load the small subset of the CUDA driver API used for UVM prefetch."""
+    try:
+        driver = ct.CDLL("libcuda.so.1")
+    except OSError as exc:
+        raise RuntimeError(
+            "Cannot offload the paged optimizer because libcuda.so.1 could not "
+            "be loaded"
+        ) from exc
+
+    driver.cuGetErrorString.argtypes = [ct.c_int, ct.POINTER(ct.c_char_p)]
+    driver.cuGetErrorString.restype = ct.c_int
+
+    prefetch_v2 = getattr(driver, "cuMemPrefetchAsync_v2", None)
+    if prefetch_v2 is not None:
+        prefetch_v2.argtypes = [
+            ct.c_uint64,
+            ct.c_size_t,
+            _CUMemLocation,
+            ct.c_uint,
+            ct.c_void_p,
+        ]
+        prefetch_v2.restype = ct.c_int
+    else:
+        # CUDA < 12.2 exposes only the legacy API, where -1 is the documented
+        # CPU destination. Keep this fallback so paged eval is not CUDA-13-only.
+        prefetch_legacy = driver.cuMemPrefetchAsync
+        prefetch_legacy.argtypes = [
+            ct.c_uint64,
+            ct.c_size_t,
+            ct.c_int,
+            ct.c_void_p,
+        ]
+        prefetch_legacy.restype = ct.c_int
+
+    return driver
+
+
+def _cuda_error_string(driver, result: int) -> str:
+    message = ct.c_char_p()
+    if driver.cuGetErrorString(result, ct.byref(message)) == 0 and message.value:
+        return message.value.decode("utf-8", errors="replace")
+    return f"CUDA driver error {result}"
+
+
+def _prefetch_managed_tensors_to_cpu(tensors) -> None:
+    """Prefetch bitsandbytes CUDA-managed allocations to host memory.
+
+    bitsandbytes prefetch_all(to_cpu=True) passes device -1 through a native
+    wrapper that first queries it as a GPU ordinal. On CUDA 13 that wrapper also
+    builds a device-type location with id -1. Both paths abort natively with
+    invalid device ordinal instead of raising in Python.
+
+    Calling the CUDA driver v2 API directly lets us describe the destination as
+    host memory. The legacy driver fallback accepts CU_DEVICE_CPU (-1).
+    """
+    if not tensors:
+        return
+
+    driver = _load_cuda_driver()
+    prefetch_v2 = getattr(driver, "cuMemPrefetchAsync_v2", None)
+    host = _CUMemLocation(type=_CU_MEM_LOCATION_TYPE_HOST, id=0)
+
+    # Match GlobalPageManager.prefetch_all's reverse order: tensors needed first
+    # by the next optimizer step are migrated last and are less likely to churn.
+    for tensor in reversed(tensors):
+        nbytes = int(getattr(tensor, "nbytes", 0))
+        if nbytes == 0:
+            continue
+        if not getattr(tensor, "is_paged", False):
+            raise RuntimeError(
+                "bitsandbytes page manager contained a non-paged tensor"
+            )
+
+        pointer = int(tensor.data_ptr())
+        if prefetch_v2 is not None:
+            result = prefetch_v2(pointer, nbytes, host, 0, None)
+        else:
+            result = driver.cuMemPrefetchAsync(
+                pointer, nbytes, _CU_DEVICE_CPU, None,
+            )
+        if result != 0:
+            raise RuntimeError(
+                "CUDA failed to prefetch paged optimizer state to host: "
+                f"{_cuda_error_string(driver, result)}"
+            )
+
+
+def _offload_paged_optimizer_state(optimizer) -> bool:
+    """Migrate initialized bitsandbytes optimizer pages to CPU for vLLM eval.
+
+    The next bitsandbytes optimizer step prefetches each state tensor back to its
+    CUDA device as it is used, so eagerly restoring every page after eval would
+    only increase peak memory before training resumes.
+    """
+    paged_optimizer = _unwrap_paged_optimizer(optimizer)
+    if paged_optimizer is None:
+        if optimizer is not None:
+            print("[VLLMRunner] Optimizer is not paged; state remains on its current device")
+        return False
+
+    page_manager = paged_optimizer.page_mng
+    paged_tensors = list(getattr(page_manager, "paged_tensors", ()))
+    paged_bytes = sum(
+        int(getattr(tensor, "nbytes", 0))
+        for tensor in {id(tensor): tensor for tensor in paged_tensors}.values()
+    )
+
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
+        free_before, total = torch.cuda.mem_get_info()
+    else:
+        free_before = total = None
+
+    # Avoid bitsandbytes' native CPU=-1 path, which aborts on CUDA 13.
+    _prefetch_managed_tensors_to_cpu(paged_tensors)
+
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
+        torch.cuda.empty_cache()
+        free_after, _ = torch.cuda.mem_get_info()
+        print(
+            "[VLLMRunner] Paged optimizer state prefetched to CPU: "
+            f"{paged_bytes / 1024**3:.2f} GiB managed, "
+            f"GPU free {free_before / 1024**3:.2f} -> "
+            f"{free_after / 1024**3:.2f} GiB "
+            f"of {total / 1024**3:.2f} GiB"
+        )
+    else:
+        print(
+            "[VLLMRunner] Paged optimizer state prefetched to CPU: "
+            f"{paged_bytes / 1024**3:.2f} GiB managed"
+        )
+    return True
 
 
 def _trainer_vllm_sleep_mode_enabled(vllm_generation) -> bool:
@@ -177,7 +345,7 @@ class ExternalVLLMRunner(VLLMRunner):
         ):
             yield self._llm
 
-    def run(self, model, eval_strategy, checkpoint_path):
+    def run(self, model, eval_strategy, checkpoint_path, optimizer=None):
         with self.awake_for_passk() as llm:
             return self._run_inference(llm, eval_strategy, adapter_path=None)
 
@@ -214,7 +382,7 @@ class ServerVLLMRunner(VLLMRunner):
         sync_weights()
         _invalidate_trainer_vllm_step_cache(self._trainer)
 
-    def run(self, model, eval_strategy, checkpoint_path):
+    def run(self, model, eval_strategy, checkpoint_path, optimizer=None):
         if self._client is None:
             raise RuntimeError(
                 "ServerVLLMRunner.run() called without a VLLMClient; this should "
@@ -289,10 +457,11 @@ def _cleanup_llm(llm):
 class EphemeralVLLMRunner(VLLMRunner):
     """Creates a fresh vLLM engine per call; offloads training model to CPU."""
 
-    def run(self, model, eval_strategy, checkpoint_path):
+    def run(self, model, eval_strategy, checkpoint_path, optimizer=None):
         model_path, lora_path = _resolve_checkpoint(
             self.config.base_model_hf, checkpoint_path)
         with self._with_model_offloaded(model):
+            _offload_paged_optimizer_state(optimizer)
             llm = _make_llm(
                 self.config, model_path=model_path, enable_lora=lora_path is not None)
             try:
@@ -308,7 +477,7 @@ class PersistentVLLMRunner(VLLMRunner):
         super().__init__(config)
         self._llm = None
 
-    def run(self, model, eval_strategy, checkpoint_path):
+    def run(self, model, eval_strategy, checkpoint_path, optimizer=None):
         if checkpoint_path is not None and not is_adapter_checkpoint(checkpoint_path):
             raise RuntimeError(
                 "Persistent vLLM only swaps LoRA adapters and cannot serve the "
@@ -420,9 +589,10 @@ def _run_data_parallel(eval_strategy, checkpoint_path: str, config: RunnerConfig
 class DataParallelVLLMRunner(VLLMRunner):
     """Spawns N subprocess vLLM workers; offloads training model to CPU."""
 
-    def run(self, model, eval_strategy, checkpoint_path):
+    def run(self, model, eval_strategy, checkpoint_path, optimizer=None):
         if checkpoint_path is None:
             raise ValueError("DataParallelVLLMRunner requires a checkpoint_path "
                              "(no External-mode equivalent).")
         with self._with_model_offloaded(model):
+            _offload_paged_optimizer_state(optimizer)
             return _run_data_parallel(eval_strategy, checkpoint_path, self.config)

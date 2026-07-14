@@ -13,6 +13,8 @@ if "unsloth" not in sys.modules:
 
 sys.modules.setdefault("vllm", MagicMock())
 sys.modules.setdefault("vllm.lora.request", MagicMock())
+sys.modules.setdefault("instruction_following_eval", MagicMock())
+sys.modules.setdefault("instruction_following_eval.evaluation_lib", MagicMock())
 
 import pytest
 
@@ -184,6 +186,73 @@ def test_persistent_runner_rejects_full_checkpoint(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# Eval checkpoint save: full checkpoints need the base model's processor files
+# ---------------------------------------------------------------------------
+
+class _FakeEval:
+    n_samples = 1
+    label_prefix = "p@1"
+    id = "math500"
+
+    def get_test_messages(self):
+        return [[{"role": "user", "content": "hi"}]]
+
+    def get_test_prompts(self):
+        return ["hi"]
+
+    def stopping_metric(self):
+        return "pass_at_1"
+
+
+def _make_passk_callback():
+    from tuning.training.config_training import PassAtKConfig
+    from tuning.training.passk.callback import PassAtKStoppingCallback
+
+    tokenizer = MagicMock()
+    tokenizer.chat_template = "t"
+    tokenizer.apply_chat_template.return_value = "rendered"
+    config = PassAtKConfig(
+        target_pass_at_k=[1.1], enabled=True,
+        use_persistent_vllm=False, num_inference_gpus=1,
+    )
+    return PassAtKStoppingCallback(
+        config=config, tokenizer=tokenizer, model_name="m",
+        base_model_hf="base/model", primary_eval=_FakeEval(),
+    )
+
+
+def test_full_checkpoint_eval_save_includes_base_processor(tmp_path, monkeypatch):
+    import transformers
+
+    processor = MagicMock()
+    from_pretrained = MagicMock(return_value=processor)
+    monkeypatch.setattr(transformers.AutoProcessor, "from_pretrained", from_pretrained)
+
+    callback = _make_passk_callback()
+    model = MagicMock()  # plain model: save_pretrained writes no adapter_config.json
+    callback._save_eval_checkpoint(model, str(tmp_path))
+
+    from_pretrained.assert_called_once_with("base/model")
+    processor.save_pretrained.assert_called_once_with(str(tmp_path))
+
+
+def test_adapter_eval_save_skips_base_processor(tmp_path, monkeypatch):
+    import transformers
+
+    from_pretrained = MagicMock()
+    monkeypatch.setattr(transformers.AutoProcessor, "from_pretrained", from_pretrained)
+
+    callback = _make_passk_callback()
+    model = MagicMock()
+    model.save_pretrained.side_effect = (
+        lambda d, **k: (tmp_path / "adapter_config.json").write_text("{}")
+    )
+    callback._save_eval_checkpoint(model, str(tmp_path))
+
+    from_pretrained.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
 # CLI plumbing
 # ---------------------------------------------------------------------------
 
@@ -200,3 +269,19 @@ def test_cli_full_finetune_flag():
     ])
     assert args.sft_full_finetune is True
     assert args.sft_optim == "paged_adamw_8bit"
+
+
+def test_cli_full_finetune_defaults_to_paged_optimizer():
+    args = _parse_args([
+        "--model", "gemma3-12B", "--wandb-project", "test",
+        "--sft-full-finetune",
+    ])
+    assert args.sft_optim == "paged_adamw_8bit"
+
+
+def test_cli_full_finetune_allows_nonpaged_optimizer_override():
+    args = _parse_args([
+        "--model", "gemma3-12B", "--wandb-project", "test",
+        "--sft-full-finetune", "--sft-optim", "adamw_8bit",
+    ])
+    assert args.sft_optim == "adamw_8bit"

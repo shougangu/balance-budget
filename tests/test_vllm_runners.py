@@ -177,15 +177,124 @@ def test_ephemeral_runner_creates_and_destroys_llm(monkeypatch):
     model = MagicMock()
     model.parameters.return_value = iter([MagicMock(device="cuda:0")])
 
+    optimizer = MagicMock()
+    offloaded = []
+    monkeypatch.setattr(
+        runners_mod, "_offload_paged_optimizer_state",
+        lambda value: offloaded.append(value),
+    )
+
     runner = runners_mod.EphemeralVLLMRunner(_make_config())
     out = runner.run(model=model, eval_strategy=_make_eval_strategy(),
-                     checkpoint_path="/tmp/adapter")
+                     checkpoint_path="/tmp/adapter", optimizer=optimizer)
 
     assert out == [{"prompt": "hi", "responses": ["ok"]}]
     assert cleanup_calls == [fake_llm]
+    assert offloaded == [optimizer]
     model.cpu.assert_called_once()
     model.to.assert_called_once()
     model.train.assert_called_once()
+
+
+def test_paged_optimizer_state_is_prefetched_to_cpu_with_telemetry(
+    monkeypatch, capsys,
+):
+    from tuning.training.passk import runners as runners_mod
+
+    gib = 1024**3
+    page_manager = SimpleNamespace(
+        paged_tensors=[
+            SimpleNamespace(nbytes=2 * gib),
+            SimpleNamespace(nbytes=3 * gib),
+        ],
+        prefetch_all=MagicMock(),
+    )
+    paged_optimizer = SimpleNamespace(is_paged=True, page_mng=page_manager)
+    accelerate_wrapper = SimpleNamespace(optimizer=paged_optimizer)
+
+    prefetched = []
+    monkeypatch.setattr(runners_mod.torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(runners_mod.torch.cuda, "synchronize", MagicMock())
+    monkeypatch.setattr(runners_mod.torch.cuda, "empty_cache", MagicMock())
+    monkeypatch.setattr(
+        runners_mod,
+        "_prefetch_managed_tensors_to_cpu",
+        lambda tensors: prefetched.extend(tensors),
+    )
+    monkeypatch.setattr(
+        runners_mod.torch.cuda, "mem_get_info",
+        MagicMock(side_effect=[(20 * gib, 80 * gib), (25 * gib, 80 * gib)]),
+    )
+
+    assert runners_mod._offload_paged_optimizer_state(accelerate_wrapper) is True
+
+    assert prefetched == page_manager.paged_tensors
+    page_manager.prefetch_all.assert_not_called()
+    assert runners_mod.torch.cuda.synchronize.call_count == 2
+    output = capsys.readouterr().out
+    assert "5.00 GiB managed" in output
+    assert "GPU free 20.00 -> 25.00 GiB" in output
+
+
+def test_managed_pages_use_cuda_host_location_v2(monkeypatch):
+    from tuning.training.passk import runners as runners_mod
+
+    calls = []
+
+    class FakeDriver:
+        def cuMemPrefetchAsync_v2(self, pointer, nbytes, location, flags, stream):
+            calls.append((pointer, nbytes, location.type, location.id, flags, stream))
+            return 0
+
+    monkeypatch.setattr(runners_mod, "_load_cuda_driver", lambda: FakeDriver())
+    tensors = [
+        SimpleNamespace(
+            nbytes=4096, is_paged=True, data_ptr=lambda: 0x1000,
+        ),
+        SimpleNamespace(
+            nbytes=8192, is_paged=True, data_ptr=lambda: 0x2000,
+        ),
+    ]
+
+    runners_mod._prefetch_managed_tensors_to_cpu(tensors)
+
+    assert calls == [
+        (0x2000, 8192, runners_mod._CU_MEM_LOCATION_TYPE_HOST, 0, 0, None),
+        (0x1000, 4096, runners_mod._CU_MEM_LOCATION_TYPE_HOST, 0, 0, None),
+    ]
+
+
+def test_managed_pages_fall_back_to_legacy_cpu_destination(monkeypatch):
+    from tuning.training.passk import runners as runners_mod
+
+    calls = []
+
+    class FakeDriver:
+        def cuMemPrefetchAsync(self, pointer, nbytes, device, stream):
+            calls.append((pointer, nbytes, device, stream))
+            return 0
+
+    monkeypatch.setattr(runners_mod, "_load_cuda_driver", lambda: FakeDriver())
+    tensor = SimpleNamespace(
+        nbytes=4096, is_paged=True, data_ptr=lambda: 0x1000,
+    )
+
+    runners_mod._prefetch_managed_tensors_to_cpu([tensor])
+
+    assert calls == [(0x1000, 4096, runners_mod._CU_DEVICE_CPU, None)]
+
+
+def test_nonpaged_optimizer_state_is_not_offloaded(monkeypatch):
+    from tuning.training.passk import runners as runners_mod
+
+    prefetch_all = MagicMock()
+    optimizer = SimpleNamespace(
+        is_paged=False,
+        page_mng=SimpleNamespace(prefetch_all=prefetch_all),
+    )
+
+    assert runners_mod._offload_paged_optimizer_state(optimizer) is False
+    prefetch_all.assert_not_called()
 
 
 def test_persistent_runner_keeps_llm_alive(monkeypatch, tmp_path):
@@ -222,6 +331,12 @@ def test_data_parallel_runner_offloads_and_dispatches(monkeypatch):
         return [{"prompt": "hi", "responses": ["ok"]}]
 
     monkeypatch.setattr(runners_mod, "_run_data_parallel", fake_dp)
+    optimizer = MagicMock()
+    offloaded = []
+    monkeypatch.setattr(
+        runners_mod, "_offload_paged_optimizer_state",
+        lambda value: offloaded.append(value),
+    )
 
     cfg = RunnerConfig(
         base_model_hf="m", vllm_gpu_memory_utilization=0.6, lora_max_rank=32,
@@ -233,11 +348,12 @@ def test_data_parallel_runner_offloads_and_dispatches(monkeypatch):
 
     runner = runners_mod.DataParallelVLLMRunner(cfg)
     out = runner.run(model=model, eval_strategy=_make_eval_strategy(),
-                     checkpoint_path="/tmp/a")
+                     checkpoint_path="/tmp/a", optimizer=optimizer)
 
     assert out == [{"prompt": "hi", "responses": ["ok"]}]
     assert captured["adapter"] == "/tmp/a"
     assert captured["num_gpus"] == 2
+    assert offloaded == [optimizer]
     model.cpu.assert_called_once()
     model.to.assert_called_once()
 
@@ -255,13 +371,13 @@ def test_callback_falls_back_from_persistent_to_ephemeral(monkeypatch):
     ephemeral_run_calls = []
 
     class FakePersistent(runners_mod.PersistentVLLMRunner):
-        def run(self, model, eval_strategy, adapter_path):
-            persistent_run_calls.append(adapter_path)
+        def run(self, model, eval_strategy, adapter_path, optimizer=None):
+            persistent_run_calls.append((adapter_path, optimizer))
             raise RuntimeError("persistent failed")
 
     class FakeEphemeral(runners_mod.EphemeralVLLMRunner):
-        def run(self, model, eval_strategy, adapter_path):
-            ephemeral_run_calls.append(adapter_path)
+        def run(self, model, eval_strategy, adapter_path, optimizer=None):
+            ephemeral_run_calls.append((adapter_path, optimizer))
             return [{"prompt": "hi", "responses": ["ok"]}]
 
     monkeypatch.setattr(cb_mod, "PersistentVLLMRunner", FakePersistent)
@@ -287,9 +403,14 @@ def test_callback_falls_back_from_persistent_to_ephemeral(monkeypatch):
     monkeypatch.setattr(callback, "_save_checkpoint_if_needed",
                         lambda model, adapter_dir: "/tmp/a")
 
-    scores, results = callback._run_eval_with_results(MagicMock(), eval_strategy)
+    optimizer = MagicMock()
+    scores, results = callback._run_eval_with_results(
+        MagicMock(), eval_strategy, optimizer=optimizer,
+    )
 
     assert scores == {"pass_at_1": 0.5}
     assert len(persistent_run_calls) == 1
     assert len(ephemeral_run_calls) == 1
+    assert persistent_run_calls[0] == ("/tmp/a", optimizer)
+    assert ephemeral_run_calls[0] == ("/tmp/a", optimizer)
     assert isinstance(callback._runner, FakeEphemeral)

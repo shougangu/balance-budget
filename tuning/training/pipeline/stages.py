@@ -51,9 +51,14 @@ def run_sft(args):
     set_chat_template(args.model, simple=args.simple_template)
     gpu_util = MODEL_TO_GPU_1[args.model]
     if args.sft_full_finetune:
-        # Full-FT evals offload the model to CPU but the optimizer states stay
-        # on the GPU, so the ephemeral vLLM engine gets a smaller share.
-        gpu_util = min(gpu_util, 0.55)
+        # if "paged" in args.sft_optim:
+        #     # Ephemeral eval moves both model weights and managed optimizer
+        #     # pages off GPU before vLLM performs its startup memory check.
+        #     gpu_util = 0.9
+        # else:
+        #     # An explicit non-paged optimizer override cannot be migrated by
+        #     # the eval runner, so leave room for its GPU-resident state.
+        gpu_util = min(gpu_util, 0.56)
 
     sft_size = args.sft_data_size if args.sft_data_size is not None else args.train_size
     dataset_config = DatasetConfig(

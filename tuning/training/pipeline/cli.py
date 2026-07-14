@@ -200,9 +200,11 @@ def _parse_args(argv=None):
     parser.add_argument("--sft-grad-accum", type=int, default=1)
     parser.add_argument("--sft-full-finetune", action="store_true", default=False,
                         help="Train all weights instead of a LoRA adapter (plain HF/TRL path).")
-    parser.add_argument("--sft-optim", type=str, default="adamw_8bit",
-                        help="SFT optimizer, e.g. paged_adamw_8bit to page optimizer "
-                             "states to CPU when full fine-tuning is memory-tight.")
+    parser.add_argument(
+        "--sft-optim", type=str, default=None,
+        help="SFT optimizer. Defaults to paged_adamw_8bit for full fine-tuning "
+             "so pass@k eval can offload optimizer state, otherwise adamw_8bit.",
+    )
     parser.add_argument("--dpo-learning-rate", type=float, default=5e-6)
     parser.add_argument("--dpo-num-epochs", type=int, default=3)
     parser.add_argument("--dpo-eval-steps", type=int, default=256)
@@ -370,6 +372,11 @@ def _parse_args(argv=None):
     parser.add_argument("--grpo-judge-max-tokens", type=int, default=64)
 
     args = parser.parse_args(argv)
+
+    if args.sft_optim is None:
+        args.sft_optim = (
+            "paged_adamw_8bit" if args.sft_full_finetune else "adamw_8bit"
+        )
 
     if args.grpo_vllm_mode == "server":
         try:

@@ -289,6 +289,16 @@ class PassAtKStoppingCallback(TrainerCallback):
             # Fallback: use unsloth's method
             print(f"[PassAtKCallback] Model does not have save_pretrained, using merged method with lora save")
             model.save_pretrained_merged(checkpoint_dir, self.tokenizer, save_method="lora")
+        # Full checkpoints are served directly by vLLM, which loads multimodal
+        # models (e.g. gemma3) together with their image processor — files that
+        # model.save_pretrained doesn't emit. Copy them from the base model.
+        # Adapter checkpoints run on the base itself, which already has them.
+        # Written before the tokenizer so the training chat template wins any
+        # shared-file conflicts.
+        if not os.path.isfile(os.path.join(checkpoint_dir, "adapter_config.json")):
+            from transformers import AutoProcessor
+            processor = AutoProcessor.from_pretrained(self._runner_config.base_model_hf)
+            processor.save_pretrained(checkpoint_dir)
         # Save tokenizer so vLLM doesn't warn about missing tokenizer in checkpoint dir
         self.tokenizer.save_pretrained(checkpoint_dir)
         print(f"[PassAtKCallback] Eval checkpoint saved")
@@ -334,21 +344,30 @@ class PassAtKStoppingCallback(TrainerCallback):
         self._save_eval_checkpoint(model, checkpoint_dir)
         return checkpoint_dir
 
-    def _run_eval_with_results(self, model, eval_strategy: EvalStrategy) -> tuple[Dict[str, float], List[Dict]]:
+    def _run_eval_with_results(
+        self, model, eval_strategy: EvalStrategy, optimizer=None,
+    ) -> tuple[Dict[str, float], List[Dict]]:
         """Run vLLM inference and score responses using the given eval strategy."""
         if dist.is_initialized() and dist.get_world_size() > 1:
             return self._run_eval_with_results_ddp(model, eval_strategy)
         with tempfile.TemporaryDirectory() as checkpoint_dir:
             checkpoint_path = self._save_checkpoint_if_needed(model, checkpoint_dir)
+            optimizer_kwargs = (
+                {"optimizer": optimizer} if optimizer is not None else {}
+            )
             try:
-                model_results = self._runner.run(model, eval_strategy, checkpoint_path)
+                model_results = self._runner.run(
+                    model, eval_strategy, checkpoint_path, **optimizer_kwargs,
+                )
             except Exception as exc:
                 if isinstance(self._runner, PersistentVLLMRunner):
                     print(f"[PassAtKCallback] Persistent vLLM failed: {exc}, "
                           f"swapping to ephemeral runner and retrying")
                     self._runner.cleanup()
                     self._runner = EphemeralVLLMRunner(self._runner_config)
-                    model_results = self._runner.run(model, eval_strategy, checkpoint_path)
+                    model_results = self._runner.run(
+                        model, eval_strategy, checkpoint_path, **optimizer_kwargs,
+                    )
                 else:
                     raise
 
@@ -535,8 +554,15 @@ class PassAtKStoppingCallback(TrainerCallback):
         except Exception as exc:
             print(f"[PassAtKCallback] Warning: judge job failed: {exc}")
 
-    def _eval_and_log(self, model, eval_strategy, state, *, is_primary: bool):
-        scores, raw_results = self._run_eval_with_results(model, eval_strategy)
+    def _eval_and_log(
+        self, model, eval_strategy, state, *, is_primary: bool, optimizer=None,
+    ):
+        if optimizer is None:
+            scores, raw_results = self._run_eval_with_results(model, eval_strategy)
+        else:
+            scores, raw_results = self._run_eval_with_results(
+                model, eval_strategy, optimizer=optimizer,
+            )
         total_minutes = get_total_minutes_from_state(state)
         if self._is_rank_zero():
             log_eval_metrics(
@@ -565,6 +591,7 @@ class PassAtKStoppingCallback(TrainerCallback):
         if model is None:
             print("[PassAtKCallback] Warning: model is None, skipping eval")
             return control
+        optimizer = kwargs.get("optimizer")
 
         data_points_seen = self._compute_data_points_seen(args, state)
         total_minutes = get_total_minutes_from_state(state)
@@ -572,12 +599,15 @@ class PassAtKStoppingCallback(TrainerCallback):
         is_baseline_eval = state.global_step == 0 and self._step_offset == 0
         with self._first_eval_limits(active=is_baseline_eval):
             primary_scores = self._eval_and_log(model, self.primary_eval, state,
-                                                is_primary=True)
+                                                is_primary=True, optimizer=optimizer)
             primary_metric = primary_scores[self.primary_eval.stopping_metric()]
             self._primary_metric_history.append(primary_metric)
 
             for monitor_eval in self.monitor_evals:
-                self._eval_and_log(model, monitor_eval, state, is_primary=False)
+                self._eval_and_log(
+                    model, monitor_eval, state,
+                    is_primary=False, optimizer=optimizer,
+                )
 
         decisions = self._decision_engine.decide(
             primary_metric=primary_metric,
