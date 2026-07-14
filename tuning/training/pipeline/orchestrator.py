@@ -259,7 +259,8 @@ def _run_post_training_subprocess(pt_method, base_cmd, pt_flag, metadata_file, a
 def main():
     args = _parse_args()
     size_match = re.search(r"-(\d+)B", args.model)
-    if size_match and int(size_match.group(1)) <= 4:
+    # g4b fails w r128 and KL adaptors extra memory
+    if size_match and int(size_match.group(1)) <= 3:
         args.grpo_batch_size = 8
         args.grpo_grad_accum = 8
     print(args)

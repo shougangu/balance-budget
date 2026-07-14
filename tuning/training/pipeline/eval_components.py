@@ -162,29 +162,29 @@ def _sft_tags(passk_config, ppl_config, primary_eval=None):
         get_early_pairs, early_pair_tag, get_early_abs, early_abs_tag,
     )
     tags = ["sft"]
-    if primary_eval is not None:
-        tags.append(primary_eval.id)
-    if passk_config is not None:
-        k_val = primary_eval.stopping_k if primary_eval else 1
-        # tags.append(f"p{k_val}")
-        # tags.append(early_pair_tag(get_early_pairs(passk_config)))
-    if ppl_config is not None:
-        tags.append("ppl")
-        tags.append(early_pair_tag(get_early_pairs(ppl_config)))
-        tags.append(early_abs_tag(get_early_abs(ppl_config)))
-    if passk_config is None and ppl_config is None:
-        tags.append("no_callbacks")
+    # if primary_eval is not None:
+    #     tags.append(primary_eval.id)
+    # if passk_config is not None:
+    #     k_val = primary_eval.stopping_k if primary_eval else 1
+    #     # tags.append(f"p{k_val}")
+    #     # tags.append(early_pair_tag(get_early_pairs(passk_config)))
+    # if ppl_config is not None:
+    #     tags.append("ppl")
+    #     tags.append(early_pair_tag(get_early_pairs(ppl_config)))
+    #     tags.append(early_abs_tag(get_early_abs(ppl_config)))
+    # if passk_config is None and ppl_config is None:
+    #     tags.append("no_callbacks")
     return tags
 
 
 def post_training_tags(method, checkpoint, primary_eval, passk_config, ppl_config=None):
     """Build W&B tags for a DPO/GRPO/KTO run forked from an SFT checkpoint."""
-    tags = [method, str(checkpoint["threshold_value"]), str(checkpoint["data_points_seen"])]
-    if primary_eval is not None:
-        tags.append(primary_eval.id)
-    if passk_config is not None:
-        k_val = primary_eval.stopping_k if primary_eval else 1
-        tags.append(f"p{k_val}")
-    if ppl_config is not None:
-        tags.append("ppl")
+    tags = [str(checkpoint["threshold_value"]), str(checkpoint["data_points_seen"])] # [method, ...]
+    # if primary_eval is not None:
+    #     tags.append(primary_eval.id)
+    # if passk_config is not None:
+    #     k_val = primary_eval.stopping_k if primary_eval else 1
+    #     tags.append(f"p{k_val}")
+    # if ppl_config is not None:
+    #     tags.append("ppl")
     return tags
