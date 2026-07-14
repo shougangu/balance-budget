@@ -135,7 +135,7 @@ class GRPOTrainingConfig(TrainingArgumentsConfig):
     log_completions: bool = True
     num_completions_to_print: int = 4 # 4 printed on logs only, all on W&B
     save_strategy: str = "steps"
-    save_steps: int = 32
+    save_steps: int = 8
     vllm_importance_sampling_correction: bool = True
     upcast_lm_head_fp32: bool = False  # MiniMax/ScaleRL stability: fp32 lm_head on trainer + vLLM
     use_liger_kernel: bool = False  # Fused Triton lm_head+GRPO loss; avoids materializing [B,T,V] logits
