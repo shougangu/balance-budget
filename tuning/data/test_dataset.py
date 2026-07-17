@@ -214,3 +214,87 @@ def get_math500_test_dataset(num_prompts=None):
         dataset = dataset.select(range(min(num_prompts, len(dataset))))
 
     return dataset
+
+
+def get_minervamath_test_dataset(num_prompts=None):
+    """Load Minerva Math test set with messages, prompt, and reference_answer columns.
+
+    Source is math-ai/minervamath (272 quantitative-reasoning problems, mostly
+    physics/chemistry/math word problems from Lewkowycz et al. 2022), scored
+    with the same math-verify path as MATH-500. Uses the OPENMATH system prompt
+    which asks the model to output $\\boxed{answer}$.
+    """
+    from datasets import load_dataset
+    minerva = load_dataset("math-ai/minervamath", split="test")
+
+    messages_list = []
+    prompts = []
+    reference_answers = []
+
+    for row in minerva:
+        problem = row["question"]
+        ref_answer = str(row["answer"])
+
+        prompt = COMPMATH_STRING.format(problem=problem)
+        messages_list.append([
+            {"role": "system", "content": SYSTEM_MESSAGE_OPENMATH},
+            {"role": "user", "content": prompt},
+        ])
+        prompts.append(prompt)
+        reference_answers.append(ref_answer)
+
+    dataset = Dataset.from_dict({
+        "messages": messages_list,
+        "prompt": prompts,
+        "reference_answer": reference_answers,
+    })
+
+    if num_prompts is not None:
+        dataset = dataset.select(range(min(num_prompts, len(dataset))))
+
+    return dataset
+
+
+def get_olympiadbench_test_dataset(num_prompts=None):
+    """Load OlympiadBench (open-ended text-only math, English competition subset)
+    with messages, prompt, and reference_answer columns.
+
+    Source is Hothan/OlympiadBench config OE_TO_maths_en_COMP, filtered to
+    single-answer problems (the split is already text-only). The first
+    final_answer entry is the reference, scored with the same math-verify path
+    as MATH-500. Uses the OPENMATH system prompt which asks the model to output
+    $\\boxed{answer}$.
+    """
+    from datasets import load_dataset
+    olympiad = load_dataset("Hothan/OlympiadBench", "OE_TO_maths_en_COMP", split="train")
+
+    messages_list = []
+    prompts = []
+    reference_answers = []
+
+    for row in olympiad:
+        if row["is_multiple_answer"]:
+            continue
+        if not row["final_answer"]:
+            continue
+        problem = row["question"]
+        ref_answer = str(row["final_answer"][0])
+
+        prompt = COMPMATH_STRING.format(problem=problem)
+        messages_list.append([
+            {"role": "system", "content": SYSTEM_MESSAGE_OPENMATH},
+            {"role": "user", "content": prompt},
+        ])
+        prompts.append(prompt)
+        reference_answers.append(ref_answer)
+
+    dataset = Dataset.from_dict({
+        "messages": messages_list,
+        "prompt": prompts,
+        "reference_answer": reference_answers,
+    })
+
+    if num_prompts is not None:
+        dataset = dataset.select(range(min(num_prompts, len(dataset))))
+
+    return dataset
