@@ -189,3 +189,17 @@ gha-creds-*.json
 docs/
 artifacts/*
 balance-budget.code-workspace
+
+# Scratch / ad-hoc dumps
+/temp.txt
+
+# Large local artifacts (multi-GB, machine-specific)
+/tuning/checkpoint_backups/
+tuning/slurm/submitscripts
+/wandb_repair/
+
+# Operational runbook (kept local)
+/tuning/slurm/IN_ALLOCATION_HANDOFF.md
+
+# Symlink to the private writeup repo (kept out of the public repo)
+/writeup

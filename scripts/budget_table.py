@@ -1,12 +1,26 @@
-# ABOUTME: Builds compute-budget vs SFT-fraction pass@1 tables from a W&B project.
-# ABOUTME: Reads gsm8k/math500/amc eval curves with keyed history scans and renders markdown/CSV.
+# ABOUTME: Builds compute-budget vs SFT-fraction evaluation tables from a W&B project.
+# ABOUTME: Reads pass@1 and test-time reward curves and renders markdown/CSV.
 
 import argparse
 import csv
 import io
+import json
+import math
 import sys
+import tempfile
+import warnings
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from pathlib import Path
+
+# wandb pulls in pydantic models that attach `repr`/`frozen` to bare Field()
+# calls, which pydantic flags with UnsupportedFieldAttributeWarning on import.
+# The warnings come from a dependency we do not control and are pure noise for
+# this reporting script, so silence just that message before wandb is imported.
+warnings.filterwarnings(
+    "ignore",
+    message=r".*attribute with value .* was provided to the `Field\(\)` function.*",
+)
 
 from scripts.sweetspot_table import parse_wandb_url
 
@@ -14,6 +28,8 @@ BUDGETS_HOURS = [4, 16, 64]
 FRACTIONS = [0.0, 0.25, 0.5, 0.75, 1.0]
 MID_FRACTIONS = [0.25, 0.5, 0.75]
 BENCHMARKS = ["gsm8k", "math500", "amc"]
+TEST_TIME_REWARD_LABEL = "test-time reward"
+TEST_TIME_REWARD_KEY = "eval/reward"
 
 # A GRPO run whose SFT offset is below this counts as trained from base (0% column).
 BASE_OFFSET_MINUTES = 30.0
@@ -45,11 +61,19 @@ AVERAGE_LABEL = "average"
 
 
 @dataclass
+class MetricSource:
+    """W&B coordinates needed to recover a metric's raw per-question samples."""
+
+    global_step: int | None = None
+
+
+@dataclass
 class EvalEvent:
     """One evaluation cluster at a given total-compute point (minutes)."""
 
     total_minutes: float
     values: dict
+    sources: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -77,6 +101,8 @@ class Cell:
     status: str = STATUS_VALUE
     run_name: str = ""
     run_id: str = ""
+    standard_deviation: float | None = None
+    variance_source: MetricSource | None = None
 
 
 def is_sft_run(tags) -> bool:
@@ -130,6 +156,27 @@ def read_after_endpoint(
     return None
 
 
+def read_max_through_endpoint(
+    series, endpoint_minutes, tolerance_minutes: float = DEFAULT_TOLERANCE_MINUTES,
+    epsilon_minutes: float = 1.0,
+) -> float | None:
+    """Maximum value seen through the forced eval at the endpoint.
+
+    Like read_after_endpoint, this only returns a value once the run has logged
+    an evaluation at the budget boundary (within the tolerance window). Earlier
+    evaluations contribute to the maximum; evaluations after the accepted
+    boundary evaluation do not.
+    """
+    values = []
+    for total_minutes, value in series:
+        values.append(value)
+        if total_minutes >= endpoint_minutes - epsilon_minutes:
+            if total_minutes <= endpoint_minutes + tolerance_minutes:
+                return max(values)
+            return None
+    return None
+
+
 def _series_for(run: BudgetRun, benchmark: str):
     """Sorted (total_minutes, value) samples for one benchmark."""
     return [
@@ -137,6 +184,40 @@ def _series_for(run: BudgetRun, benchmark: str):
         for e in run.events
         if benchmark in e.values
     ]
+
+
+def _event_after_endpoint(
+    run: BudgetRun, benchmark: str, endpoint_minutes: float,
+    tolerance_minutes: float = DEFAULT_TOLERANCE_MINUTES,
+    epsilon_minutes: float = 1.0,
+) -> EvalEvent | None:
+    """The metric event at the accepted budget boundary."""
+    for event in run.events:
+        if benchmark not in event.values:
+            continue
+        if event.total_minutes >= endpoint_minutes - epsilon_minutes:
+            if event.total_minutes <= endpoint_minutes + tolerance_minutes:
+                return event
+            return None
+    return None
+
+
+def _max_event_through_endpoint(
+    run: BudgetRun, benchmark: str, endpoint_minutes: float,
+    tolerance_minutes: float = DEFAULT_TOLERANCE_MINUTES,
+    epsilon_minutes: float = 1.0,
+) -> EvalEvent | None:
+    """The event holding the maximum metric through an accepted boundary eval."""
+    candidates = []
+    for event in run.events:
+        if benchmark not in event.values:
+            continue
+        candidates.append(event)
+        if event.total_minutes >= endpoint_minutes - epsilon_minutes:
+            if event.total_minutes <= endpoint_minutes + tolerance_minutes:
+                return max(candidates, key=lambda item: item.values[benchmark])
+            return None
+    return None
 
 
 def _crashed_at_boundary(
@@ -155,6 +236,7 @@ def assign_cells(
     tolerance_minutes: float = DEFAULT_TOLERANCE_MINUTES,
     near_minutes: float = DEFAULT_NEAR_MINUTES,
     last_eval_near_minutes: float = DEFAULT_LAST_EVAL_NEAR_MINUTES,
+    max_pass: bool = False,
 ) -> list:
     """All table cells a single run contributes (readings or o / x markers)."""
     cells = []
@@ -175,11 +257,16 @@ def assign_cells(
         crashed_near = not is_live and _crashed_at_boundary(
             run, endpoint, near_minutes, last_eval_near_minutes
         )
-        for benchmark in BENCHMARKS:
-            value = read_after_endpoint(
-                _series_for(run, benchmark), endpoint,
+        metric_labels = list(BENCHMARKS)
+        if not is_sft_run(run.tags):
+            metric_labels.append(TEST_TIME_REWARD_LABEL)
+        for benchmark in metric_labels:
+            event_reader = _max_event_through_endpoint if max_pass else _event_after_endpoint
+            event = event_reader(
+                run, benchmark, endpoint,
                 tolerance_minutes=tolerance_minutes,
             )
+            value = event.values[benchmark] if event is not None else None
             if value is not None:
                 status = STATUS_VALUE
             elif is_live:
@@ -192,6 +279,7 @@ def assign_cells(
                 Cell(
                     benchmark, budget_hours, fraction, value, status,
                     run.name, run.run_id,
+                    variance_source=(event.sources.get(benchmark) if event else None),
                 )
             )
     return cells
@@ -205,6 +293,7 @@ def build_grid(
     tolerance_minutes: float = DEFAULT_TOLERANCE_MINUTES,
     near_minutes: float = DEFAULT_NEAR_MINUTES,
     last_eval_near_minutes: float = DEFAULT_LAST_EVAL_NEAR_MINUTES,
+    max_pass: bool = False,
 ) -> dict:
     """Resolve runs into a {(benchmark, budget, fraction): Cell} grid.
 
@@ -217,12 +306,110 @@ def build_grid(
         for cell in assign_cells(
             run, budgets=budgets, tolerance_minutes=tolerance_minutes,
             near_minutes=near_minutes, last_eval_near_minutes=last_eval_near_minutes,
+            max_pass=max_pass,
         ):
             key = (cell.benchmark, cell.budget_hours, cell.fraction)
             current = grid.get(key)
             if current is None or STATUS_RANK[cell.status] >= STATUS_RANK[current.status]:
                 grid[key] = cell
     return grid
+
+
+def pass_at_1_standard_deviation(table: dict) -> float:
+    """Plug-in SD of mean pass@1 from each question's repeated responses.
+
+    For question i with m_i responses and empirical success rate p_i, this uses
+    Var(p_i) = p_i(1-p_i)/m_i and the independent-question sum-variance rule.
+    """
+    columns = table.get("columns", [])
+    try:
+        correct_index = columns.index("per_response_correct")
+    except ValueError as exc:
+        raise ValueError("pass@1 table lacks per_response_correct") from exc
+
+    question_variances = []
+    for row in table.get("data", []):
+        values = row[correct_index]
+        if isinstance(values, str):
+            values = json.loads(values)
+        if not isinstance(values, (list, tuple)) or not values:
+            continue
+        numeric = [float(value) for value in values]
+        sample_count = len(numeric)
+        probability = sum(numeric) / sample_count
+        question_variances.append(
+            probability * (1.0 - probability) / sample_count
+        )
+
+    question_count = len(question_variances)
+    if question_count == 0:
+        raise ValueError("pass@1 table has no usable per-question responses")
+    variance = sum(question_variances) / (question_count ** 2)
+    return math.sqrt(max(variance, 0.0))
+
+
+def _table_ref_path(table_ref) -> str:
+    if isinstance(table_ref, str):
+        return table_ref
+    get_value = getattr(table_ref, "get", None)
+    if get_value is not None:
+        path = get_value("path")
+        if path:
+            return path
+    raise ValueError("W&B table reference has no downloadable path")
+
+
+def _load_wandb_table(run, table_ref) -> dict:
+    """Download one existing W&B table without logging any new metrics."""
+    remote_path = _table_ref_path(table_ref)
+    with tempfile.TemporaryDirectory(prefix="budget-table-") as temp_dir:
+        downloaded = run.file(remote_path).download(root=temp_dir, replace=True)
+        local_path = Path(getattr(downloaded, "name", downloaded))
+        with local_path.open(encoding="utf-8") as handle:
+            return json.load(handle)
+
+
+def populate_standard_deviations(grid, raw_runs) -> list[str]:
+    """Populate pass@1 benchmark cells from existing raw W&B tables; return warnings.
+
+    Only the events that actually won a grid cell are downloaded. In --max mode,
+    the variance therefore belongs to the same historical event as the maximum.
+    The test-time reward metric carries no SD: its retained completion tables do
+    not cover the full eval, so only its mean is reported.
+    """
+    runs_by_id = {run.id: run for run in raw_runs}
+    cache = {}
+    warnings = []
+
+    for cell in grid.values():
+        if cell.status != STATUS_VALUE or cell.variance_source is None:
+            continue
+        if cell.benchmark not in BENCHMARKS:
+            continue
+        run = runs_by_id.get(cell.run_id)
+        if run is None:
+            continue
+        source = cell.variance_source
+        try:
+            if source.global_step is None:
+                raise ValueError("metric history has no train/global_step")
+            table_key = f"raw_generations/{cell.benchmark}/step_{source.global_step}"
+            table_ref = run.summary.get(table_key)
+            if table_ref is None:
+                raise ValueError(f"run summary has no {table_key}")
+
+            cache_key = (cell.run_id, _table_ref_path(table_ref), cell.benchmark)
+            result = cache.get(cache_key)
+            if result is None:
+                result = pass_at_1_standard_deviation(_load_wandb_table(run, table_ref))
+                cache[cache_key] = result
+            cell.standard_deviation = result
+        except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
+            warnings.append(
+                f"{cell.run_name} {cell.benchmark} {cell.budget_hours}h "
+                f"{int(cell.fraction * 100)}% SFT: {exc}"
+            )
+    return warnings
 
 
 def add_average_cells(
@@ -245,12 +432,20 @@ def add_average_cells(
             if readings:
                 value = sum(c.value for c in readings) / len(readings)
                 status = STATUS_VALUE
+                if all(c.standard_deviation is not None for c in readings):
+                    standard_deviation = math.sqrt(sum(
+                        c.standard_deviation ** 2 for c in readings
+                    )) / len(readings)
+                else:
+                    standard_deviation = None
             else:
                 value = None
                 status = marker.status
+                standard_deviation = None
             grid[(AVERAGE_LABEL, budget, fraction)] = Cell(
                 AVERAGE_LABEL, budget, fraction, value, status,
                 marker.run_name, marker.run_id,
+                standard_deviation=standard_deviation,
             )
 
 
@@ -271,6 +466,29 @@ def format_table(grid, benchmark: str, budgets=BUDGETS_HOURS, fractions=FRACTION
         row = [f"{budget} Hours"]
         for fraction in fractions:
             row.append(_render_cell(grid.get((benchmark, budget, fraction))))
+        lines.append("| " + " | ".join(row) + " |")
+    return "\n".join(lines) + "\n"
+
+
+def format_standard_deviation_table(
+    grid, benchmark: str, budgets=BUDGETS_HOURS, fractions=FRACTIONS,
+) -> str:
+    """Render the SD of each reported mean as a markdown table."""
+    header = ["% of compute for SFT $\\rightarrow$"] + [
+        _fmt_frac_header(f) for f in fractions
+    ]
+    sep = ["---"] + [":--:" for _ in fractions]
+    lines = [
+        "| " + " | ".join(header) + " |",
+        "| " + " | ".join(sep) + " |",
+        "| Total Compute Hours $\\downarrow$ |" + " |" * len(fractions),
+    ]
+    for budget in budgets:
+        row = [f"{budget} Hours"]
+        for fraction in fractions:
+            row.append(_render_standard_deviation_cell(
+                grid.get((benchmark, budget, fraction))
+            ))
         lines.append("| " + " | ".join(row) + " |")
     return "\n".join(lines) + "\n"
 
@@ -303,6 +521,34 @@ def _render_cell(cell) -> str:
     return STATUS_MARKER.get(cell.status, "")
 
 
+def _render_standard_deviation_cell(cell) -> str:
+    """SD percentage for a reading, else the o / x marker (blank if unknown)."""
+    if cell is None:
+        return ""
+    if cell.status != STATUS_VALUE:
+        return STATUS_MARKER.get(cell.status, "")
+    if cell.standard_deviation is None:
+        return ""
+    return f"{cell.standard_deviation * 100:.1f}%"
+
+
+def _render_combined_cell(cell) -> str:
+    """A reading as ``mean ± SD``, else the o / x marker (blank if no run).
+
+    The ``± SD`` is appended only when the standard deviation was recovered
+    (pass@1 benchmarks); a bare mean is shown otherwise so the cell still
+    reports its value instead of collapsing to nothing.
+    """
+    if cell is None:
+        return ""
+    if cell.status != STATUS_VALUE:
+        return STATUS_MARKER.get(cell.status, "")
+    rendered = f"{cell.value * 100:.1f}%"
+    if cell.standard_deviation is not None:
+        rendered += f" ± {cell.standard_deviation * 100:.1f}%"
+    return rendered
+
+
 def _render_run_id(cell) -> str:
     """The W&B ID for a populated cell (blank if no run fills it)."""
     return cell.run_id if cell is not None else ""
@@ -321,6 +567,63 @@ def format_csv(grid, benchmark: str, budgets=BUDGETS_HOURS, fractions=FRACTIONS)
         row = [f"{budget} Hours"]
         for fraction in fractions:
             row.append(_render_cell(grid.get((benchmark, budget, fraction))))
+        writer.writerow(row)
+    return buffer.getvalue()
+
+
+def format_standard_deviation_csv(
+    grid, benchmark: str, budgets=BUDGETS_HOURS, fractions=FRACTIONS,
+) -> str:
+    """Render standard deviations as CSV (blank where no SD was recovered)."""
+    buffer = io.StringIO()
+    writer = csv.writer(buffer, lineterminator="\n")
+    writer.writerow(["Total Compute Hours"] + [_fmt_frac_header(f) for f in fractions])
+    for budget in budgets:
+        row = [f"{budget} Hours"]
+        for fraction in fractions:
+            row.append(_render_standard_deviation_cell(
+                grid.get((benchmark, budget, fraction))
+            ))
+        writer.writerow(row)
+    return buffer.getvalue()
+
+
+def format_combined_table(
+    grid, benchmark: str, budgets=BUDGETS_HOURS, fractions=FRACTIONS,
+) -> str:
+    """Render one benchmark's ``mean ± SD`` budget table as markdown."""
+    header = ["% of compute for SFT $\\rightarrow$"] + [
+        _fmt_frac_header(f) for f in fractions
+    ]
+    sep = ["---"] + [":--:" for _ in fractions]
+    lines = [
+        "| " + " | ".join(header) + " |",
+        "| " + " | ".join(sep) + " |",
+        "| Total Compute Hours $\\downarrow$ |" + " |" * len(fractions),
+    ]
+    for budget in budgets:
+        row = [f"{budget} Hours"]
+        for fraction in fractions:
+            row.append(_render_combined_cell(
+                grid.get((benchmark, budget, fraction))
+            ))
+        lines.append("| " + " | ".join(row) + " |")
+    return "\n".join(lines) + "\n"
+
+
+def format_combined_csv(
+    grid, benchmark: str, budgets=BUDGETS_HOURS, fractions=FRACTIONS,
+) -> str:
+    """Render ``mean ± SD`` as CSV (only pass@1 benchmarks carry the ± term)."""
+    buffer = io.StringIO()
+    writer = csv.writer(buffer, lineterminator="\n")
+    writer.writerow(["Total Compute Hours"] + [_fmt_frac_header(f) for f in fractions])
+    for budget in budgets:
+        row = [f"{budget} Hours"]
+        for fraction in fractions:
+            row.append(_render_combined_cell(
+                grid.get((benchmark, budget, fraction))
+            ))
         writer.writerow(row)
     return buffer.getvalue()
 
@@ -350,29 +653,47 @@ def filter_runs_by_tag(runs, tag):
 def _fetch_events(run, page_size: int = DEFAULT_PAGE_SIZE) -> tuple[list, float]:
     """Pull eval events and the SFT offset from a run's history.
 
-    Each benchmark's ``eval/<b>_pass_at_1`` is logged on a step that also carries
-    ``total_minutes``, so one keyed scan per benchmark returns just those points
-    already stamped with their total-compute x. Requesting all keys at once would
-    return nothing — the three benchmarks live on separate steps, so no single row
-    carries all of them. Events sharing a total_minutes (the three benchmarks of
-    one eval cluster) merge into one EvalEvent. The offset is the earliest eval's
-    total_minutes: the SFT compute a fork resumed from, which places it on the grid.
+    Each metric is logged on a step that also carries total_minutes, so one keyed
+    scan per metric returns just those points already stamped with total compute.
+    Requesting all keys at once would return nothing because the metrics can live
+    on separate rows. Events sharing a total_minutes merge into one EvalEvent.
+
+    The offset is the earliest pass@1 evaluation, which identifies the SFT compute
+    a fork resumed from. Reward-only points do not affect run placement.
     """
     by_minutes = {}
-    for benchmark in BENCHMARKS:
-        key = f"eval/{benchmark}_pass_at_1"
-        for row in run.scan_history(keys=[TOTAL_MINUTES_KEY, key], page_size=page_size):
+    pass_minutes = []
+    history_keys = {
+        **{benchmark: f"eval/{benchmark}_pass_at_1" for benchmark in BENCHMARKS},
+        TEST_TIME_REWARD_LABEL: TEST_TIME_REWARD_KEY,
+    }
+    for metric_label, key in history_keys.items():
+        keys = [TOTAL_MINUTES_KEY, key, "train/global_step"]
+        for row in run.scan_history(keys=keys, page_size=page_size):
             tm = row.get(TOTAL_MINUTES_KEY)
             value = row.get(key)
             if tm is None or value is None:
                 continue
             cluster = next((t for t in by_minutes if abs(t - tm) <= 1e-06), tm)
-            by_minutes.setdefault(cluster, {})[benchmark] = value
+            event_data = by_minutes.setdefault(
+                cluster, {"values": {}, "sources": {}},
+            )
+            event_data["values"][metric_label] = value
+            event_data["sources"][metric_label] = MetricSource(
+                global_step=row.get("train/global_step"),
+            )
+            if metric_label in BENCHMARKS:
+                pass_minutes.append(tm)
+
     events = [
-        EvalEvent(total_minutes=tm, values=values)
-        for tm, values in sorted(by_minutes.items())
+        EvalEvent(
+            total_minutes=tm,
+            values=event_data["values"],
+            sources=event_data["sources"],
+        )
+        for tm, event_data in sorted(by_minutes.items())
     ]
-    offset = min(by_minutes) if by_minutes else 0.0
+    offset = min(pass_minutes) if pass_minutes else 0.0
     return events, offset
 
 
@@ -410,7 +731,7 @@ def main(argv: list[str] | None = None) -> None:
     import wandb
 
     parser = argparse.ArgumentParser(
-        description="Compute-budget vs SFT-fraction pass@1 tables from W&B"
+        description="Compute-budget vs SFT-fraction evaluation tables from W&B"
     )
     parser.add_argument("url", help="W&B project URL")
     parser.add_argument(
@@ -431,6 +752,10 @@ def main(argv: list[str] | None = None) -> None:
     )
     parser.add_argument(
         "--raw", action="store_true", help="Also print which run fills each cell"
+    )
+    parser.add_argument(
+        "--max", dest="max_pass", action="store_true",
+        help="Use the maximum metric value seen through each time budget",
     )
     parser.add_argument(
         "--csv", action="store_true", default=True,
@@ -457,7 +782,9 @@ def main(argv: list[str] | None = None) -> None:
         runs, tolerance_minutes=args.tolerance_minutes,
         near_minutes=args.near_minutes,
         last_eval_near_minutes=args.last_eval_near_minutes,
+        max_pass=args.max_pass,
     )
+    variance_warnings = populate_standard_deviations(grid, raw_runs)
     add_average_cells(grid)
 
     legend = "o = run still training toward this budget; x = run died at this budget before its eval (re-evaluate)"
@@ -466,16 +793,16 @@ def main(argv: list[str] | None = None) -> None:
         legend if args.csv else f"_{legend}_\n",
         file=sys.stderr if args.csv else sys.stdout,
     )
+    for warning in variance_warnings:
+        print(f"standard-deviation warning: {warning}", file=sys.stderr)
     print(format_id_csv(grid, AVERAGE_LABEL))
-    for benchmark in BENCHMARKS + [AVERAGE_LABEL]:
+    for benchmark in BENCHMARKS + [AVERAGE_LABEL, TEST_TIME_REWARD_LABEL]:
         if args.csv:
             print(f"{project} — {benchmark}")
-            print(format_csv(grid, benchmark))
-            print(f"{project} — {benchmark} — W&B run IDs")
+            print(format_combined_csv(grid, benchmark))
         else:
             print(f"### {project} — {benchmark}\n")
-            print(format_table(grid, benchmark))
-            print(f"### {project} — {benchmark} — W&B run IDs\n")
+            print(format_combined_table(grid, benchmark))
         if args.raw:
             for budget in BUDGETS_HOURS:
                 for fraction in FRACTIONS:
