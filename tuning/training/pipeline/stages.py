@@ -219,6 +219,7 @@ def _build_post_training_configs(
         training_args.learning_rate = args.dpo_learning_rate
     else:
         training_args = GRPOTrainingConfig()
+        training_args.num_compute_gpus = args.grpo_num_gpus
         training_args.num_train_epochs = args.grpo_num_epochs
         training_args.eval_steps = args.grpo_eval_steps
         training_args.per_device_train_batch_size = args.grpo_batch_size

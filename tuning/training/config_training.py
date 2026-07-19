@@ -105,6 +105,7 @@ class DPOTrainingConfig(TrainingArgumentsConfig):
 
 
 class GRPOTrainingConfig(TrainingArgumentsConfig):
+    num_compute_gpus: int = 2
     num_generations: int = 8
     num_generations_eval: int = 8
     num_iterations: int = 1
@@ -146,6 +147,7 @@ class GRPOTrainingConfig(TrainingArgumentsConfig):
     def to_hf_args(self, output_dir: str) -> dict:
         """Return kwargs for GRPOConfig constructor."""
         d = super().to_hf_args(output_dir)
+        d.pop("num_compute_gpus", None)  # consumed by grpo_training.py for GPU-minute accounting
         d.pop("upcast_lm_head_fp32", None)  # consumed by grpo_training.py, not GRPOConfig
         d.pop("zero_variance_filter", None)  # consumed by grpo_training.py, not GRPOConfig
         d.pop("zero_variance_filter_epsilon", None)  # consumed by grpo_training.py, not GRPOConfig

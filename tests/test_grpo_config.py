@@ -26,6 +26,7 @@ def restore_seed_globals():
 
 def test_grpo_config_defaults():
     config = GRPOTrainingConfig()
+    assert config.num_compute_gpus == 2
     assert config.num_generations == 8
     assert config.max_completion_length == 2048
     assert config.beta == 0.0
@@ -62,6 +63,7 @@ def test_grpo_config_to_hf_args():
     assert d["vllm_max_model_length"] == 6144
     assert d["save_strategy"] == "steps"
     # Should not contain fields that are not GRPOConfig params
+    assert "num_compute_gpus" not in d
     assert "eval_accumulation_steps" not in d
     assert "zero_variance_filter" not in d
     assert "zero_variance_filter_epsilon" not in d
@@ -195,6 +197,15 @@ def test_grpo_eval_batch_explicit_override_wins():
     checkpoint = {"checkpoint_path": "/x/llama3-8B_sft-0", "data_points_seen": 0}
     configs = _build_post_training_configs(args, "grpo", checkpoint, train_size=1000)
     assert configs.training_args.per_device_eval_batch_size == 5
+
+
+def test_grpo_compute_gpu_count_follows_cli():
+    from tuning.training.pipeline.stages import _build_post_training_configs
+    args = _parse_args(["--model", "gemma3-12B", "--wandb-project", "test",
+                        "--grpo-num-gpus", "4"])
+    checkpoint = {"checkpoint_path": "/x/gemma3-12B_sft-0", "data_points_seen": 0}
+    configs = _build_post_training_configs(args, "grpo", checkpoint, train_size=1000)
+    assert configs.training_args.num_compute_gpus == 4
 
 
 def test_dataset_cli_accepts_dapo():
