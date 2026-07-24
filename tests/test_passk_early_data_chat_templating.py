@@ -25,6 +25,23 @@ class FakeTokenizer:
             return [ord(ch) for ch in text]
         return text
 
+    def __call__(
+        self,
+        texts,
+        truncation,
+        max_length,
+        padding,
+        add_special_tokens,
+    ):
+        assert truncation is True
+        assert padding is False
+        assert add_special_tokens is False
+        input_ids = [[ord(ch) for ch in text[:max_length]] for text in texts]
+        return {
+            "input_ids": input_ids,
+            "attention_mask": [[1] * len(ids) for ids in input_ids],
+        }
+
 
 LLAMA33_ASSISTANT_PREFIX = "<|start_header_id|>assistant<|end_header_id|>\n\n"
 LLAMA33_ASSISTANT_SUFFIX = "<|eot_id|>"
@@ -74,6 +91,45 @@ def test_passk_early_sft_loaded_data_is_chat_templated(monkeypatch, tmp_path):
     assert "text" in row
     assert "<system>Be concise.</system>" in row["text"]
     assert f"{LLAMA33_ASSISTANT_PREFIX}hello{LLAMA33_ASSISTANT_SUFFIX}" in row["text"]
+
+
+def test_sft_rendered_text_is_explicitly_tokenized():
+    dataset = DatasetDict(
+        {
+            "train": Dataset.from_dict(
+                {
+                    "messages": [[
+                        {"role": "user", "content": "hello"},
+                        {"role": "assistant", "content": "world"},
+                    ]],
+                    "is_persona_if": [True],
+                }
+            ),
+            "test": Dataset.from_dict(
+                {
+                    "messages": [[
+                        {"role": "user", "content": "goodbye"},
+                        {"role": "assistant", "content": "world"},
+                    ]],
+                    "is_persona_if": [False],
+                }
+            ),
+        }
+    )
+    tokenizer = FakeTokenizer(LLAMA33_ASSISTANT_PREFIX, LLAMA33_ASSISTANT_SUFFIX)
+
+    rendered = utils.apply_chat_template(tokenizer, dataset)
+    tokenized = utils.tokenize_sft_dataset(
+        tokenizer,
+        rendered,
+        max_length=32,
+        num_proc=None,
+    )
+
+    expected = [ord(ch) for ch in rendered["train"][0]["text"][:32]]
+    assert tokenized["train"][0]["input_ids"] == expected
+    assert tokenized["train"][0]["attention_mask"] == [1] * len(expected)
+    assert tokenized["train"][0]["is_persona_if"] is True
 
 
 def test_passk_early_pt_loaded_data_is_chat_templated(monkeypatch, tmp_path):

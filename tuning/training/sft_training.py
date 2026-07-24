@@ -9,7 +9,12 @@ from tuning.training.callback_utils import (
     OffsetAwareWandbCallback,
     remove_default_wandb_callback,
 )
-from tuning.utils.utils import chat_template_func, apply_chat_template, get_response_delimiters
+from tuning.utils.utils import (
+    chat_template_func,
+    apply_chat_template,
+    get_response_delimiters,
+    tokenize_sft_dataset,
+)
 from typing import List, Optional
 from pathlib import Path
 import tuning.config
@@ -17,6 +22,7 @@ from tuning.config import HF_MODEL_MAP, MODELS_DIR
 import torch
 import wandb
 import subprocess
+
 
 def train_model_sft(
     run_config: SFTRunConfig = None,
@@ -44,6 +50,12 @@ def train_model_sft(
 
     dataset = apply_chat_template(tokenizer, dataset)
     print(f"Example SFT input:\n{dataset['train'][0]['text']}")
+    dataset = tokenize_sft_dataset(
+        tokenizer,
+        dataset,
+        max_length=model_load_config.max_seq_length,
+        num_proc=4,
+    )
 
     callbacks = [OffsetAwareWandbCallback()]
     if passk_config is not None and passk_config.enabled:

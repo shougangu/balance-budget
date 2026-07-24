@@ -156,6 +156,27 @@ def apply_chat_template(tokenizer, dataset):
     return dataset
 
 
+def tokenize_sft_dataset(tokenizer, dataset, max_length, num_proc=4):
+    """Tokenize rendered SFT text before Unsloth inspects the dataset."""
+
+    def _tokenize(examples):
+        return tokenizer(
+            examples["text"],
+            truncation=True,
+            max_length=max_length,
+            padding=False,
+            add_special_tokens=False,
+        )
+
+    map_kwargs = {
+        "batched": True,
+        "desc": 'Tokenizing SFT dataset["text"]',
+    }
+    if num_proc is not None:
+        map_kwargs["num_proc"] = num_proc
+    return dataset.map(_tokenize, **map_kwargs)
+
+
 def apply_chat_template_pt(tokenizer, dataset):
     def _format(examples):
         prompts = []
