@@ -54,13 +54,29 @@ def get_train_dataset(run_config: Union[PTRunConfig, SFTRunConfig]) -> DatasetDi
     is_dist = dist.is_initialized() and dist.get_world_size() > 1
     rank = dist.get_rank() if is_dist else 0
 
+    train_size = run_config.dataset_config.train_size
+    full_dataset_path = f"{DATASETS_DIR}/{dataset_stub}"
+    full_dataset = load_from_disk(full_dataset_path)
+
+    # A request that covers the entire split does not need a sampled cache.
+    # Returning the memory-mapped base dataset avoids materializing a redundant
+    # random permutation of every row. All DDP ranks can safely read it.
+    if train_size >= len(full_dataset["train"]):
+        if rank == 0:
+            if train_size > len(full_dataset["train"]):
+                print(
+                    f"[WARNING] Requested train_size={train_size} exceeds full "
+                    f"dataset size={len(full_dataset['train'])}"
+                )
+            print(
+                f"Using full dataset directly from {full_dataset_path}; "
+                "no sampled cache will be written"
+            )
+        return full_dataset
+
     sampled_dataset = None
     if rank == 0:
-        train_size = run_config.dataset_config.train_size
-
-        full_dataset_path = f"{DATASETS_DIR}/{dataset_stub}"
         print(f"Loading dataset from {full_dataset_path}")
-        full_dataset = load_from_disk(full_dataset_path)
         print(f"Full dataset: {full_dataset}")
 
         unique_column = "prompt" if "prompt" in full_dataset["train"].column_names else None
