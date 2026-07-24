@@ -13,7 +13,7 @@ from math_verify.errors import TimeoutException
 from tuning.evaluation.gsm8k_scoring import is_correct as gsm8k_is_correct
 from tuning.evaluation.math500_scoring import is_correct as math500_is_correct
 
-BASE_DIR = Path('/home/shougan/projects/aip-fredashi/shougan/balance-budget')
+BASE_DIR = Path(__file__).resolve().parent.parent.parent  # repo root (balance-budget)
 IFEVAL_INPUT_PATH = BASE_DIR / "instruction_following_eval/data/input_data.jsonl"
 
 
