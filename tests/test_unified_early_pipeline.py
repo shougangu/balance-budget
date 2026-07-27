@@ -172,6 +172,20 @@ class TestParseArgs:
     def test_default_max_seq_length(self):
         assert _parse_args(REQUIRED).max_seq_length == 1024
 
+    def test_default_sft_max_seq_length(self):
+        assert _parse_args(REQUIRED).sft_max_seq_length is None
+
+    def test_custom_sft_max_seq_length(self):
+        args = _parse_args(REQUIRED + ["--sft-max-seq-length", "2048"])
+        assert args.sft_max_seq_length == 2048
+
+    def test_default_grpo_max_seq_length(self):
+        assert _parse_args(REQUIRED).grpo_max_seq_length is None
+
+    def test_custom_grpo_max_seq_length(self):
+        args = _parse_args(REQUIRED + ["--grpo-max-seq-length", "4096"])
+        assert args.grpo_max_seq_length == 4096
+
     def test_default_metadata_merge(self):
         assert _parse_args(REQUIRED).metadata_merge == "union"
 

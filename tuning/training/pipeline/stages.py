@@ -75,7 +75,11 @@ def run_sft(args):
     )
     lora_config = _build_lora_config(args)
     model_load_config = ModelLoadConfig()
-    model_load_config.max_seq_length = args.max_seq_length
+    model_load_config.max_seq_length = (
+        args.sft_max_seq_length
+        if args.sft_max_seq_length is not None
+        else args.max_seq_length
+    )
     training_args = TrainingArgumentsConfig()
     training_args.resume_from_checkpoint = bool(args.sft_resume)
     training_args.num_train_epochs = args.sft_num_epochs
@@ -203,7 +207,11 @@ def _build_post_training_configs(
         lora_config.target_modules = args.grpo_lora_target_modules
 
     model_load_config = ModelLoadConfig()
-    model_load_config.max_seq_length = args.max_seq_length
+    model_load_config.max_seq_length = (
+        args.grpo_max_seq_length
+        if method == "grpo" and args.grpo_max_seq_length is not None
+        else args.max_seq_length
+    )
 
     if method == "grpo" and args.grpo_precision == "fp16":
         model_load_config.dtype = torch.float16
@@ -227,6 +235,11 @@ def _build_post_training_configs(
             training_args.per_device_eval_batch_size = args.grpo_eval_batch_size
         training_args.gradient_accumulation_steps = args.grpo_grad_accum
         training_args.num_generations = args.grpo_num_generations
+        training_args.num_generations_eval = (
+            args.grpo_num_generations_eval
+            if args.grpo_num_generations_eval is not None
+            else args.grpo_num_generations
+        )
         training_args.num_iterations = args.grpo_num_iterations
         training_args.max_completion_length = args.grpo_max_completion_length
         training_args.vllm_max_model_length = 4096 + args.grpo_max_completion_length

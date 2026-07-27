@@ -182,6 +182,14 @@ def _parse_args(argv=None):
     parser.add_argument("--monitor-evals", nargs="*", default=[],
                         choices=["ifeval", "gsm8k", "math500", "amc", "ifbench"])
     parser.add_argument("--max-seq-length", type=int, default=1024)
+    parser.add_argument(
+        "--sft-max-seq-length", type=int, default=None,
+        help="SFT-only context limit; defaults to --max-seq-length.",
+    )
+    parser.add_argument(
+        "--grpo-max-seq-length", type=int, default=None,
+        help="GRPO-only context limit; defaults to --max-seq-length.",
+    )
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--eval_seed", type=int, default=None)
     parser.add_argument("--metadata-merge", choices=["union", "passk", "ppl"],
@@ -243,6 +251,11 @@ def _parse_args(argv=None):
                              "keep (value * num_gpus) divisible by num_generations_eval.")
     parser.add_argument("--grpo-grad-accum", type=int, default=16)
     parser.add_argument("--grpo-num-generations", type=int, default=8)
+    parser.add_argument(
+        "--grpo-num-generations-eval", type=int, default=None,
+        help="Generations per prompt for GRPO trainer evaluation. Defaults to "
+             "--grpo-num-generations.",
+    )
     parser.add_argument("--grpo-num-iterations", type=int, default=1,
                         help="μ in the GRPO paper: inner optimization passes per rollout batch.")
     parser.add_argument("--grpo-max-completion-length", type=int, default=2048)

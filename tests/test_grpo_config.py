@@ -181,6 +181,51 @@ def test_grpo_eval_batch_size_cli_explicit():
     assert args.grpo_eval_batch_size == 3
 
 
+def test_grpo_eval_generations_cli_default_none():
+    args = _parse_args(["--model", "qwen2-3B", "--wandb-project", "test"])
+    assert args.grpo_num_generations_eval is None
+
+
+def test_grpo_eval_generations_default_to_training_generations():
+    from tuning.training.pipeline.stages import _build_post_training_configs
+    args = _parse_args(["--model", "llama3-8B", "--wandb-project", "test",
+                        "--grpo-num-generations", "4"])
+    checkpoint = {"checkpoint_path": "/x/llama3-8B_sft-0", "data_points_seen": 0}
+    configs = _build_post_training_configs(args, "grpo", checkpoint, train_size=1000)
+    assert configs.training_args.num_generations == 4
+    assert configs.training_args.num_generations_eval == 4
+
+
+def test_grpo_eval_generations_explicit_override_wins():
+    from tuning.training.pipeline.stages import _build_post_training_configs
+    args = _parse_args(["--model", "llama3-8B", "--wandb-project", "test",
+                        "--grpo-num-generations", "8",
+                        "--grpo-num-generations-eval", "4"])
+    checkpoint = {"checkpoint_path": "/x/llama3-8B_sft-0", "data_points_seen": 0}
+    configs = _build_post_training_configs(args, "grpo", checkpoint, train_size=1000)
+    assert configs.training_args.num_generations == 8
+    assert configs.training_args.num_generations_eval == 4
+
+
+def test_grpo_max_seq_length_defaults_to_global():
+    from tuning.training.pipeline.stages import _build_post_training_configs
+    args = _parse_args(["--model", "llama3-8B", "--wandb-project", "test",
+                        "--max-seq-length", "3072"])
+    checkpoint = {"checkpoint_path": "/x/llama3-8B_sft-0", "data_points_seen": 0}
+    configs = _build_post_training_configs(args, "grpo", checkpoint, train_size=1000)
+    assert configs.model_load_config.max_seq_length == 3072
+
+
+def test_grpo_max_seq_length_override_wins():
+    from tuning.training.pipeline.stages import _build_post_training_configs
+    args = _parse_args(["--model", "llama3-8B", "--wandb-project", "test",
+                        "--max-seq-length", "1024",
+                        "--grpo-max-seq-length", "4096"])
+    checkpoint = {"checkpoint_path": "/x/llama3-8B_sft-0", "data_points_seen": 0}
+    configs = _build_post_training_configs(args, "grpo", checkpoint, train_size=1000)
+    assert configs.model_load_config.max_seq_length == 4096
+
+
 def test_grpo_eval_batch_defaults_to_config_value_when_flag_absent():
     from tuning.training.pipeline.stages import _build_post_training_configs
     args = _parse_args(["--model", "llama3-8B", "--wandb-project", "test",
