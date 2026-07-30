@@ -4,7 +4,11 @@ from tuning.data.train_dataset import get_train_dataset
 from tuning.training.config_training import ModelLoadConfig, LoraConfig, SFTRunConfig, TrainingArgumentsConfig, PassAtKConfig, PerplexityConfig, DatasetConfig, sft_batch_size, effective_batch_size
 from tuning.training.perplexity_callback import PerplexityStoppingCallback
 from tuning.training.passk_callback import PassAtKStoppingCallback
-from tuning.training.model_utils import load_model_with_lora, save_trained_model
+from tuning.training.model_utils import (
+    disable_loss_kwargs_if_unsupported,
+    load_model_with_lora,
+    save_trained_model,
+)
 from tuning.training.callback_utils import (
     OffsetAwareWandbCallback,
     remove_default_wandb_callback,
@@ -46,6 +50,10 @@ def train_model_sft(
         use_unsloth=not training_args.full_finetune,
         full_finetune=training_args.full_finetune,
     )
+    # avoid cache=True default on HF config.json. unsloth patch
+    # lets padding be enabled by default and also removes use_cache=False
+    # default in SFTTrainer.compute_loss, removing position_ids padding separation  
+    model.config.use_cache = False
     tokenizer = chat_template_func(tokenizer)
 
     dataset = apply_chat_template(tokenizer, dataset)
@@ -93,6 +101,12 @@ def train_model_sft(
             **training_args.to_hf_args(output_dir=run_config.output_dir),
         ),
     )
+
+    if disable_loss_kwargs_if_unsupported(trainer):
+        print(
+            f"[SFT] Model normalizes loss per micro-batch; Trainer will divide by "
+            f"gradient_accumulation_steps={trainer.args.gradient_accumulation_steps}"
+        )
 
     # Mask non-response tokens in labels using template-specific delimiters.
     # Simple template has no structural delimiters — train on entire sequence.

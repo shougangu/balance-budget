@@ -196,6 +196,35 @@ def upcast_lm_head_to_fp32(model):
     return model
 
 
+def disable_loss_kwargs_if_unsupported(trainer) -> bool:
+    """Keep the trainer's loss invariant to gradient_accumulation_steps.
+
+    A model class sets accepts_loss_kwargs = False to declare that its loss cannot
+    be normalized by num_items_in_batch — the multimodal Gemma-3 classes do this
+    because they filter logits and labels before computing the loss. Trainer only
+    divides the loss by gradient_accumulation_steps when it believes the model did
+    not normalize it, so a model whose declaration is ignored has both its logged
+    loss and its gradients multiplied by gradient_accumulation_steps.
+
+    Unsloth rewrites Trainer.__init__ to skip that declaration and infer support
+    from **kwargs in the forward signature, which is always true for Gemma-3.
+    Reading the declaration off the base model restores it for this trainer.
+
+    Returns True when loss kwargs were disabled.
+    """
+    model = trainer.accelerator.unwrap_model(trainer.model)
+    if hasattr(model, "get_base_model"):
+        model = model.get_base_model()
+    elif hasattr(model, "base_model") and hasattr(model.base_model, "model"):
+        model = model.base_model.model
+
+    if getattr(model, "accepts_loss_kwargs", True):
+        return False
+
+    trainer.model_accepts_loss_kwargs = False
+    return True
+
+
 def install_vllm_fp32_logits_patch() -> bool:
     """Patch vLLM LogitsProcessor to compute output projection logits in fp32.
 
