@@ -90,6 +90,7 @@ def run_sft(args):
     training_args.lr_scheduler_type = args.sft_lr_scheduler_type
     training_args.learning_rate = args.sft_learning_rate
     training_args.full_finetune = args.sft_full_finetune
+    training_args.mask_prompt_tokens = args.sft_mask_prompt_tokens
     training_args.optim = args.sft_optim
 
     passk_config, primary_eval, monitor_evals = _build_eval_components(args, "sft", gpu_util)

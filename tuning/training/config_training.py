@@ -69,6 +69,7 @@ class TrainingArgumentsConfig(BaseModel):
     # eval_do_concat_batches: bool = False
     resume_from_checkpoint: bool = False  # forwarded to trainer.train(); not an HF args field
     full_finetune: bool = False  # train all weights instead of a LoRA adapter
+    mask_prompt_tokens: bool = False  # exclude prompt tokens from the SFT loss
 
     def to_hf_args(self, output_dir: str) -> dict:
         """Return kwargs for TrainingArguments/DPOConfig constructor."""
@@ -78,6 +79,7 @@ class TrainingArgumentsConfig(BaseModel):
         d.pop("beta", None)  # beta is DPO-specific, not a TrainingArguments field
         d.pop("resume_from_checkpoint", None)  # consumed by trainer.train(), not its constructor
         d.pop("full_finetune", None)  # consumed by model loading, not a TrainingArguments field
+        d.pop("mask_prompt_tokens", None)  # consumed by dataset preparation, not a TrainingArguments field
         d["output_dir"] = output_dir
         d["fp16"] = not bf16_supported
         d["bf16"] = bf16_supported

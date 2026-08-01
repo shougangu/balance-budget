@@ -208,6 +208,8 @@ def _parse_args(argv=None):
     parser.add_argument("--sft-grad-accum", type=int, default=1)
     parser.add_argument("--sft-full-finetune", action="store_true", default=False,
                         help="Train all weights instead of a LoRA adapter (plain HF/TRL path).")
+    parser.add_argument("--sft-mask-prompt-tokens", action="store_true", default=False,
+                        help="Exclude prompt tokens from the SFT loss for every chat template.")
     parser.add_argument(
         "--sft-optim", type=str, default=None,
         help="SFT optimizer. Defaults to paged_adamw_8bit for full fine-tuning "

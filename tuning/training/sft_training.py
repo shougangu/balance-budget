@@ -16,12 +16,10 @@ from tuning.training.callback_utils import (
 from tuning.utils.utils import (
     chat_template_func,
     apply_chat_template,
-    get_response_delimiters,
     tokenize_sft_dataset,
 )
 from typing import List, Optional
 from pathlib import Path
-import tuning.config
 from tuning.config import HF_MODEL_MAP, MODELS_DIR
 import torch
 import wandb
@@ -56,13 +54,18 @@ def train_model_sft(
     model.config.use_cache = False
     tokenizer = chat_template_func(tokenizer)
 
-    dataset = apply_chat_template(tokenizer, dataset)
+    mask_prompt = training_args.mask_prompt_tokens
+    dataset = apply_chat_template(tokenizer, dataset, mask_prompt=mask_prompt)
     print(f"Example SFT input:\n{dataset['train'][0]['text']}")
+    # The rendered template already contains BOS. Supplying input_ids here prevents
+    # TRL's language-model text path from tokenizing with the Llama default and
+    # prepending a second BOS.
     dataset = tokenize_sft_dataset(
         tokenizer,
         dataset,
         max_length=model_load_config.max_seq_length,
         num_proc=4,
+        mask_prompt=mask_prompt,
     )
 
     callbacks = [OffsetAwareWandbCallback()]
@@ -98,6 +101,9 @@ def train_model_sft(
             max_length = model_load_config.max_seq_length,
             dataset_num_proc = 4,
             packing = False,
+            # TRL infers this from prompt/completion columns, which a pre-tokenized
+            # dataset does not have, so the mask is only honoured when set here.
+            completion_only_loss = mask_prompt,
             **training_args.to_hf_args(output_dir=run_config.output_dir),
         ),
     )
@@ -107,12 +113,6 @@ def train_model_sft(
             f"[SFT] Model normalizes loss per micro-batch; Trainer will divide by "
             f"gradient_accumulation_steps={trainer.args.gradient_accumulation_steps}"
         )
-
-    # Mask non-response tokens in labels using template-specific delimiters.
-    # Simple template has no structural delimiters — train on entire sequence.
-    if tuning.config.DEFAULT_CHAT_TEMPLATE != "simple":
-        from unsloth import train_on_responses_only
-        train_on_responses_only(trainer, **get_response_delimiters())
 
     remove_default_wandb_callback(trainer)
 

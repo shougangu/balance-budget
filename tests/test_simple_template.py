@@ -133,17 +133,3 @@ class TestChatTemplateFuncSimpleMode:
             result = chat_template_func(mock_tokenizer)
 
         assert result.chat_template == SIMPLE_TEMPLATE
-
-
-class TestSFTSkipsResponseMasking:
-    def test_simple_template_has_no_response_delimiters(self):
-        """get_response_delimiters() should raise for 'simple', confirming
-        that sft_training must skip train_on_responses_only."""
-        from tuning.utils.utils import get_response_delimiters
-        original = tuning.config.DEFAULT_CHAT_TEMPLATE
-        try:
-            tuning.config.DEFAULT_CHAT_TEMPLATE = "simple"
-            with pytest.raises(ValueError, match="No response delimiters"):
-                get_response_delimiters()
-        finally:
-            tuning.config.DEFAULT_CHAT_TEMPLATE = original

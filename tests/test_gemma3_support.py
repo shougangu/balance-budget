@@ -16,7 +16,7 @@ from tuning.training.pipeline.cli import (
     MODEL_TO_GPU_2,
     MODEL_TO_GPU_3,
 )
-from tuning.utils.utils import GEMMA_3_CHAT_TEMPLATE, RESPONSE_DELIMITERS, STOP_TOKENS
+from tuning.utils.utils import GEMMA_3_CHAT_TEMPLATE, STOP_TOKENS
 
 
 GEMMA3_MODELS = ["gemma3-1B", "gemma3-4B", "gemma3-12B"]
@@ -124,13 +124,6 @@ def test_gemma3_stop_tokens_registered():
     assert "<end_of_turn>" in tokens
 
 
-def test_gemma3_response_delimiters_registered():
-    assert "gemma-3" in RESPONSE_DELIMITERS
-    delims = RESPONSE_DELIMITERS["gemma-3"]
-    assert delims["instruction_part"] == "<start_of_turn>user\n"
-    assert delims["response_part"] == "<start_of_turn>model\n"
-
-
 def test_gemma3_get_stop_tokens_runtime_lookup():
     import tuning.config
     from tuning.utils.utils import get_stop_tokens
@@ -139,18 +132,5 @@ def test_gemma3_get_stop_tokens_runtime_lookup():
     try:
         tuning.config.DEFAULT_CHAT_TEMPLATE = "gemma-3"
         assert "<end_of_turn>" in get_stop_tokens()
-    finally:
-        tuning.config.DEFAULT_CHAT_TEMPLATE = original
-
-
-def test_gemma3_get_response_delimiters_runtime_lookup():
-    import tuning.config
-    from tuning.utils.utils import get_response_delimiters
-
-    original = tuning.config.DEFAULT_CHAT_TEMPLATE
-    try:
-        tuning.config.DEFAULT_CHAT_TEMPLATE = "gemma-3"
-        delims = get_response_delimiters()
-        assert delims["response_part"] == "<start_of_turn>model\n"
     finally:
         tuning.config.DEFAULT_CHAT_TEMPLATE = original

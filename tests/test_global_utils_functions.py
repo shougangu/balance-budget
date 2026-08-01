@@ -7,9 +7,7 @@ import tuning.config
 from tuning.utils.utils import (
     LLAMA_31_SIMPLE_TEMPLATE,
     STOP_TOKENS,
-    RESPONSE_DELIMITERS,
     chat_template_func,
-    get_response_delimiters,
     get_stop_tokens,
 )
 
@@ -34,21 +32,6 @@ def test_get_stop_tokens_chatml():
 def test_get_stop_tokens_llama():
     tuning.config.DEFAULT_CHAT_TEMPLATE = "llama-3.1"
     assert get_stop_tokens() == STOP_TOKENS["llama-3.1"]
-
-
-def test_get_response_delimiters_reads_global_not_import_snapshot():
-    tuning.config.DEFAULT_CHAT_TEMPLATE = "llama-3.1"
-    assert get_response_delimiters() == RESPONSE_DELIMITERS["llama-3.1"]
-
-
-def test_get_response_delimiters_chatml():
-    tuning.config.DEFAULT_CHAT_TEMPLATE = "chatml"
-    assert get_response_delimiters() == RESPONSE_DELIMITERS["chatml"]
-
-
-def test_get_response_delimiters_llama():
-    tuning.config.DEFAULT_CHAT_TEMPLATE = "llama-3.1"
-    assert get_response_delimiters() == RESPONSE_DELIMITERS["llama-3.1"]
 
 
 def _make_fake_unsloth(monkeypatch, calls):

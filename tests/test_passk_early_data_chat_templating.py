@@ -32,15 +32,21 @@ class FakeTokenizer:
         max_length,
         padding,
         add_special_tokens,
+        return_offsets_mapping=False,
     ):
         assert truncation is True
         assert padding is False
         assert add_special_tokens is False
         input_ids = [[ord(ch) for ch in text[:max_length]] for text in texts]
-        return {
+        encoded = {
             "input_ids": input_ids,
             "attention_mask": [[1] * len(ids) for ids in input_ids],
         }
+        if return_offsets_mapping:
+            encoded["offset_mapping"] = [
+                [(i, i + 1) for i in range(len(ids))] for ids in input_ids
+            ]
+        return encoded
 
 
 LLAMA33_ASSISTANT_PREFIX = "<|start_header_id|>assistant<|end_header_id|>\n\n"

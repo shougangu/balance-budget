@@ -138,13 +138,44 @@ def chat_template_func(tokenizer):
     return tokenizer
 
 
-def apply_chat_template(tokenizer, dataset):
+def apply_chat_template(tokenizer, dataset, mask_prompt=False):
+    """Render conversations to text, optionally recording where each prompt ends.
+
+    ``mask_prompt`` adds a ``prompt_length`` column holding the character offset at
+    which the assistant response begins, which ``tokenize_sft_dataset`` turns into a
+    per-token ``completion_mask``. The offset is taken from the generation-prompt
+    render, so it is the exact prefix the model is shown at inference time.
+    """
+
     def _format(examples):
-        texts = [
-            tokenizer.apply_chat_template(convo, tokenize=False, add_generation_prompt=False)
-            for convo in examples["messages"]
-        ]
-        return {"text": texts}
+        if not mask_prompt:
+            texts = [
+                tokenizer.apply_chat_template(convo, tokenize=False, add_generation_prompt=False)
+                for convo in examples["messages"]
+            ]
+            return {"text": texts}
+
+        texts, prompt_lengths = [], []
+        for convo in examples["messages"]:
+            responses = sum(message.get("role") == "assistant" for message in convo)
+            if responses != 1:
+                raise ValueError(
+                    "Prompt masking requires a single assistant turn per conversation; "
+                    f"found {responses}."
+                )
+            text = tokenizer.apply_chat_template(
+                convo, tokenize=False, add_generation_prompt=False
+            )
+            prompt = tokenizer.apply_chat_template(
+                convo[:-1], tokenize=False, add_generation_prompt=True
+            )
+            if not text.startswith(prompt):
+                raise ValueError(
+                    f"Rendered prompt is not a prefix of the rendered conversation: {prompt!r}"
+                )
+            texts.append(text)
+            prompt_lengths.append(len(prompt))
+        return {"text": texts, "prompt_length": prompt_lengths}
 
     dataset = dataset.map(_format, batched=True)
     # Remove "messages" column so TRL SFTTrainer doesn't redundantly
@@ -156,17 +187,36 @@ def apply_chat_template(tokenizer, dataset):
     return dataset
 
 
-def tokenize_sft_dataset(tokenizer, dataset, max_length, num_proc=4):
-    """Tokenize rendered SFT text before Unsloth inspects the dataset."""
+def tokenize_sft_dataset(tokenizer, dataset, max_length, num_proc=4, mask_prompt=False):
+    """Tokenize rendered SFT text without adding special tokens a second time.
+
+    Chat templates already render BOS/EOS into the text. The resulting ``input_ids``
+    also tell TRL that the dataset is processed, so it skips its default text-tokenization
+    path, which would prepend another BOS for Llama tokenizers.
+
+    ``mask_prompt`` adds a ``completion_mask`` column marking which tokens carry loss.
+    """
 
     def _tokenize(examples):
-        return tokenizer(
+        encoded = tokenizer(
             examples["text"],
             truncation=True,
             max_length=max_length,
             padding=False,
             add_special_tokens=False,
+            return_offsets_mapping=mask_prompt,
         )
+        if not mask_prompt:
+            return encoded
+
+        # A token spanning the seam holds the first response characters, so it counts
+        # as response; assigning it to the prompt would drop it from the loss.
+        offsets = encoded.pop("offset_mapping")
+        encoded["completion_mask"] = [
+            [int(end > prompt_length) for _, end in row]
+            for row, prompt_length in zip(offsets, examples["prompt_length"])
+        ]
+        return encoded
 
     map_kwargs = {
         "batched": True,
@@ -247,32 +297,6 @@ def get_stop_tokens() -> list[str]:
             f"Supported: {list(STOP_TOKENS.keys())}"
         )
     return STOP_TOKENS[chat_template]
-
-
-RESPONSE_DELIMITERS = {
-    "chatml": {
-        "instruction_part": "<|im_start|>user\n",
-        "response_part": "<|im_start|>assistant\n",
-    },
-    "llama-3.1": {
-        "instruction_part": "<|start_header_id|>user<|end_header_id|>\n\n",
-        "response_part": "<|start_header_id|>assistant<|end_header_id|>\n\n",
-    },
-    "gemma-3": {
-        "instruction_part": "<start_of_turn>user\n",
-        "response_part": "<start_of_turn>model\n",
-    },
-}
-
-
-def get_response_delimiters() -> dict:
-    chat_template = tuning.config.DEFAULT_CHAT_TEMPLATE
-    if chat_template not in RESPONSE_DELIMITERS:
-        raise ValueError(
-            f"No response delimiters defined for chat template '{chat_template}'. "
-            f"Supported: {list(RESPONSE_DELIMITERS.keys())}"
-        )
-    return RESPONSE_DELIMITERS[chat_template]
 
 
 def _read_on_disk_chat_template(checkpoint_path: str) -> str | None:
