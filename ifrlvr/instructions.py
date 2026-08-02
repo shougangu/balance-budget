@@ -26,6 +26,11 @@ from absl import logging
 
 from ifrlvr import instructions_util
 
+# langdetect averages seven trials that each walk a randomly sampled sequence of
+# n-grams under jittered smoothing, so text near a language boundary detects
+# differently from call to call. Pin the seed so every verdict is repeatable.
+langdetect.DetectorFactory.seed = 0
+
 _InstructionArgsDtype = dict[str, int | str | Sequence[str]] | None
 
 _LANGUAGES = instructions_util.LANGUAGE_CODES

@@ -168,7 +168,7 @@ def _parse_args(argv=None):
     stage.add_argument("--qos", default=None,
                        help="Slurm QOS for every sbatch job the pipeline submits "
                             "(e.g. 'high' for the priority queue).")
-    parser.add_argument("--sft-dataset", default="gsm8k", choices=["gsm8k", "tuluif", "tulumix", "openmath", "openmath-lenp95", "openmath-reasoning"])
+    parser.add_argument("--sft-dataset", default="gsm8k", choices=["gsm8k", "tuluif", "tulumix", "ifmix", "openmath", "openmath-lenp95", "openmath-reasoning"])
     parser.add_argument("--dataset", default="gsm8k",
                         choices=["tuluif", "gsm8k", "openmath", "ifrlvr", "dapo",
                                  "mathmix", "simplerl", "simplerl-easy",
