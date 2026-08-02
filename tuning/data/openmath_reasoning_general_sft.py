@@ -1,11 +1,12 @@
 # ABOUTME: SFT dataset from nvidia/OpenMathReasoning (cot split) across all generation models.
 # ABOUTME: Keeps solutions within 1024-8000 token range.
 
-from datasets import Dataset
+from datasets import Dataset, DatasetDict
 from transformers import AutoTokenizer
 
 from tuning.data.hf_dataset import HFDataset
 from tuning.data.config import SYSTEM_MESSAGE_OPENMATH, COMPMATH_STRING
+from tuning.data.heldout_math_eval import build_heldout_math_eval
 
 TOKENIZER_NAME = "unsloth/Meta-Llama-3.1-8B"
 MIN_RESPONSE_TOKENS = 1024
@@ -52,12 +53,17 @@ class OpenMathReasoningGeneralSFT(HFDataset):
             })
         return rows
 
-    def format_dataset(self):
+    def format_dataset(self, eval_dataset=None):
+        # The cot split holds several solutions per problem, so a row-level tail cut
+        # would leave every held-out problem in training. Evaluate on problems the
+        # corpus was never seeded from instead.
         tokenizer = self._load_tokenizer()
         rows = self._format_rows(self._dataset, tokenizer)
         print(f"OpenMathReasoningGeneral SFT: {len(rows)} rows after filtering")
-        formatted_dataset = Dataset.from_list(rows).train_test_split(
-            test_size=min(200, len(rows) - 1), shuffle=False
+        if eval_dataset is None:
+            eval_dataset = build_heldout_math_eval()
+        formatted_dataset = DatasetDict(
+            {"train": Dataset.from_list(rows), "test": eval_dataset}
         )
         print(f"OpenMathReasoningGeneral SFT Dataset - {formatted_dataset}")
         print(f"Example row - {formatted_dataset['train'][0]}")

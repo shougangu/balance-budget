@@ -1,11 +1,12 @@
 # ABOUTME: SFT dataset from OpenMathInstruct-2 for complex math training.
-# ABOUTME: Filters to math/augmented_math sources, keeps all (problem, solution) pairs.
+# ABOUTME: Keeps every MATH and GSM8K source, all (problem, solution) pairs.
 
 import numpy as np
 
-from datasets import Dataset
+from datasets import Dataset, DatasetDict
 from tuning.data.hf_dataset import HFDataset
 from tuning.data.config import SYSTEM_MESSAGE_OPENMATH, COMPMATH_STRING
+from tuning.data.heldout_math_eval import build_heldout_math_eval
 
 MATH_SOURCES = {"math", "augmented_math", "augmented_gsm8k", "gsm8k"}
 
@@ -47,11 +48,14 @@ class OpenMathSFT(HFDataset):
             remove_columns=filtered.column_names,
         )
 
-    def format_dataset(self, length_percentile=None):
+    def format_dataset(self, length_percentile=None, eval_dataset=None):
+        # Every problem in this corpus carries many generated solutions, so slicing rows
+        # off the end would hold out solutions whose problems remain in training. The
+        # evaluation split is sourced from problems the corpus was never seeded from.
         formatted = self._format_rows(self._dataset, length_percentile=length_percentile)
-        formatted_dataset = formatted.train_test_split(
-            test_size=min(200, len(formatted) - 1), shuffle=False
-        )
+        if eval_dataset is None:
+            eval_dataset = build_heldout_math_eval()
+        formatted_dataset = DatasetDict({"train": formatted, "test": eval_dataset})
         print(f"OpenMath SFT Dataset - {formatted_dataset}")
         print(f"Example row - {formatted_dataset['train'][0]}")
         self._dataset = formatted_dataset

@@ -21,28 +21,28 @@ def _make_fake_cot_rows():
 
     return Dataset.from_list([
         # passes all filters (problem A)
-        {"problem": "What is 2+2?", "expected_answer": "4", "generation_model": "qwq",
+        {"problem": "What is 2+2?", "expected_answer": "4", "generation_model": "QwQ-32B",
          "generated_solution": qwq_solution("4", "2 plus 2 equals 4.")},
         # wrong generation_model → excluded
         {"problem": "What is 3+3?", "expected_answer": "6", "generation_model": "deepseek-r1",
          "generated_solution": qwq_solution("6")},
         # duplicate of problem A → excluded by dedup
-        {"problem": "What is 2+2?", "expected_answer": "4", "generation_model": "qwq",
+        {"problem": "What is 2+2?", "expected_answer": "4", "generation_model": "QwQ-32B",
          "generated_solution": qwq_solution("4", "2 and 2 together make 4.")},
         # wrong answer → excluded by correctness filter
-        {"problem": "What is 5+5?", "expected_answer": "10", "generation_model": "qwq",
+        {"problem": "What is 5+5?", "expected_answer": "10", "generation_model": "QwQ-32B",
          "generated_solution": wrong_solution()},
         # empty expected_answer → excluded
         {"problem": "Explain the concept of infinity.", "expected_answer": "",
-         "generation_model": "qwq", "generated_solution": qwq_solution("")},
+         "generation_model": "QwQ-32B", "generated_solution": qwq_solution("")},
         # too long → excluded by max token bound
-        {"problem": "What is 7+7?", "expected_answer": "14", "generation_model": "qwq",
+        {"problem": "What is 7+7?", "expected_answer": "14", "generation_model": "QwQ-32B",
          "generated_solution": long_solution("14")},
         # too short → excluded by min token bound
-        {"problem": "What is 8+8?", "expected_answer": "16", "generation_model": "qwq",
+        {"problem": "What is 8+8?", "expected_answer": "16", "generation_model": "QwQ-32B",
          "generated_solution": tiny_solution("16")},
         # passes all filters (problem B)
-        {"problem": "What is 9+9?", "expected_answer": "18", "generation_model": "qwq",
+        {"problem": "What is 9+9?", "expected_answer": "18", "generation_model": "QwQ-32B",
          "generated_solution": qwq_solution("18", "9 and 9 together make 18.")},
     ])
 
@@ -64,8 +64,9 @@ class TestOpenMathReasoningSFT:
         return loader
 
     def _all_rows(self, loader):
+        """Every row built from the source corpus. The test split comes from elsewhere."""
         ds = loader.get_dataset()
-        return list(ds["train"]) + list(ds["test"])
+        return list(ds["train"])
 
     def test_only_two_problems_pass_all_filters(self):
         """Only the 2+2 and 9+9 problems should survive all filters."""

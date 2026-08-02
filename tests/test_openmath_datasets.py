@@ -39,8 +39,7 @@ class TestOpenMathSFT:
         loader.format_dataset()
         dataset = loader.get_dataset()
         train = dataset["train"]
-        test_split = dataset["test"]
-        all_prompts = list(train["prompt"]) + list(test_split["prompt"])
+        all_prompts = list(train["prompt"])
         # Should have exactly 3 rows (the math + augmented_math rows)
         assert len(all_prompts) == 3
 
@@ -73,9 +72,8 @@ class TestOpenMathSFT:
         loader.format_dataset()
         dataset = loader.get_dataset()
         train = dataset["train"]
-        test = dataset["test"]
         # "What is 2+2?" has 2 solutions in math source, both should be present
-        all_prompts = list(train["prompt"]) + list(test["prompt"])
+        all_prompts = list(train["prompt"])
         count_2plus2 = sum(1 for p in all_prompts if "2+2" in p)
         assert count_2plus2 == 2
 
