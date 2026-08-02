@@ -35,6 +35,7 @@ from tuning.training.server_rollouts import install_client_rendered_chat
 
 from tuning.utils.utils import chat_template_func
 from trl import GRPOTrainer, GRPOConfig
+from trl.trainer.utils import RepeatSampler
 from transformers.trainer_utils import get_last_checkpoint
 from typing import Callable, List
 from tuning.config import HF_MODEL_MAP
@@ -58,6 +59,35 @@ def _enable_vllm_engine_stats():
 _enable_vllm_engine_stats()
 
 
+class _EpochSeededRepeatSampler(RepeatSampler):
+    """RepeatSampler whose historical per-epoch order can be reconstructed.
+
+    RepeatSampler seeds its generator once and advances it once per epoch. A
+    fresh sampler therefore cannot jump directly to a resumed epoch. Replaying
+    the preceding permutation draws reconstructs that epoch without changing
+    the order of uninterrupted or pre-existing runs.
+
+    Epochs are monotonic for this training sampler because Accelerate's
+    mid-epoch skip wrapper starts with iteration zero and otherwise overwrites
+    the epoch that Trainer just restored.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.epoch = 0
+
+    def set_epoch(self, epoch: int):
+        self.epoch = max(self.epoch, epoch)
+
+    def __iter__(self):
+        if self.shuffle and self.seed is not None:
+            self.generator.manual_seed(self.seed)
+            for _ in range(self.epoch):
+                torch.randperm(self.num_samples, generator=self.generator)
+        yield from super().__iter__()
+        self.epoch += 1
+
+
 class _GRPOTrainer(GRPOTrainer):
     """GRPOTrainer with an extra metric: fraction of sequences masked by the vLLM IS ratio cap."""
 
@@ -71,6 +101,21 @@ class _GRPOTrainer(GRPOTrainer):
         super().__init__(*args, **kwargs)
         if self.TIMING_ENABLED:
             self._install_timing_wrappers()
+
+    def _get_train_sampler(self, dataset=None):
+        """Reconstruct each epoch's historical prompt order so resumes can skip exactly.
+
+        Rebuilt from TRL's sampler so its batch-size arithmetic stays in one place.
+        """
+        sampler = super()._get_train_sampler(dataset)
+        return _EpochSeededRepeatSampler(
+            data_source=sampler.data_source,
+            mini_repeat_count=sampler.mini_repeat_count,
+            batch_size=sampler.batch_size,
+            repeat_count=sampler.repeat_count,
+            shuffle=sampler.shuffle,
+            seed=sampler.seed,
+        )
 
     def _compute_zero_variance_keep_mask(self, output, mode):
         advantages = output.get("advantages")
