@@ -1,6 +1,8 @@
 # ABOUTME: Tests for data utility functions, especially unique-first sampling.
 # ABOUTME: Validates that get_random_train_subset prioritizes unique values when configured.
 
+import random
+
 from datasets import Dataset, DatasetDict
 from tuning.data.utils import get_random_train_subset
 
@@ -84,3 +86,44 @@ def test_unique_column_handles_list_values():
     ds = _make_dataset(prompts)
     result = get_random_train_subset(ds, train_size=3, unique_column="prompt")
     assert len(result["train"]) == 3
+
+
+def test_same_seed_gives_same_sample():
+    """Two calls with the same seed select the same rows in the same order."""
+    ds = _make_dataset([f"q{i}" for i in range(100)])
+    first = get_random_train_subset(ds, train_size=20, seed=42)
+    second = get_random_train_subset(ds, train_size=20, seed=42)
+    assert first["train"]["prompt"] == second["train"]["prompt"]
+
+
+def test_different_seeds_give_different_samples():
+    """Different seeds select different rows."""
+    ds = _make_dataset([f"q{i}" for i in range(100)])
+    first = get_random_train_subset(ds, train_size=20, seed=1)
+    second = get_random_train_subset(ds, train_size=20, seed=2)
+    assert first["train"]["prompt"] != second["train"]["prompt"]
+
+
+def test_seeded_sampling_leaves_global_rng_untouched():
+    """Sampling must not reseed the process-wide RNG used elsewhere in training."""
+    ds = _make_dataset([f"q{i}" for i in range(100)])
+
+    random.seed(123)
+    expected = [random.random() for _ in range(3)]
+
+    random.seed(123)
+    get_random_train_subset(ds, train_size=20, seed=7)
+    actual = [random.random() for _ in range(3)]
+
+    assert actual == expected
+
+
+def test_seeded_sampling_applies_to_unique_column_path():
+    """The unique_column branch is seeded too, not just the plain branch."""
+    prompts = []
+    for i in range(50):
+        prompts.extend([f"q{i}"] * 3)
+    ds = _make_dataset(prompts)
+    first = get_random_train_subset(ds, train_size=30, unique_column="prompt", seed=5)
+    second = get_random_train_subset(ds, train_size=30, unique_column="prompt", seed=5)
+    assert first["train"]["prompt"] == second["train"]["prompt"]

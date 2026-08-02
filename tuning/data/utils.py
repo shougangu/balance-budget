@@ -1,9 +1,17 @@
+# ABOUTME: Helpers for deriving training subsets from a full dataset split.
+# ABOUTME: Sampling is seedable so a regenerated subset reproduces its row order.
+
 from datasets import DatasetDict
 import random
 
 
 def get_random_train_subset(dataset: DatasetDict, train_size: int,
-                            unique_column: str = None) -> DatasetDict:
+                            unique_column: str = None,
+                            seed: int = None) -> DatasetDict:
+
+    # A private generator keeps the draw reproducible without reseeding the
+    # process-wide RNG that training and generation also draw from.
+    rng = random.Random(seed)
 
     train_split = dataset["train"]
     test_split = dataset["test"]
@@ -34,13 +42,13 @@ def get_random_train_subset(dataset: DatasetDict, train_size: int,
                 duplicate_indices.append(i)
 
         if len(unique_indices) > actual_train_size:
-            random_subset = sorted(random.sample(unique_indices, actual_train_size))
+            random_subset = sorted(rng.sample(unique_indices, actual_train_size))
         else:
             remaining = actual_train_size - len(unique_indices)
-            fill = random.sample(duplicate_indices, min(remaining, len(duplicate_indices)))
+            fill = rng.sample(duplicate_indices, min(remaining, len(duplicate_indices)))
             random_subset = sorted(unique_indices + fill)
     else:
-        random_subset = random.sample(range(len(train_split)), actual_train_size)
+        random_subset = rng.sample(range(len(train_split)), actual_train_size)
 
     train_split = train_split.select(random_subset)
 
