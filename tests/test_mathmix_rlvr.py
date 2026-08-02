@@ -52,3 +52,23 @@ def test_mathmix_test_split_is_half_and_half():
     sources = [r["prompt"][-1]["content"].split("-")[0] for r in mixed["test"]]
     assert sources.count("srl") == 4
     assert sources.count("om") == 4
+
+
+def test_mathmix_test_excludes_problems_the_other_corpus_trains_on():
+    """Both corpora derive from MATH, so one's test problem can sit in the other's train pool."""
+    simplerl = _fake("srl", 10, n_test=8)
+    openmath = _fake("om", 100, n_test=8)
+
+    shared = simplerl["train"][0]["prompt"][-1]["content"]
+    openmath_test = openmath["test"].to_list()
+    openmath_test[0]["prompt"][-1]["content"] = shared
+    openmath = DatasetDict(
+        {"train": openmath["train"], "test": Dataset.from_list(openmath_test)}
+    )
+
+    mixed = build_mathmix(simplerl, openmath, seed=42)
+
+    test_contents = [r["prompt"][-1]["content"] for r in mixed["test"]]
+    train_contents = {r["prompt"][-1]["content"] for r in mixed["train"]}
+    assert shared not in test_contents
+    assert not train_contents & set(test_contents)

@@ -35,6 +35,10 @@ def build_mathmix(simplerl: DatasetDict, openmath: DatasetDict, seed: int = 42) 
 
     half_test = min(simplerl["test"].num_rows, openmath["test"].num_rows) // 2
     test_rows = list(simplerl["test"])[:half_test] + list(openmath["test"])[:half_test]
+    # Both corpora are built from MATH, so a problem held out by one source can sit in
+    # the other source's train pool. Keep only problems the mixed train split never sees.
+    train_keys = {r["prompt"][-1]["content"] for r in train_rows}
+    test_rows = [r for r in test_rows if r["prompt"][-1]["content"] not in train_keys]
     rng.shuffle(test_rows)
 
     return DatasetDict({

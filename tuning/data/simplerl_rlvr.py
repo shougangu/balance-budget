@@ -103,9 +103,9 @@ if __name__ == "__main__":
         ds.load_from_huggingface("hkust-nlp/SimpleRL-Zoo-Data")
         ds.format_dataset()
         tier_datasets.append(ds.get_dataset())
-        # save_name = f"rlvr-simplerl-{difficulty}"
-        # ds.clear_old_datasets(prefix=save_name)
-        # ds.save_dataset_to_disk(save_name=save_name)
+        save_name = f"rlvr-simplerl-{difficulty}"
+        ds.clear_old_datasets(prefix=save_name)
+        ds.save_dataset_to_disk(save_name=save_name)
 
     combined = combine_tiers(tier_datasets)
     print(f"SimpleRL-Zoo (combined) Dataset - {combined}")
