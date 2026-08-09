@@ -1,6 +1,8 @@
 # ABOUTME: Regression tests for the constraint-style IF SFT mix assembly.
 # ABOUTME: Covers per-source normalisation, persona dedup, turn-1 cutting and seeded shuffling.
 
+from collections import Counter
+
 import pytest
 
 from tuning.data.config import SYSTEM_MESSAGE_INSTRUCTION_FOLLOWING
@@ -9,15 +11,17 @@ from tuning.data.ifmix_sft import (
     NEMOTRON_PERSONA_SOURCE,
     NEMOTRON_SYNTHETIC_SOURCE,
     SHUFFLE_SEED,
-    SMOL_SOURCE,
     _dedupe,
     argilla_rows,
     persona_rows,
     response_satisfies_constraints,
+    NEAR_DUPLICATE_THRESHOLD,
     shuffle_rows,
-    smol_rows,
+    source_quotas,
+    split_rows,
     synthetic_rows,
 )
+from tuning.data.near_duplicates import nearest_neighbours
 
 
 def _nemotron_record(seed_dataset, turns, reasoning="internal deliberation"):
@@ -87,24 +91,6 @@ def test_rows_record_their_source():
 
     assert persona[0]["source"] == NEMOTRON_PERSONA_SOURCE
     assert synthetic[0]["source"] == NEMOTRON_SYNTHETIC_SOURCE
-
-
-def test_smol_rows_normalise_two_message_conversations():
-    records = [
-        {
-            "messages": [
-                {"role": "user", "content": "write exactly 3 bullet points"},
-                {"role": "assistant", "content": "* a\n* b\n* c"},
-            ]
-        }
-    ]
-
-    rows = smol_rows(records)
-
-    assert len(rows) == 1
-    assert rows[0]["source"] == SMOL_SOURCE
-    assert rows[0]["messages"][0]["content"] == SYSTEM_MESSAGE_INSTRUCTION_FOLLOWING
-    assert rows[0]["messages"][1]["content"] == "write exactly 3 bullet points"
 
 
 def test_response_satisfies_constraints_accepts_a_compliant_answer():
@@ -388,9 +374,9 @@ def test_dedupe_keeps_the_same_prompt_from_different_sources():
             "messages": [
                 {"role": "system", "content": "system"},
                 {"role": "user", "content": "Write exactly three bullets."},
-                {"role": "assistant", "content": "Smol response"},
+                {"role": "assistant", "content": "Nemotron response"},
             ],
-            "source": SMOL_SOURCE,
+            "source": NEMOTRON_PERSONA_SOURCE,
         },
     ]
 
@@ -404,7 +390,7 @@ def test_dedupe_normalises_and_drops_repeated_prompts_within_a_source():
             {"role": "user", "content": "Write exactly three bullets."},
             {"role": "assistant", "content": "First response"},
         ],
-        "source": SMOL_SOURCE,
+        "source": ARGILLA_SOURCE,
     }
     duplicate = {
         "messages": [
@@ -412,7 +398,117 @@ def test_dedupe_normalises_and_drops_repeated_prompts_within_a_source():
             {"role": "user", "content": "  write EXACTLY   three bullets.  "},
             {"role": "assistant", "content": "Second response"},
         ],
-        "source": SMOL_SOURCE,
+        "source": ARGILLA_SOURCE,
     }
 
     assert _dedupe([first, duplicate]) == [first]
+
+
+def test_dedupe_drops_prompts_differing_only_in_punctuation():
+    """Constraint prompts recur with a comma or dash moved and no other change."""
+    first = {
+        "messages": [
+            {"role": "system", "content": "system"},
+            {"role": "user", "content": "Write exactly three bullets, then stop."},
+            {"role": "assistant", "content": "First response"},
+        ],
+        "source": ARGILLA_SOURCE,
+    }
+    duplicate = {
+        "messages": [
+            {"role": "system", "content": "system"},
+            {"role": "user", "content": "Write exactly three bullets -- then stop!"},
+            {"role": "assistant", "content": "Second response"},
+        ],
+        "source": ARGILLA_SOURCE,
+    }
+
+    assert _dedupe([first, duplicate]) == [first]
+
+
+def _prompt_row(prompt, source=ARGILLA_SOURCE):
+    return {
+        "messages": [
+            {"role": "system", "content": SYSTEM_MESSAGE_INSTRUCTION_FOLLOWING},
+            {"role": "user", "content": prompt},
+            {"role": "assistant", "content": f"response to {prompt[:20]}"},
+        ],
+        "source": source,
+    }
+
+
+TWIN_TEMPLATE = (
+    "Your ENTIRE response should be in en language, no other language is allowed. "
+    "Your response should contain at least {} sentences. Your answer must contain a "
+    "title, wrapped in double angular brackets, such as <<poem of joy>>. Highlight at "
+    "least 2 sections in your answer with markdown, i.e. *highlighted section*."
+)
+
+DISTINCT_PROMPTS = [
+    "Explain how photosynthesis converts sunlight into chemical energy in plant cells.",
+    "Write a short story about a lighthouse keeper who befriends a migrating whale.",
+    "Summarise the causes of the fall of the western roman empire for a student.",
+    "Implement a red black tree in rust including rotation and rebalancing helpers.",
+    "Compare the monetary policy tools available to a central bank during deflation.",
+    "Describe the rules of cricket to somebody who has only ever watched baseball.",
+]
+
+
+def test_split_holds_out_rows_with_no_near_duplicate_in_train():
+    """Template twins stay in train; only rows nothing resembles are held out."""
+    rows = [_prompt_row(TWIN_TEMPLATE.format(n)) for n in range(20)]
+    rows += [_prompt_row(p) for p in DISTINCT_PROMPTS]
+    rows += [
+        _prompt_row(p.replace("the", "a") + " Provide detail.", NEMOTRON_SYNTHETIC_SOURCE)
+        for p in DISTINCT_PROMPTS
+    ]
+
+    split = split_rows(rows, test_size=3)
+
+    held_prompts = [r["messages"][1]["content"] for r in split["test"]]
+    assert not any(p.startswith("Your ENTIRE response") for p in held_prompts)
+
+    assert len(split["test"]) == 3
+    held = [r["messages"][1]["content"] for r in split["test"]]
+    kept = [r["messages"][1]["content"] for r in split["train"]]
+    # No held-out prompt may resemble anything left in train.
+    assert all(score < NEAR_DUPLICATE_THRESHOLD for score, _ in nearest_neighbours(kept, held))
+    # The redundant template rows stay in train rather than being thrown away.
+    assert len(split["train"]) == len(rows) - 3
+
+
+def test_split_is_deterministic():
+    rows = [_prompt_row(p, NEMOTRON_SYNTHETIC_SOURCE) for p in DISTINCT_PROMPTS]
+    first = split_rows(rows, test_size=2)
+    second = split_rows(rows, test_size=2)
+    assert first["test"]["messages"] == second["test"]["messages"]
+
+
+def test_source_quotas_track_each_source_share_and_sum_to_test_size():
+    rows = [_prompt_row(f"argilla prompt {n}") for n in range(60)]
+    rows += [_prompt_row(f"synthetic prompt {n}", NEMOTRON_SYNTHETIC_SOURCE) for n in range(30)]
+    rows += [_prompt_row(f"persona prompt {n}", NEMOTRON_PERSONA_SOURCE) for n in range(10)]
+
+    quotas = source_quotas(rows, test_size=10)
+
+    assert sum(quotas.values()) == 10
+    assert quotas == {
+        ARGILLA_SOURCE: 6,
+        NEMOTRON_SYNTHETIC_SOURCE: 3,
+        NEMOTRON_PERSONA_SOURCE: 1,
+    }
+
+
+def test_split_preserves_source_composition():
+    rows = [_prompt_row(p) for p in DISTINCT_PROMPTS]
+    rows += [
+        _prompt_row(p.replace("the", "a") + " Provide detail.", NEMOTRON_SYNTHETIC_SOURCE)
+        for p in DISTINCT_PROMPTS
+    ]
+
+    split = split_rows(rows, test_size=4)
+
+    assert Counter(split["test"]["source"]) == {
+        ARGILLA_SOURCE: 2,
+        NEMOTRON_SYNTHETIC_SOURCE: 2,
+    }

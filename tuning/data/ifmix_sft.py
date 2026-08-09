@@ -1,28 +1,48 @@
 # ABOUTME: Single-turn constraint-style SFT mix for instruction following (IFEval/IFBench targets).
-# ABOUTME: Merges verified Argilla IFEval-like data, smol-constraints and both Nemotron v3 IF subsets.
+# ABOUTME: Merges verified Argilla IFEval-like data with both Nemotron v3 IF subsets.
+
+# The mix holds five properties, each enforced in one place:
+#   - Every row is one turn carrying the IF system message and the name of its source
+#     (`_row`, `persona_rows`, `synthetic_rows`).
+#   - A row survives only if its response satisfies every constraint the prompt declares
+#     (`response_satisfies_constraints`).
+#   - That verification is reproducible: checkers draw from the module RNG, so each is
+#     built under a pinned seed and the stream is restored afterwards, leaving the result
+#     independent of both cluster and row order (`_built_checker`, `PROBE_SEEDS`).
+#   - A constraint whose arguments the checker will not take as given is dropped rather
+#     than counted as passing (`_instruction_kwargs`, the `accepted` check).
+#   - Duplicate prompts are dropped per source, so a prompt two sources both carry keeps
+#     both responses (`_dedupe`), and the test split holds out only rows nothing in train
+#     resembles, at each source's share of the mix (`split_rows`, `source_quotas`).
 
 import inspect
 import json
 import random
 
-from datasets import Dataset, load_dataset
+from datasets import Dataset, DatasetDict, load_dataset
 
 from tuning.data.config import SYSTEM_MESSAGE_INSTRUCTION_FOLLOWING
 from tuning.data.hf_dataset import HFDataset
+from tuning.data.near_duplicates import holdout_without_near_duplicates, normalize
 
 ARGILLA_REPO = "argilla/ifeval-like-data"
-SMOL_REPO = "HuggingFaceTB/smoltalk"
-SMOL_CONFIG = "smol-constraints"
+# The repo's other config is an IFEval-passing subset of this one, carrying no prompt it
+# does not already hold; every row is verified here anyway.
+ARGILLA_CONFIG = "default"
 NEMOTRON_REPO = "nvidia/Nemotron-SFT-Instruction-Following-Chat-v3"
 NEMOTRON_FILE = "data/instruction_following.jsonl"
 
 ARGILLA_SOURCE = "argilla-ifeval-like"
-SMOL_SOURCE = "smol-constraints"
 NEMOTRON_PERSONA_SOURCE = "allenai/tulu-3-sft-personas-instruction-following"
 NEMOTRON_SYNTHETIC_SOURCE = "synthetic"
 
 SHUFFLE_SEED = 42
 TEST_SIZE = 500
+
+# Jaccard over 5-word shingles. The mix is assembled from constraint templates, so
+# prompts that differ only in one of their numbers score around here; holding such a
+# pair across the split would score the model on text it was trained on.
+NEAR_DUPLICATE_THRESHOLD = 0.7
 
 
 def _row(prompt, response, source):
@@ -84,16 +104,6 @@ def synthetic_rows(records):
         for prompt, response in _turns(record["messages"]):
             if prompt and response:
                 rows.append(_row(prompt, response, NEMOTRON_SYNTHETIC_SOURCE))
-            break
-    return rows
-
-
-def smol_rows(records):
-    rows = []
-    for record in records:
-        for prompt, response in _turns(record["messages"]):
-            if prompt and response:
-                rows.append(_row(prompt, response, SMOL_SOURCE))
             break
     return rows
 
@@ -221,6 +231,10 @@ def _row_key(row):
 def _dedupe(rows):
     """Drop repeated prompts within a source, keeping the first occurrence.
 
+    Prompts are compared under the same normalisation the near-duplicate check
+    uses, so a prompt that recurs with only its punctuation changed counts as the
+    repeat it is rather than reaching the mix twice.
+
     The same prompt may legitimately occur in more than one source with a
     different response. Keep those cross-source examples so an earlier-loaded
     component cannot silently erase a later component from the mix.
@@ -229,12 +243,56 @@ def _dedupe(rows):
     unique = []
     for row in rows:
         prompt = row["messages"][1]["content"]
-        key = (row["source"], " ".join(prompt.split()).lower())
+        key = (row["source"], normalize(prompt))
         if key in seen:
             continue
         seen.add(key)
         unique.append(row)
     return unique
+
+
+def source_quotas(rows, test_size):
+    """Test-split places per source, in proportion to each source's share of the mix.
+
+    Largest-remainder allocation, so the places sum to exactly `test_size`.
+    """
+    counts = {}
+    for row in rows:
+        counts[row["source"]] = counts.get(row["source"], 0) + 1
+
+    exact = {source: test_size * count / len(rows) for source, count in counts.items()}
+    quotas = {source: int(share) for source, share in exact.items()}
+    order = sorted(exact, key=lambda source: (exact[source] - quotas[source], source), reverse=True)
+    for source in order[: test_size - sum(quotas.values())]:
+        quotas[source] += 1
+    return quotas
+
+
+def split_rows(rows, test_size=TEST_SIZE, threshold=NEAR_DUPLICATE_THRESHOLD):
+    """Hold out rows that nothing else in the mix resembles.
+
+    The sources are template-generated, so a random slice puts near-identical
+    prompts on both sides. Candidates are drawn under a pinned seed and a row is
+    held out only when no other row is within `threshold`; rejected candidates
+    stay in train, so nothing is discarded. Sources are held to their share of the
+    mix, so decontaminating the split does not also reweight it.
+    """
+    prompts = [row["messages"][1]["content"] for row in rows]
+    sources = [row["source"] for row in rows]
+    train_idx, test_idx = holdout_without_near_duplicates(
+        prompts,
+        test_size=test_size,
+        threshold=threshold,
+        seed=SHUFFLE_SEED,
+        groups=sources,
+        quotas=source_quotas(rows, test_size),
+    )
+    return DatasetDict(
+        {
+            "train": Dataset.from_list([rows[i] for i in train_idx]),
+            "test": Dataset.from_list([rows[i] for i in test_idx]),
+        }
+    )
 
 
 class IFMixSFT(HFDataset):
@@ -253,21 +311,12 @@ class IFMixSFT(HFDataset):
         rows = []
 
         print(f"Loading {ARGILLA_REPO} (verifying every declared constraint)", flush=True)
-        for config in ("default", "filtered"):
-            # Downloaded rather than streamed: a stream that dies mid-iteration ends the
-            # loop silently, which cost this split two thirds of its rows on one cluster.
-            records = load_dataset(ARGILLA_REPO, config, split="train")
-            verified = argilla_rows(records)
-            print(
-                f"  {config}: kept {len(verified):,} verified rows of {len(records):,}",
-                flush=True,
-            )
-            rows.extend(verified)
-
-        print(f"Loading {SMOL_REPO}/{SMOL_CONFIG}", flush=True)
-        smol = smol_rows(load_dataset(SMOL_REPO, SMOL_CONFIG, split="train"))
-        print(f"  kept {len(smol):,} rows", flush=True)
-        rows.extend(smol)
+        # Downloaded rather than streamed: a stream that dies mid-iteration ends the
+        # loop silently, which cost this split two thirds of its rows on one cluster.
+        records = load_dataset(ARGILLA_REPO, ARGILLA_CONFIG, split="train")
+        verified = argilla_rows(records)
+        print(f"  kept {len(verified):,} verified rows of {len(records):,}", flush=True)
+        rows.extend(verified)
 
         # Streamed twice rather than materialised; the split is 3 GB of parsed JSON.
         print(f"Loading {NEMOTRON_REPO}", flush=True)
@@ -289,9 +338,7 @@ class IFMixSFT(HFDataset):
             counts[row["source"]] = counts.get(row["source"], 0) + 1
         print(f"IF mix composition: {counts}")
 
-        formatted_dataset = Dataset.from_list(rows).train_test_split(
-            test_size=min(TEST_SIZE, len(rows) - 1), shuffle=False
-        )
+        formatted_dataset = split_rows(rows, test_size=min(TEST_SIZE, len(rows) - 1))
         print(f"IF Mix SFT Dataset - {formatted_dataset}")
         print(f"Example row - {formatted_dataset['train'][0]}")
         self._dataset = formatted_dataset
