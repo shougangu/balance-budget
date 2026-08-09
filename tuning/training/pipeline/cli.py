@@ -205,6 +205,9 @@ def _parse_args(argv=None):
     parser.add_argument("--sft-num-epochs", type=int, default=1)
     parser.add_argument("--sft-eval-steps", type=int, default=64)
     parser.add_argument("--sft-batch-size", type=int, default=16)
+    parser.add_argument("--sft-eval-batch-size", type=int, default=None,
+                        help="Per-device eval batch size. Defaults to the train batch size; "
+                             "lower it when eval logits OOM at the training geometry.")
     parser.add_argument("--sft-grad-accum", type=int, default=1)
     parser.add_argument("--sft-full-finetune", action="store_true", default=False,
                         help="Train all weights instead of a LoRA adapter (plain HF/TRL path).")

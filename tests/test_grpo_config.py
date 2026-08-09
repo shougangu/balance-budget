@@ -459,3 +459,14 @@ def test_sft_prompt_masking_cli_can_be_disabled():
         "--no-sft-mask-prompt-tokens",
     ])
     assert args.sft_mask_prompt_tokens is False
+
+
+def test_sft_eval_batch_size_cli_default_none():
+    args = _parse_args(["--model", "qwen2-3B", "--wandb-project", "test"])
+    assert args.sft_eval_batch_size is None
+
+
+def test_sft_eval_batch_size_cli_explicit():
+    args = _parse_args(["--model", "qwen2-3B", "--wandb-project", "test",
+                        "--sft-eval-batch-size", "1"])
+    assert args.sft_eval_batch_size == 1
