@@ -1,5 +1,8 @@
 
 from trl import SFTTrainer, SFTConfig
+from trl.trainer.sft_trainer import (
+    DataCollatorForLanguageModeling as SFTDataCollatorForLanguageModeling,
+)
 from tuning.data.train_dataset import get_train_dataset
 from tuning.training.config_training import ModelLoadConfig, LoraConfig, SFTRunConfig, TrainingArgumentsConfig, PassAtKConfig, PerplexityConfig, DatasetConfig, sft_batch_size, effective_batch_size
 from tuning.training.perplexity_callback import PerplexityStoppingCallback
@@ -67,6 +70,10 @@ def train_model_sft(
         num_proc=4,
         mask_prompt=mask_prompt,
     )
+    data_collator = SFTDataCollatorForLanguageModeling(
+        pad_token_id=tokenizer.pad_token_id,
+        completion_only_loss=mask_prompt,
+    )
 
     callbacks = [OffsetAwareWandbCallback()]
     if passk_config is not None and passk_config.enabled:
@@ -96,6 +103,7 @@ def train_model_sft(
         train_dataset = dataset["train"],
         eval_dataset = dataset["test"],
         callbacks = callbacks,
+        data_collator = data_collator,
         args = SFTConfig(
             dataset_text_field = "text",
             max_length = model_load_config.max_seq_length,

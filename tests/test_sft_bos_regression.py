@@ -21,7 +21,7 @@ def test_sft_pipeline_pretokenizes_rendered_text_before_trl(monkeypatch, tmp_pat
         "test": [{"text": "<bos>test<eos>", "input_ids": [1, 4, 3]}],
     }
     model = SimpleNamespace(config=SimpleNamespace(use_cache=True))
-    tokenizer = object()
+    tokenizer = SimpleNamespace(pad_token_id=0)
     calls = []
 
     monkeypatch.setattr(sft_training, "get_train_dataset", lambda _config: raw_dataset)

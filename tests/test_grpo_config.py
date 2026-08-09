@@ -446,3 +446,16 @@ def test_lora_config_random_state_explicit_overrides_global():
     from tuning.training.config_training import LoraConfig
     config = LoraConfig(random_state=99)
     assert config.random_state == 99
+
+
+def test_sft_prompt_masking_cli_defaults_on():
+    args = _parse_args(["--model", "qwen2-3B", "--wandb-project", "test"])
+    assert args.sft_mask_prompt_tokens is True
+
+
+def test_sft_prompt_masking_cli_can_be_disabled():
+    args = _parse_args([
+        "--model", "qwen2-3B", "--wandb-project", "test",
+        "--no-sft-mask-prompt-tokens",
+    ])
+    assert args.sft_mask_prompt_tokens is False
