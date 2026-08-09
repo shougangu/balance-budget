@@ -74,7 +74,7 @@ from types import SimpleNamespace
 
 
 def test_dispatch_grpo_passes_gres_to_sbatch(tmp_path):
-    """When pt_method='grpo' and grpo_num_gpus=4, dispatch injects --gres=gpu:4."""
+    """Multi-GPU GRPO dispatch requests the H100 model explicitly."""
     from tuning.training.pipeline.orchestrator import _dispatch_parallel_workers
 
     metadata_file = tmp_path / "meta.jsonl"
@@ -101,7 +101,7 @@ def test_dispatch_grpo_passes_gres_to_sbatch(tmp_path):
         )
 
     cmd = mock_run.call_args[0][0]
-    assert "--gres=gpu:4" in cmd
+    assert "--gres=gpu:h100:4" in cmd
     assert cmd[0] == "sbatch"
 
 

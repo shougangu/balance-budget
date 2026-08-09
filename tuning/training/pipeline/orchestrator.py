@@ -133,12 +133,14 @@ def _dispatch_parallel_workers(parallel, base_cmd, pt_flag, metadata_files,
                                 sbatch_script, args):
     """Submit sbatch workers for post-training.
 
-    Injects --gres=gpu:N when pt_method=='grpo' and grpo_num_gpus>1.
+    Injects an explicit H100 GRES when GRPO needs multiple GPUs.  The GPU
+    partitions used by this pipeline are H100-only, and current Alliance
+    clusters reject model-less GPU requests.
     """
 
     sbatch_flags = _sbatch_flags_for_args(args)
     if args.post_training_method == "grpo" and args.grpo_num_gpus > 1:
-        sbatch_flags.append(f"--gres=gpu:{args.grpo_num_gpus}")
+        sbatch_flags.append(f"--gres=gpu:h100:{args.grpo_num_gpus}")
 
     worker_argv = list(base_cmd[1:])
     worker_argv += [pt_flag, "--run-all", "--no-dispatch"]
@@ -188,7 +190,7 @@ def submit_post_training_worker_for_metadata(args, metadata_file,
     if allocation is not None and qos:
         sbatch_flags.append(f"--qos={qos}")
     if args.grpo_num_gpus > 1:
-        sbatch_flags.append(f"--gres=gpu:{args.grpo_num_gpus}")
+        sbatch_flags.append(f"--gres=gpu:h100:{args.grpo_num_gpus}")
 
     try:
         job_id = _submit_sbatch_worker(

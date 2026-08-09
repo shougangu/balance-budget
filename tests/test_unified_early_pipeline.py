@@ -362,7 +362,7 @@ class TestSubmitPostTrainingWorkerForMetadata:
         orch.submit_post_training_worker_for_metadata(
             self._args(grpo_num_gpus=4), "/tmp/meta.jsonl",
         )
-        assert "--gres=gpu:4" in calls[0][1]["sbatch_flags"]
+        assert "--gres=gpu:h100:4" in calls[0][1]["sbatch_flags"]
 
     def test_includes_qos_in_live_dispatch_allocation(self, monkeypatch):
         from tuning.training.pipeline import orchestrator as orch
@@ -453,7 +453,7 @@ class TestSubmitPostTrainingWorkerForMetadata:
 
     def test_allocation_override_keeps_gres(self, monkeypatch):
         flags = self._submitted_flags(monkeypatch, 60.0, grpo_num_gpus=2)
-        assert "--gres=gpu:2" in flags
+        assert "--gres=gpu:h100:2" in flags
 
 
 # ---------------------------------------------------------------------------
