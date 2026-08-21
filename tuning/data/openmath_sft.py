@@ -1,9 +1,11 @@
 # ABOUTME: SFT dataset from OpenMathInstruct-2 for complex math training.
 # ABOUTME: Keeps every MATH and GSM8K source, all (problem, solution) pairs.
 
+import argparse
+
 import numpy as np
 
-from datasets import Dataset, DatasetDict
+from datasets import Dataset, DatasetDict, load_dataset
 from tuning.data.hf_dataset import HFDataset
 from tuning.data.config import SYSTEM_MESSAGE_OPENMATH, COMPMATH_STRING
 from tuning.data.heldout_math_eval import build_heldout_math_eval
@@ -61,12 +63,43 @@ class OpenMathSFT(HFDataset):
         self._dataset = formatted_dataset
 
 
-if __name__ == "__main__":
+CORPUS = "nvidia/OpenMathInstruct-2"
+
+
+def build_openmath_sft(split="train", save_name="sft-openmath", clear_existing=False,
+                       length_percentile=None):
+    """Build and save an OpenMath SFT dataset from one split of the corpus.
+
+    The corpus ships fair-downsampled splits (train_1M, train_2M, train_5M) whose
+    solutions are spread across questions instead of concentrated on the ones that
+    were easiest to generate for. Clearing is opt-in and scoped to save_name so a
+    rebuild cannot take sibling datasets with it.
+    """
     openmath = OpenMathSFT()
-    openmath.load_from_huggingface("nvidia/OpenMathInstruct-2", split="train")
-    openmath.clear_old_datasets(prefix="sft-openmath")
-    openmath.format_dataset()
-    openmath.save_dataset_to_disk(save_name="sft-openmath")
+    openmath._dataset = load_dataset(CORPUS, split=split)
+    openmath._raw_dataset = openmath._dataset
+    openmath.hf_path = CORPUS
+    if clear_existing:
+        openmath.clear_old_datasets(prefix=save_name)
+    openmath.format_dataset(length_percentile=length_percentile)
+    openmath.save_dataset_to_disk(save_name=save_name)
+    return openmath.get_dataset()
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Build an OpenMath SFT dataset.")
+    parser.add_argument("--split", default="train",
+                        help="Corpus split, e.g. train / train_1M / train_2M / train_5M")
+    parser.add_argument("--save-name", default="sft-openmath")
+    parser.add_argument("--clear-existing", action="store_true")
+    parser.add_argument("--length-percentile", type=float, default=None)
+    args = parser.parse_args()
+    build_openmath_sft(
+        split=args.split,
+        save_name=args.save_name,
+        clear_existing=args.clear_existing,
+        length_percentile=args.length_percentile,
+    )
 
     # openmath_lenp95 = OpenMathSFT()
     # openmath_lenp95.load_from_huggingface("nvidia/OpenMathInstruct-2", split="train")
