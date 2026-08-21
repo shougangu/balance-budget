@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import List, Dict, Optional
 
 from instruction_following_eval import evaluation_lib
-from tuning.data.test_dataset import get_ifeval_test_dataset, get_gsm8k_test_dataset, get_math500_test_dataset, get_amc_test_dataset, get_ifbench_test_dataset
+from tuning.data.test_dataset import get_ifeval_test_dataset, get_gsm8k_test_dataset, get_math500_test_dataset, get_amc_test_dataset, get_ifbench_test_dataset, get_math_test_dataset, get_aime24_test_dataset
 from math_verify.errors import TimeoutException
 from tuning.evaluation.gsm8k_scoring import is_correct as gsm8k_is_correct
 from tuning.evaluation.math500_scoring import is_correct as math500_is_correct
@@ -299,7 +299,16 @@ class GSM8KEvalStrategy(EvalStrategy):
 
 
 class MATH500EvalStrategy(EvalStrategy):
-    """MATH-500 evaluation using pass@k scoring with math-verify."""
+    """MATH-500 evaluation using pass@k scoring with math-verify.
+
+    Subclasses swap in another boxed-answer benchmark by overriding
+    `benchmark` and `load_test_dataset`.
+    """
+
+    benchmark = "math500"
+
+    def load_test_dataset(self, num_prompts=None):
+        return get_math500_test_dataset(num_prompts=num_prompts)
 
     def __init__(self, k_values=None, n_samples=1, num_prompts=None):
         k_values = k_values or [1]
@@ -307,7 +316,7 @@ class MATH500EvalStrategy(EvalStrategy):
         self._n_samples = n_samples
         self.stopping_k = k_values[0]
 
-        self.test_dataset = get_math500_test_dataset(num_prompts=num_prompts)
+        self.test_dataset = self.load_test_dataset(num_prompts=num_prompts)
         self.reference_answers = {
             prompt: ref
             for prompt, ref in zip(
@@ -316,7 +325,7 @@ class MATH500EvalStrategy(EvalStrategy):
             )
         }
 
-        print(f"[MATH500EvalStrategy] k_values={k_values}, n_samples={n_samples}, "
+        print(f"[{type(self).__name__}] k_values={k_values}, n_samples={n_samples}, "
               f"num_prompts={len(self.test_dataset)}")
 
     @property
@@ -325,7 +334,7 @@ class MATH500EvalStrategy(EvalStrategy):
 
     @property
     def id(self) -> str:
-        return "math500"
+        return self.benchmark
 
     def get_test_messages(self) -> List[List[dict]]:
         return self._apply_prompt_limit(list(self.test_dataset["messages"]))
@@ -352,7 +361,7 @@ class MATH500EvalStrategy(EvalStrategy):
                 try:
                     eval_results.append(math500_is_correct(r, ref))
                 except TimeoutException:
-                    print(f"[MATH500EvalStrategy] Stale TimeoutException absorbed: ref={ref!r}")
+                    print(f"[{type(self).__name__}] Stale TimeoutException absorbed: ref={ref!r}")
                     eval_results.append(False)
             all_results.append(eval_results)
 
@@ -374,16 +383,34 @@ class MATH500EvalStrategy(EvalStrategy):
 
     @property
     def label_prefix(self) -> str:
-        return f"math500-p@{self.stopping_k}"
+        return f"{self.benchmark}-p@{self.stopping_k}"
 
     def wandb_metrics(self, scores: Dict[str, float]) -> Dict[str, float]:
         metrics = {}
         for k in self.k_values:
             key = f"pass_at_{k}"
             if key in scores:
-                metrics[f"eval/math500_{key}"] = scores[key]
-        metrics["eval/math500_avg_response_length_tokens"] = scores.get("avg_response_length_tokens", 0.0)
+                metrics[f"eval/{self.benchmark}_{key}"] = scores[key]
+        metrics[f"eval/{self.benchmark}_avg_response_length_tokens"] = scores.get("avg_response_length_tokens", 0.0)
         return metrics
+
+
+class MATHEvalStrategy(MATH500EvalStrategy):
+    """Full MATH test set (5000 problems), the benchmark OpenMathInstruct-2 reports on."""
+
+    benchmark = "math"
+
+    def load_test_dataset(self, num_prompts=None):
+        return get_math_test_dataset(num_prompts=num_prompts)
+
+
+class AIME24EvalStrategy(MATH500EvalStrategy):
+    """AIME 2024, 30 integer-answer problems."""
+
+    benchmark = "aime24"
+
+    def load_test_dataset(self, num_prompts=None):
+        return get_aime24_test_dataset(num_prompts=num_prompts)
 
 
 class AMCEvalStrategy(EvalStrategy):

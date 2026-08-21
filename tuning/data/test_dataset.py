@@ -298,3 +298,68 @@ def get_olympiadbench_test_dataset(num_prompts=None):
         dataset = dataset.select(range(min(num_prompts, len(dataset))))
 
     return dataset
+
+
+def last_boxed_content(text: str) -> str:
+    """Return the contents of the last \\boxed{...} in text, honouring nested braces."""
+    start = text.rfind("\\boxed{")
+    if start == -1:
+        raise ValueError(f"no \\boxed{{}} in {text!r}")
+    i = start + len("\\boxed{")
+    depth = 1
+    while i < len(text) and depth:
+        depth += {"{": 1, "}": -1}.get(text[i], 0)
+        i += 1
+    if depth:
+        raise ValueError(f"unbalanced \\boxed{{}} in {text!r}")
+    return text[start + len("\\boxed{"): i - 1]
+
+
+def _boxed_math_dataset(problems, answers, num_prompts=None):
+    """Wrap (problem, answer) pairs in the OPENMATH prompt as an eval dataset."""
+    prompts = [COMPMATH_STRING.format(problem=problem) for problem in problems]
+    messages_list = [
+        [
+            {"role": "system", "content": SYSTEM_MESSAGE_OPENMATH},
+            {"role": "user", "content": prompt},
+        ]
+        for prompt in prompts
+    ]
+    dataset = Dataset.from_dict({
+        "messages": messages_list,
+        "prompt": prompts,
+        "reference_answer": [str(answer) for answer in answers],
+    })
+    if num_prompts is not None:
+        dataset = dataset.select(range(min(num_prompts, len(dataset))))
+    return dataset
+
+
+MATH_SUBJECTS = (
+    "algebra", "counting_and_probability", "geometry", "intermediate_algebra",
+    "number_theory", "prealgebra", "precalculus",
+)
+
+
+def get_math_test_dataset(num_prompts=None):
+    """Load the full MATH test set (5000 problems, Hendrycks et al. 2021).
+
+    This is the "MATH" benchmark OpenMathInstruct-2 reports on. The reference
+    answer is the last \\boxed{} of the ground-truth solution, scored with the
+    same math-verify path as MATH-500.
+    """
+    from datasets import load_dataset
+    problems, answers = [], []
+    for subject in MATH_SUBJECTS:
+        for row in load_dataset("EleutherAI/hendrycks_math", subject, split="test"):
+            problems.append(row["problem"])
+            answers.append(last_boxed_content(row["solution"]))
+    return _boxed_math_dataset(problems, answers, num_prompts)
+
+
+def get_aime24_test_dataset(num_prompts=None):
+    """Load AIME 2024 (30 problems, math-ai/aime24) with integer reference answers."""
+    from datasets import load_dataset
+    aime = load_dataset("math-ai/aime24", split="test")
+    return _boxed_math_dataset(
+        aime["problem"], [last_boxed_content(s) for s in aime["solution"]], num_prompts)
