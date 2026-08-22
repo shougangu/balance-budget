@@ -1,9 +1,9 @@
 # ABOUTME: Regression tests for padding variable-length SFT completion masks.
-# ABOUTME: The explicit TRL collator prevents Unsloth from selecting the generic HF collator.
+# ABOUTME: TRL builds this collator from completion_only_loss; masking must survive ragged batches.
 
 import torch
 
-from tuning.training.sft_training import SFTDataCollatorForLanguageModeling
+from trl.trainer.sft_trainer import DataCollatorForLanguageModeling as SFTDataCollatorForLanguageModeling
 
 
 def test_completion_collator_pads_variable_length_masks():

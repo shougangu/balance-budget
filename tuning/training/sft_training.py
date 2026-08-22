@@ -1,8 +1,5 @@
 
 from trl import SFTTrainer, SFTConfig
-from trl.trainer.sft_trainer import (
-    DataCollatorForLanguageModeling as SFTDataCollatorForLanguageModeling,
-)
 from tuning.data.train_dataset import get_train_dataset
 from tuning.training.config_training import ModelLoadConfig, LoraConfig, SFTRunConfig, TrainingArgumentsConfig, PassAtKConfig, PerplexityConfig, DatasetConfig, sft_batch_size, effective_batch_size
 from tuning.training.perplexity_callback import PerplexityStoppingCallback
@@ -27,6 +24,25 @@ from tuning.config import HF_MODEL_MAP, MODELS_DIR
 import torch
 import wandb
 import subprocess
+
+
+def padding_free_status(model, args, full_finetune):
+    """Describe whether padding-free batching survived, and why it did not.
+
+    Padding-free concatenates a micro-batch instead of padding every sequence to the
+    batch maximum, so losing it roughly doubles the cost of a step. Only Unsloth's
+    text-model path provides it, and it switches off silently, so name the reason.
+    """
+    if getattr(args, "padding_free", False):
+        return "on"
+    if full_finetune:
+        return "off (full fine-tune runs the plain HF path, which has no flash-attention build)"
+    config = getattr(model, "config", None)
+    architectures = getattr(config, "architectures", None) or []
+    is_vlm = any(name.endswith("ForConditionalGeneration") for name in architectures)
+    if is_vlm or hasattr(config, "vision_config"):
+        return "off (vision-language architecture; Unsloth refuses padding-free)"
+    return "off (unexpected: check for a data_collator or processor passed to SFTTrainer)"
 
 
 def train_model_sft(
@@ -70,10 +86,13 @@ def train_model_sft(
         num_proc=4,
         mask_prompt=mask_prompt,
     )
-    data_collator = SFTDataCollatorForLanguageModeling(
-        pad_token_id=tokenizer.pad_token_id,
-        completion_only_loss=mask_prompt,
-    )
+    # Unsloth turns padding-free batching off whenever the caller supplies a
+    # collator or a processor, so let TRL build the collator from
+    # ``completion_only_loss`` below and hand it a plain tokenizer. Gemma 3's
+    # processor wrapper also lacks ``pad``, which makes Unsloth swap in the
+    # generic Transformers collator that ignores the completion mask; the full
+    # processor stays available for chat templating, callbacks, and saving.
+    trainer_processing_class = getattr(tokenizer, "tokenizer", tokenizer)
 
     callbacks = [OffsetAwareWandbCallback()]
     if passk_config is not None and passk_config.enabled:
@@ -99,11 +118,10 @@ def train_model_sft(
 
     trainer = SFTTrainer(
         model = model,
-        processing_class = tokenizer,
+        processing_class = trainer_processing_class,
         train_dataset = dataset["train"],
         eval_dataset = dataset["test"],
         callbacks = callbacks,
-        data_collator = data_collator,
         args = SFTConfig(
             dataset_text_field = "text",
             max_length = model_load_config.max_seq_length,
@@ -124,6 +142,10 @@ def train_model_sft(
 
     remove_default_wandb_callback(trainer)
 
+    print(
+        f"[SFT] padding-free batching: "
+        f"{padding_free_status(model, trainer.args, training_args.full_finetune)}"
+    )
     print(trainer.args.to_dict())
 
     resume_from_checkpoint = None
