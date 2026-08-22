@@ -85,8 +85,10 @@ def run_sft(args):
     training_args.num_train_epochs = args.sft_num_epochs
     training_args.eval_steps = args.sft_eval_steps
     training_args.per_device_train_batch_size = args.sft_batch_size
-    if args.sft_eval_batch_size is not None:
-        training_args.per_device_eval_batch_size = args.sft_eval_batch_size
+    # Gemma-3 attends through flex attention, whose compiled mask kernels fault on the short
+    # sequences a narrower evaluation batch produces; evaluating wider than training instead
+    # exhausts the device on long-sequence runs. Tie the two unless asked for a specific size.
+    training_args.per_device_eval_batch_size = args.sft_eval_batch_size if args.sft_eval_batch_size is not None else args.sft_batch_size
     training_args.gradient_accumulation_steps = args.sft_grad_accum
     training_args.warmup_ratio = args.sft_warmup_ratio
     training_args.lr_scheduler_type = args.sft_lr_scheduler_type
