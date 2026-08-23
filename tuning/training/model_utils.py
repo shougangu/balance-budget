@@ -253,6 +253,80 @@ def install_vllm_fp32_logits_patch() -> bool:
     return True
 
 
+def enable_eager_block_mask(model) -> bool:
+    """Install the eager block-mask builder when the model attends through flex."""
+    config = getattr(model, "config", None)
+    implementations = {
+        getattr(config, "_attn_implementation", None),
+        getattr(getattr(config, "text_config", None), "_attn_implementation", None),
+    }
+    if "flex_attention" not in implementations:
+        return False
+    return install_eager_block_mask_patch()
+
+
+def restore_native_attention(model, implementation: str) -> bool:
+    """Undo Unsloth's Gemma-3 attention patch so transformers' own kernels run.
+
+    Unsloth's forward casts queries, keys and values to fp32 and dispatches only to
+    flex attention or SDPA, so neither bf16 SDPA nor flash attention is reachable
+    through it. Unsloth stashes the function it replaced, so restoring is exact.
+    """
+    from transformers.models.gemma3 import modeling_gemma3
+
+    attention = modeling_gemma3.Gemma3Attention
+    stash = "_original_modeling_gemma3_Gemma3Attention_forward"
+    if not hasattr(attention, stash):
+        raise RuntimeError(
+            f"Unsloth did not stash {attention.__name__}.forward as {stash}; "
+            "its patch layout changed and this restore is no longer safe"
+        )
+    attention.forward = getattr(attention, stash)
+
+    config = getattr(model, "config", None)
+    for target in (config, getattr(config, "text_config", None)):
+        if target is not None:
+            target._attn_implementation = implementation
+    return True
+
+
+def install_eager_block_mask_patch() -> bool:
+    """Build flex attention's block mask eagerly instead of through torch.compile.
+
+    Transformers asks for the compiled builder on torch >= 2.6
+    (``masking_utils.flex_attention_mask`` passes ``_compile=True``), a path PyTorch
+    itself deprecates. Its generated Triton kernel dies with an illegal memory access
+    on Gemma-3; see docs/GEMMA3_FLEX_ATTENTION_FAULTS.md. The mask is built once per
+    forward, so building it eagerly leaves the attention kernel itself untouched.
+    """
+    import transformers.masking_utils as masking_utils
+
+    if getattr(masking_utils, "_balance_budget_eager_block_mask", False):
+        return False
+
+    original_create_block_mask = masking_utils.create_block_mask
+
+    def _as_bool(mask_mod):
+        # Indexing a long padding mask promotes the intersection to int64, which the
+        # eager builder rejects; the compiled builder traced the check away.
+        def bool_mask_mod(batch_idx, head_idx, q_idx, kv_idx):
+            return mask_mod(batch_idx, head_idx, q_idx, kv_idx).to(torch.bool)
+
+        return bool_mask_mod
+
+    def _eager_create_block_mask(*args, **kwargs):
+        if "mask_mod" in kwargs:
+            kwargs["mask_mod"] = _as_bool(kwargs["mask_mod"])
+        else:
+            args = (_as_bool(args[0]),) + args[1:]
+        kwargs["_compile"] = False
+        return original_create_block_mask(*args, **kwargs)
+
+    masking_utils.create_block_mask = _eager_create_block_mask
+    masking_utils._balance_budget_eager_block_mask = True
+    return True
+
+
 def install_trl_vllm_dtype_patch(dtype_name: str) -> bool:
     """Force TRL's colocated vLLM LLM constructor wrapper to receive dtype."""
     import importlib

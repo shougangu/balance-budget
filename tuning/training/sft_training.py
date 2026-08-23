@@ -6,6 +6,8 @@ from tuning.training.perplexity_callback import PerplexityStoppingCallback
 from tuning.training.passk_callback import PassAtKStoppingCallback
 from tuning.training.model_utils import (
     disable_loss_kwargs_if_unsupported,
+    enable_eager_block_mask,
+    restore_native_attention,
     load_model_with_lora,
     save_trained_model,
 )
@@ -21,6 +23,7 @@ from tuning.utils.utils import (
 from typing import List, Optional
 from pathlib import Path
 from tuning.config import HF_MODEL_MAP, MODELS_DIR
+import os
 import torch
 import wandb
 import subprocess
@@ -71,6 +74,17 @@ def train_model_sft(
     # lets padding be enabled by default and also removes use_cache=False
     # default in SFTTrainer.compute_loss, removing position_ids padding separation  
     model.config.use_cache = False
+    if os.environ.get("BALANCE_BUDGET_EAGER_BLOCK_MASK") == "1":
+        if enable_eager_block_mask(model):
+            print("[SFT] flex attention block masks: eager")
+        else:
+            raise RuntimeError(
+                "BALANCE_BUDGET_EAGER_BLOCK_MASK is set but the model does not attend "
+                f"through flex attention: {model.config._attn_implementation}"
+            )
+    native_attention = os.environ.get("BALANCE_BUDGET_GEMMA_ATTENTION")
+    if native_attention and restore_native_attention(model, native_attention):
+        print(f"[SFT] gemma attention: transformers native, {native_attention}")
     tokenizer = chat_template_func(tokenizer)
 
     mask_prompt = training_args.mask_prompt_tokens
