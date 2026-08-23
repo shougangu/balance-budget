@@ -505,6 +505,38 @@ class TestOffsetAwareWandbCallback:
         assert cb.total_seconds == 30.0
         assert state.stateful_callbacks["OffsetAwareWandbCallback"] == cb.state()
 
+    def test_legacy_checkpoint_takes_multiplier_from_training_args(self):
+        """Checkpoints predating the multiplier still resume counting GPU-minutes."""
+        legacy_state = {
+            "args": {"initial_global_step": 0},
+            "attributes": {"total_seconds": 600.0},
+        }
+        cb = OffsetAwareWandbCallback.from_state(legacy_state)
+        cb._wandb = None
+        state = TrainerState(
+            global_step=552,
+            stateful_callbacks={"OffsetAwareWandbCallback": legacy_state},
+        )
+
+        cb.on_train_begin(SimpleNamespace(gpu_minute_multiplier=2.0), state, TrainerControl())
+        _fire_step(cb, state, start=10.0, end=13.0)
+
+        assert cb.time_multiplier == 2.0
+        assert cb.total_seconds == 606.0
+
+    def test_training_args_without_multiplier_keep_the_configured_one(self):
+        """SFT and DPO never record a multiplier, so their single-GPU default stands."""
+        cb = OffsetAwareWandbCallback(initial_total_seconds=600.0)
+        cb._wandb = None
+        state = TrainerState(
+            global_step=20,
+            stateful_callbacks={"OffsetAwareWandbCallback": cb.state()},
+        )
+
+        cb.on_train_begin(SimpleNamespace(), state, TrainerControl())
+
+        assert cb.time_multiplier == 1.0
+
     def test_injects_total_global_step_and_total_minutes(self):
         cb = OffsetAwareWandbCallback(
             initial_global_step=500,

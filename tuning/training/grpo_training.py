@@ -442,6 +442,10 @@ def train_model_grpo(
         )
         callbacks.append(passk_callback)
 
+    grpo_args = GRPOConfig(**training_args.to_hf_args(output_dir=run_config.output_dir))
+    # Survives a resume intact, unlike anything stored on the timing callback.
+    grpo_args.gpu_minute_multiplier = float(training_args.num_compute_gpus)
+
     trainer = _GRPOTrainer(
         model=model,
         processing_class=tokenizer,
@@ -449,9 +453,7 @@ def train_model_grpo(
         train_dataset=raw_dataset["train"],
         eval_dataset=raw_dataset["test"],
         callbacks=callbacks if callbacks else None,
-        args=GRPOConfig(
-            **training_args.to_hf_args(output_dir=run_config.output_dir),
-        ),
+        args=grpo_args,
         zero_variance_filter=training_args.zero_variance_filter,
         zero_variance_filter_epsilon=training_args.zero_variance_filter_epsilon,
     )

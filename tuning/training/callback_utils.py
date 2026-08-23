@@ -100,6 +100,13 @@ class OffsetAwareWandbCallback(WandbCallback, ExportableState):
         if stored_name and stored_name != self.__class__.__name__:
             state.stateful_callbacks.pop(stored_name, None)
 
+        # Trainer rebuilds this callback as type(cb)(**state()["args"]) when it
+        # resumes, so the constructor's multiplier is gone by now; take it from
+        # the training arguments, which the launch config rebuilds every run.
+        multiplier = getattr(args, "gpu_minute_multiplier", None)
+        if multiplier:
+            self.time_multiplier = float(multiplier)
+
         self.step_start = None
         self._sync_state(state)
         return super().on_train_begin(args, state, control, **kwargs)

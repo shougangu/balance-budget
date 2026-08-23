@@ -58,7 +58,7 @@ class TrainingArgumentsConfig(BaseModel):
     lr_scheduler_type: str = "cosine"
     report_to: list[str] = ["wandb"]
     save_strategy: str = "steps"
-    save_steps: int = 625
+    save_steps: int = 256
     save_total_limit: int = 1
     load_best_model_at_end: bool = False
     dataloader_drop_last: bool = False
