@@ -1475,7 +1475,7 @@ class TestSbatchScriptResolution:
 
 
 class TestFixedEvalSampling:
-    """gsm8k/math500/amc are scored at fixed (n_samples, k_values) everywhere."""
+    """gsm8k/math500/amc/ifeval/ifbench are scored at fixed (n_samples, k_values) everywhere."""
 
     def test_eval_sampling_overrides_gsm8k_and_math(self):
         from tuning.training.pipeline.eval_components import _eval_sampling
@@ -1486,9 +1486,17 @@ class TestFixedEvalSampling:
         from tuning.training.pipeline.eval_components import _eval_sampling
         assert _eval_sampling("amc", [1], 1) == ([1, 2, 4, 8], 8)
 
+    def test_eval_sampling_ifeval_fixed_n4(self):
+        from tuning.training.pipeline.eval_components import _eval_sampling
+        assert _eval_sampling("ifeval", [1], 1) == ([1, 2, 4], 4)
+
+    def test_eval_sampling_ifbench_fixed_n8(self):
+        from tuning.training.pipeline.eval_components import _eval_sampling
+        assert _eval_sampling("ifbench", [1], 1) == ([1, 2, 4, 8], 8)
+
     def test_eval_sampling_passes_through_unlisted(self):
         from tuning.training.pipeline.eval_components import _eval_sampling
-        assert _eval_sampling("ifeval", [1, 2], 3) == ([1, 2], 3)
+        assert _eval_sampling("aime24", [1, 2], 3) == ([1, 2], 3)
 
     def _components(self, extra):
         from tuning.training.pipeline.eval_components import _build_eval_components
@@ -1508,8 +1516,13 @@ class TestFixedEvalSampling:
         assert primary.n_samples == 4
         assert primary.k_values == [1, 2, 4]
 
-    def test_primary_ifeval_uses_cli(self):
+    def test_primary_ifeval_pinned_n4(self):
         _, primary, _ = self._components(["--task-name", "ifeval"])
+        assert primary.n_samples == 4
+        assert primary.k_values == [1, 2, 4]
+
+    def test_primary_ifbench_pinned_n8(self):
+        _, primary, _ = self._components(["--task-name", "ifbench"])
         assert primary.n_samples == 8
         assert primary.k_values == [1, 2, 4, 8]
 
