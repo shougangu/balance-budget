@@ -7,6 +7,7 @@ from tuning.training.passk_callback import PassAtKStoppingCallback
 from tuning.training.model_utils import (
     disable_loss_kwargs_if_unsupported,
     enable_eager_block_mask,
+    install_resume_epoch_patch,
     restore_native_attention,
     load_model_with_lora,
     save_trained_model,
@@ -169,6 +170,7 @@ def train_model_sft(
             resume_from_checkpoint = str(max(checkpoints, key=lambda x: int(x.name.split("-")[1])))
             print(f"[SFT] Resuming from checkpoint: {resume_from_checkpoint}")
 
+    install_resume_epoch_patch()
     try:
         trainer_stats = trainer.train(resume_from_checkpoint=resume_from_checkpoint)
     except KeyboardInterrupt:

@@ -327,6 +327,43 @@ def install_eager_block_mask_patch() -> bool:
     return True
 
 
+def install_resume_epoch_patch() -> bool:
+    """Keep the sampler on the current epoch when a resume skips trained batches.
+
+    Transformers sets the epoch on its dataloader and then asks accelerate's
+    skip_first_batches for a loader that drops the already-trained batches. That
+    loader starts its own epoch counter at 0 and pushes it into the shared
+    seedable sampler on iteration, so the resumed run draws epoch 0's permutation
+    and re-shows examples instead of continuing the interrupted epoch. Carrying
+    the epoch counter across restores the interrupted epoch's order.
+    """
+    import transformers.trainer as trainer_module
+
+    if getattr(trainer_module, "_balance_budget_resume_epoch", False):
+        return False
+    original_skip_first_batches = trainer_module.skip_first_batches
+
+    def skip_first_batches(dataloader, num_batches=0):
+        skipped = original_skip_first_batches(dataloader, num_batches)
+        iteration = getattr(dataloader, "iteration", None)
+        if iteration is not None and hasattr(skipped, "iteration"):
+            skipped.iteration = iteration
+        return skipped
+
+    # Unsloth re-executes the training loop in its own module with a copy of
+    # transformers.trainer's names, so the loop that actually runs may resolve
+    # skip_first_batches from that copy rather than from transformers.trainer.
+    namespaces = [trainer_module.__dict__]
+    loop_globals = getattr(trainer_module.Trainer._inner_training_loop, "__globals__", None)
+    if loop_globals is not None and loop_globals is not trainer_module.__dict__:
+        namespaces.append(loop_globals)
+    for namespace in namespaces:
+        if namespace.get("skip_first_batches") is original_skip_first_batches:
+            namespace["skip_first_batches"] = skip_first_batches
+    trainer_module._balance_budget_resume_epoch = True
+    return True
+
+
 def install_trl_vllm_dtype_patch(dtype_name: str) -> bool:
     """Force TRL's colocated vLLM LLM constructor wrapper to receive dtype."""
     import importlib
