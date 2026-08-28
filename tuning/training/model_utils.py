@@ -115,7 +115,12 @@ def load_model_with_lora(model_path, model_name, model_load_config, lora_config,
             )
 
         dtype = model_load_config.dtype
-        if dtype is None:
+        if dtype is None and full_finetune:
+            # Full fine-tuning updates the weights in place, so they must be fp32 master
+            # weights: at LR 2e-5 most AdamW steps are below half a bf16 ulp and would
+            # round to zero. bf16 autocast in the trainer still runs the matmuls in bf16.
+            dtype = torch.float32
+        elif dtype is None:
             dtype = torch.bfloat16 if (torch.cuda.is_available() and torch.cuda.is_bf16_supported()) else torch.float16
 
         # In distributed mode (LOCAL_RANK set by torchrun), device_map="auto"

@@ -82,6 +82,46 @@ def test_load_full_finetune_skips_peft(hf_load_mocks):
     model.gradient_checkpointing_enable.assert_called_once()
 
 
+def test_load_full_finetune_uses_fp32_master_weights(hf_load_mocks):
+    import torch
+    import transformers
+    from tuning.training.model_utils import load_model_with_lora
+
+    _, _, model_path = hf_load_mocks
+    load_model_with_lora(
+        model_path=model_path,
+        model_name="llama3-8B",
+        model_load_config=ModelLoadConfig(),
+        lora_config=LoraConfig(),
+        use_unsloth=False,
+        full_finetune=True,
+    )
+    kwargs = transformers.AutoModelForCausalLM.from_pretrained.call_args.kwargs
+    assert kwargs["torch_dtype"] is torch.float32
+
+
+def test_load_lora_keeps_bf16_weights(hf_load_mocks, monkeypatch):
+    import torch
+    import transformers
+    import peft
+    from tuning.training.model_utils import load_model_with_lora
+
+    monkeypatch.setattr(peft, "get_peft_model", MagicMock())
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(torch.cuda, "is_bf16_supported", lambda: True)
+    _, _, model_path = hf_load_mocks
+    load_model_with_lora(
+        model_path=model_path,
+        model_name="llama3-8B",
+        model_load_config=ModelLoadConfig(),
+        lora_config=LoraConfig(),
+        use_unsloth=False,
+        full_finetune=False,
+    )
+    kwargs = transformers.AutoModelForCausalLM.from_pretrained.call_args.kwargs
+    assert kwargs["torch_dtype"] is torch.bfloat16
+
+
 def test_load_full_finetune_rejects_unsloth(hf_load_mocks):
     from tuning.training.model_utils import load_model_with_lora
 
