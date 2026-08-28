@@ -61,16 +61,14 @@ def _update_row(metadata_file, predicate, updates):
     Returns the updated row, or None if no row matched.
     """
     with open(metadata_file) as f:
-        lines = f.readlines()
+        rows = [json.loads(line) for line in f if line.strip()]
     target = None
+    for row in rows:
+        if target is None and predicate(row):
+            row.update(updates)
+            target = row
     with open(metadata_file, "w") as f:
-        for line in lines:
-            if not line.strip():
-                continue
-            row = json.loads(line)
-            if target is None and predicate(row):
-                row.update(updates)
-                target = row
+        for row in rows:
             f.write(json.dumps(row) + "\n")
     return target
 
