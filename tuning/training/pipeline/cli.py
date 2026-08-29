@@ -168,7 +168,9 @@ def _parse_args(argv=None):
     stage.add_argument("--qos", default=None,
                        help="Slurm QOS for every sbatch job the pipeline submits "
                             "(e.g. 'high' for the priority queue).")
-    parser.add_argument("--sft-dataset", default="gsm8k", choices=["gsm8k", "tuluif", "tulumix", "ifmix", "openmath", "openmath-1M", "openmath-lenp95", "openmath-reasoning"])
+    parser.add_argument("--sft-dataset", default="gsm8k", choices=["gsm8k", "tuluif", "tulumix", "ifmix", "openmath", "openmath-1M", "openmath-lenp95", "openmath-reasoning",
+                                                                   "nemotron-math-low", "nemotron-math-medium",
+                                                                   "nemotron-math-low-x4", "nemotron-math-medium-x4"])
     parser.add_argument("--dataset", default="gsm8k",
                         choices=["tuluif", "gsm8k", "openmath", "ifrlvr", "dapo",
                                  "mathmix", "simplerl", "simplerl-easy",
@@ -328,6 +330,9 @@ def _parse_args(argv=None):
     parser.add_argument("--sft-passk-early", type=parse_early_tuple, nargs="*",
                         default=[])
     parser.add_argument("--sft-passk-k-values", type=int, nargs="+", default=[1])
+    parser.add_argument("--eval-fixed-sampling", action=argparse.BooleanOptionalAction, default=True,
+                        help="Score gsm8k/math500/amc at the fixed (n_samples, k_values) grid "
+                             "regardless of the --*-passk flags")
     parser.add_argument("--sft-passk-n-samples", type=int, default=1)
     parser.add_argument("--sft-passk-num-prompts", type=int, default=1500)
     parser.add_argument("--sft-passk-max-tokens", type=int, default=4096)

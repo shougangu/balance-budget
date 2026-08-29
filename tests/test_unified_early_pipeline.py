@@ -1516,6 +1516,20 @@ class TestFixedEvalSampling:
         assert primary.n_samples == 4
         assert primary.k_values == [1, 2, 4]
 
+    def test_no_fixed_sampling_uses_cli_for_primary_and_monitors(self):
+        _, primary, monitors = self._components([
+            "--task-name", "math500", "--monitor-evals", "amc",
+            "--no-eval-fixed-sampling",
+        ])
+        assert primary.n_samples == 8
+        assert primary.k_values == [1, 2, 4, 8]
+        assert monitors[0].n_samples == 8
+        assert monitors[0].k_values == [1, 2, 4, 8]
+
+    def test_eval_sampling_unfixed_passes_through(self):
+        from tuning.training.pipeline.eval_components import _eval_sampling
+        assert _eval_sampling("amc", [1], 1, fixed=False) == ([1], 1)
+
     def test_primary_ifeval_pinned_n4(self):
         _, primary, _ = self._components(["--task-name", "ifeval"])
         assert primary.n_samples == 4

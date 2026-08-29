@@ -13,9 +13,9 @@ FIXED_EVAL_SAMPLING = {
 }
 
 
-def _eval_sampling(name, k_values, n_samples):
+def _eval_sampling(name, k_values, n_samples, fixed=True):
     """Return (k_values, n_samples) for a dataset, applying any fixed override."""
-    fixed = FIXED_EVAL_SAMPLING.get(name)
+    fixed = FIXED_EVAL_SAMPLING.get(name) if fixed else None
     if fixed is None:
         return k_values, n_samples
     fixed_n, fixed_k = fixed
@@ -95,7 +95,8 @@ def _build_eval_components(args, stage, gpu_util):
     cli_k_values = getattr(args, f"{prefix}_passk_k_values", [1])
     cli_n_samples = getattr(args, f"{prefix}_passk_n_samples", 1)
     num_prompts = getattr(args, f"{prefix}_passk_num_prompts", None)
-    k_values, n_samples = _eval_sampling(args.task_name, cli_k_values, cli_n_samples)
+    fixed = getattr(args, "eval_fixed_sampling", True)
+    k_values, n_samples = _eval_sampling(args.task_name, cli_k_values, cli_n_samples, fixed)
 
     if args.task_name == "ifeval":
         from tuning.training.eval_strategy import IFEvalStrategy
@@ -139,7 +140,8 @@ def _build_monitor_evals(args, k_values, n_samples):
     for name in getattr(args, "monitor_evals", []):
         if name == args.task_name:
             continue
-        kv, ns = _eval_sampling(name, k_values, n_samples)
+        kv, ns = _eval_sampling(name, k_values, n_samples,
+                                getattr(args, "eval_fixed_sampling", True))
         if name == "math500":
             from tuning.training.eval_strategy import MATH500EvalStrategy
             monitor_evals.append(MATH500EvalStrategy(k_values=kv, n_samples=ns))

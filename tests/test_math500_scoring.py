@@ -86,3 +86,21 @@ def test_get_math500_test_dataset_loads():
         # User message uses COMPMATH_STRING template
         assert "Problem:" in ds[0]["messages"][1]["content"]
         assert "What is 2+2?" in ds[0]["messages"][1]["content"]
+
+
+class TestIsCorrectWithThinkBlock:
+    """Long-CoT responses carry intermediate boxed candidates inside <think>; the final answer wins."""
+
+    def test_final_boxed_after_think_block_is_scored(self):
+        response = (
+            "<think>\nMaybe $\\boxed{7}$? No, recheck: 4+5 = 9.\n</think>\n\n"
+            "The answer is $\\boxed{9}$."
+        )
+        assert is_correct(response, "9") is True
+
+    def test_wrong_final_answer_is_not_rescued_by_a_boxed_guess_in_think(self):
+        response = (
+            "<think>\nMaybe $\\boxed{9}$? No, it must be 7.\n</think>\n\n"
+            "The answer is $\\boxed{7}$."
+        )
+        assert is_correct(response, "9") is False
