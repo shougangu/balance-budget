@@ -16,6 +16,7 @@ from tuning.training.callback_utils import (
     OffsetAwareWandbCallback,
     remove_default_wandb_callback,
 )
+from tuning.training.paged_optimizer_offload import PagedOptimizerOffloadCallback
 from tuning.utils.utils import (
     chat_template_func,
     apply_chat_template,
@@ -110,6 +111,8 @@ def train_model_sft(
     trainer_processing_class = getattr(tokenizer, "tokenizer", tokenizer)
 
     callbacks = [OffsetAwareWandbCallback()]
+    if training_args.full_finetune:
+        callbacks.append(PagedOptimizerOffloadCallback())
     if passk_config is not None and passk_config.enabled:
         passk_callback = PassAtKStoppingCallback(
             config=passk_config,
