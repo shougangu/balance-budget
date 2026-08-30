@@ -128,3 +128,28 @@ def test_ifbench_defaults_to_the_shared_sample_count():
                            "--n-samples", "4", "--out", "o.json"])
     assert cal.benchmark_n_samples("ifbench", args) == 4
     assert cal.benchmark_n_samples("amc", args) == 8
+
+def test_merge_carries_the_processor_config_a_multimodal_base_needs(tmp_path):
+    adapter = tmp_path / "adapter"
+    adapter.mkdir()
+    (adapter / "preprocessor_config.json").write_text('{"image_seq_length": 256}')
+    base = tmp_path / "base"
+    base.mkdir()
+    (base / "preprocessor_config.json").write_text('{"image_seq_length": 999}')
+    (base / "processor_config.json").write_text('{"processor_class": "Gemma3Processor"}')
+    out = tmp_path / "merged"
+    out.mkdir()
+    cal.copy_processor_assets(str(adapter), str(base), str(out))
+    assert (out / "processor_config.json").exists()
+    assert json.loads((out / "preprocessor_config.json").read_text())["image_seq_length"] == 256
+
+
+def test_merge_of_a_text_only_base_copies_nothing(tmp_path):
+    adapter = tmp_path / "adapter"
+    adapter.mkdir()
+    base = tmp_path / "base"
+    base.mkdir()
+    out = tmp_path / "merged"
+    out.mkdir()
+    cal.copy_processor_assets(str(adapter), str(base), str(out))
+    assert list(out.iterdir()) == []

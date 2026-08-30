@@ -289,6 +289,24 @@ def sft_parent_adapter(model: str):
 
 MERGE_DONE_MARKER = "merge_complete"
 
+# A multimodal base (Gemma-3) is only loadable with its processor beside the
+# weights; save_pretrained on the tokenizer alone does not write these.
+PROCESSOR_ASSETS = ("preprocessor_config.json", "processor_config.json")
+
+
+def copy_processor_assets(adapter: str, base: str, out: str) -> None:
+    """Put the processor config a multimodal base needs next to merged weights.
+
+    The adapter's copy wins over the base's, matching whose tokenizer is saved.
+    """
+    import shutil
+
+    for name in PROCESSOR_ASSETS:
+        for source in (os.path.join(adapter, name), os.path.join(base, name)):
+            if os.path.isfile(source):
+                shutil.copyfile(source, os.path.join(out, name))
+                break
+
 
 def merge_adapter_into_base(base: str, adapter: str, out: str) -> str:
     """Write base weights with the adapter merged in (plus the adapter's tokenizer) to out.
@@ -312,6 +330,7 @@ def merge_adapter_into_base(base: str, adapter: str, out: str) -> str:
     model = PeftModel.from_pretrained(model, adapter).merge_and_unload()
     model.save_pretrained(staging, safe_serialization=True)
     AutoTokenizer.from_pretrained(adapter).save_pretrained(staging)
+    copy_processor_assets(adapter, base, staging)
     open(os.path.join(staging, MERGE_DONE_MARKER), "w").close()
     try:
         os.rename(staging, out)
