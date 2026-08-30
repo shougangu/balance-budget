@@ -153,3 +153,10 @@ def test_merge_of_a_text_only_base_copies_nothing(tmp_path):
     out.mkdir()
     cal.copy_processor_assets(str(adapter), str(base), str(out))
     assert list(out.iterdir()) == []
+
+
+def test_majority_vote_grades_the_winner_with_the_accept_either_verifier():
+    """maj@k must use the same grader as pass@k, or the two columns disagree."""
+    # The numeric path reads the 7 out of this box; math-verify alone rejects the \text{}.
+    results = [{"prompt": "p", "responses": [r"so \\boxed{\\text{7 apples}}"] * 2}]
+    assert cal.majority_vote_scores(results, {"p": "7"}, k_values=[2]) == {"maj_at_2": 1.0}

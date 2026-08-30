@@ -207,10 +207,11 @@ def majority_vote_scores(results: list[dict], reference_answers: dict,
     """maj@k over the first k responses of each prompt, for every k every prompt can fill.
 
     Responses vote by canonical_answer; unparsable responses abstain and ties go
-    to the answer seen first. Each distinct answer is graded once per prompt with
-    the math-verify grader, on the first response that produced it.
+    to the answer seen first. Each distinct answer is graded once per prompt, on
+    the first response that produced it, with the same accept-either verifier
+    pass@k uses so the two columns of a report agree.
     """
-    from tuning.evaluation.math500_scoring import is_correct
+    from tuning.evaluation.math_scoring import is_correct
 
     usable = [k for k in k_values if all(k <= len(item["responses"]) for item in results)]
     per_k = {k: [] for k in usable}

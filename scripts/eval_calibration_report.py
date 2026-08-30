@@ -17,6 +17,10 @@ so the published-to-ours gap splits into a grading component
 theirs_sampled), a prompt component (theirs_sampled - ours_native) and a
 template component (ours_native - ours_simple).
 
+A *_maj256 cell adds a majority-voting section: greedy (from the matching
+*_greedy cell), sampled pass@1, maj@{4,16,64,256} and pass@n from the same
+generations.
+
 Usage:
     python scripts/eval_calibration_report.py --dir outputs/eval_calibration
 """
@@ -134,6 +138,35 @@ def render_model(model, arms):
                 _, reported = published.get(benchmark, (benchmark, None))
                 values = {a: score(arms.get(a), benchmark) for a in MATH_ARM_ORDER}
                 lines.append(_gap_row(benchmark, reported, values))
+    lines.extend(render_majority(model, arms))
+    return lines
+
+
+MAJ_K = (4, 16, 64, 256)
+
+
+def render_majority(model, arms):
+    """Lines for the majority-voting section, or [] when the model has no maj256 cell."""
+    lines = []
+    for arm in sorted(a for a in arms if a.endswith("_maj256")):
+        greedy = arms.get(arm.replace("_maj256", "_greedy"))
+        cell = arms[arm]
+        present = [b for b in MATH_BENCHMARKS if score(cell, b) is not None]
+        if not present:
+            continue
+        header = (f"{'benchmark':<12}{'greedy':>8}{'pass@1':>8}"
+                  + "".join(f"{'maj@' + str(k):>9}" for k in MAJ_K) + f"{'pass@n':>9}")
+        lines += ["", f"majority voting ({arm}; n = samples per prompt in that cell)",
+                  header, "-" * len(header)]
+        for benchmark in present:
+            n = max(int(k[len("pass_at_"):]) for k in cell["benchmarks"][benchmark]
+                    if k.startswith("pass_at_") and k[len("pass_at_"):].isdigit())
+            row = f"{benchmark:<12}{pct(score(greedy, benchmark)).strip():>8}"
+            row += f"{pct(score(cell, benchmark)).strip():>8}"
+            for k in MAJ_K:
+                row += f"{pct(score(cell, benchmark, f'maj_at_{k}')).strip():>9}"
+            row += f"{pct(score(cell, benchmark, f'pass_at_{n}')).strip():>9}"
+            lines.append(row)
     return lines
 
 
