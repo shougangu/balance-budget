@@ -96,6 +96,12 @@ def run_sft(args):
     training_args.full_finetune = args.sft_full_finetune
     training_args.mask_prompt_tokens = args.sft_mask_prompt_tokens
     training_args.optim = args.sft_optim
+    training_args.max_grad_norm = args.sft_max_grad_norm
+    training_args.adam_beta2 = args.sft_adam_beta2
+    if args.sft_save_steps is not None:
+        training_args.save_steps = args.sft_save_steps
+    if args.sft_save_total_limit is not None:
+        training_args.save_total_limit = args.sft_save_total_limit
 
     passk_config, primary_eval, monitor_evals = _build_eval_components(args, "sft", gpu_util)
     ppl_config = _sft_ppl_config(args)

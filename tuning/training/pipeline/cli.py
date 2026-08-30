@@ -220,6 +220,13 @@ def _parse_args(argv=None):
         help="SFT optimizer. Defaults to paged_adamw_8bit for full fine-tuning "
              "so pass@k eval can offload optimizer state, otherwise adamw_8bit.",
     )
+    parser.add_argument("--sft-max-grad-norm", type=float, default=1.0,
+                        help="Gradient clipping norm for SFT; 0 disables clipping.")
+    parser.add_argument("--sft-adam-beta2", type=float, default=0.999)
+    parser.add_argument("--sft-save-steps", type=int, default=None,
+                        help="Trainer checkpoint cadence in optimizer steps.")
+    parser.add_argument("--sft-save-total-limit", type=int, default=None,
+                        help="How many trainer checkpoints to keep on disk.")
     parser.add_argument("--dpo-learning-rate", type=float, default=5e-6)
     parser.add_argument("--dpo-num-epochs", type=int, default=3)
     parser.add_argument("--dpo-eval-steps", type=int, default=256)

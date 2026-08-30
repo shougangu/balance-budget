@@ -55,6 +55,8 @@ class TrainingArgumentsConfig(BaseModel):
     learning_rate: float = 5e-5
     optim: str = "adamw_8bit"
     weight_decay: float = 0.01
+    max_grad_norm: float = 1.0
+    adam_beta2: float = 0.999
     lr_scheduler_type: str = "cosine"
     report_to: list[str] = ["wandb"]
     save_strategy: str = "steps"
