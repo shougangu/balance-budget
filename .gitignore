@@ -203,3 +203,5 @@ tuning/slurm/submitscripts
 
 # Symlink to the private writeup repo (kept out of the public repo)
 /writeup
+/outputs/
+/checkpoint_backups/
