@@ -10,8 +10,7 @@ from typing import List, Dict, Optional
 from instruction_following_eval import evaluation_lib
 from tuning.data.test_dataset import get_ifeval_test_dataset, get_gsm8k_test_dataset, get_math500_test_dataset, get_amc_test_dataset, get_ifbench_test_dataset, get_math_test_dataset, get_aime24_test_dataset
 from math_verify.errors import TimeoutException
-from tuning.evaluation.gsm8k_scoring import is_correct as gsm8k_is_correct
-from tuning.evaluation.math500_scoring import is_correct as math500_is_correct
+from tuning.evaluation.math_scoring import is_correct as math_is_correct
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent  # repo root (balance-budget)
 IFEVAL_INPUT_PATH = BASE_DIR / "instruction_following_eval/data/input_data.jsonl"
@@ -265,7 +264,7 @@ class GSM8KEvalStrategy(EvalStrategy):
             )
             response_token_lengths.extend(len(ids) for ids in encoded_batch["input_ids"])
 
-            eval_results = [gsm8k_is_correct(r, ref) for r in responses]
+            eval_results = [math_is_correct(r, ref) for r in responses]
             all_results.append(eval_results)
 
             item["per_response_correct"] = eval_results
@@ -359,7 +358,7 @@ class MATH500EvalStrategy(EvalStrategy):
             eval_results = []
             for r in responses:
                 try:
-                    eval_results.append(math500_is_correct(r, ref))
+                    eval_results.append(math_is_correct(r, ref))
                 except TimeoutException:
                     print(f"[{type(self).__name__}] Stale TimeoutException absorbed: ref={ref!r}")
                     eval_results.append(False)
@@ -468,7 +467,7 @@ class AMCEvalStrategy(EvalStrategy):
             eval_results = []
             for r in responses:
                 try:
-                    eval_results.append(math500_is_correct(r, ref))
+                    eval_results.append(math_is_correct(r, ref))
                 except TimeoutException:
                     print(f"[AMCEvalStrategy] Stale TimeoutException absorbed: ref={ref!r}")
                     eval_results.append(False)

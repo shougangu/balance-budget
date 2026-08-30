@@ -517,7 +517,7 @@ def test_math500_score_responses_survives_timeout():
                 raise TimeoutException("Operation timed out!")
             return True
 
-        with patch("tuning.training.eval_strategy.math500_is_correct", side_effect=timeout_on_second_call):
+        with patch("tuning.training.eval_strategy.math_is_correct", side_effect=timeout_on_second_call):
             results = [
                 {"prompt": "Q1", "responses": [r"$\boxed{42}$"]},
                 {"prompt": "Q2", "responses": [r"$\boxed{7}$"]},
