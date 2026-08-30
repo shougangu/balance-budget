@@ -86,28 +86,47 @@ def test_no_row_is_fully_masked(model_key, template, template_name):
         assert any(row["completion_mask"]), f"{template_name} fully masked a row"
 
 
-def test_token_straddling_the_seam_is_supervised():
-    """"Answer:" + "A body" merges into one ":A" token, which must count as response.
+def test_prompt_tokens_match_inference_tokenization():
+    """The masked prefix must be the exact token stream the model is prompted with at eval.
 
-    Assigning it to the prompt would drop the first response token from the loss.
+    "Answer:" + "A body" would merge into one ":A" token under joint tokenization, which
+    the model never sees at inference, where the prompt is tokenized on its own.
     """
     tokenizer = _tokenizer("llama3-8B", SIMPLE_TEMPLATE)
     row = _prepare(tokenizer, [STRADDLING_CONVO])[0]
 
-    tokens = tokenizer.convert_ids_to_tokens(row["input_ids"])
-    straddling = [i for i, tok in enumerate(tokens) if tok == ":A"]
-    assert straddling, f"expected a merged ':A' token, got {tokens}"
-    for index in straddling:
-        assert row["completion_mask"][index] == 1
+    prompt_text = tokenizer.apply_chat_template(
+        STRADDLING_CONVO[:-1], tokenize=False, add_generation_prompt=True
+    )
+    prompt_ids = tokenizer(prompt_text, add_special_tokens=False)["input_ids"]
+    n_prompt = sum(1 for m in row["completion_mask"] if m == 0)
+    assert row["input_ids"][:n_prompt] == prompt_ids
+    assert row["completion_mask"][n_prompt] == 1
+    assert ":A" not in tokenizer.convert_ids_to_tokens(row["input_ids"])
 
 
-def test_masking_does_not_change_input_ids():
-    """Labels change; the token stream must stay byte-identical to unmasked runs."""
+def test_think_tag_after_answer_colon_is_its_own_tokens():
+    """A "<think>" response after "Answer:" must not be fused into the prompt's colon."""
     tokenizer = _tokenizer("llama3-8B", SIMPLE_TEMPLATE)
-    masked = _prepare(tokenizer, [STRADDLING_CONVO], mask_prompt=True)[0]
-    unmasked = _prepare(tokenizer, [STRADDLING_CONVO], mask_prompt=False)[0]
+    convo = [
+        {"role": "user", "content": "Problem: 2+2?\nAnswer:"},
+        {"role": "assistant", "content": "<think>\nAdd.\n</think>\n\n$\\boxed{4}$"},
+    ]
+    row = _prepare(tokenizer, [convo])[0]
+    tokens = tokenizer.convert_ids_to_tokens(row["input_ids"])
+    assert ":<" not in tokens, tokens
+    first = row["completion_mask"].index(1)
+    assert tokenizer.decode(row["input_ids"][first:first + 4]).startswith("<think>")
 
-    assert masked["input_ids"] == unmasked["input_ids"]
+
+def test_completion_tokens_match_standalone_tokenization():
+    """Response tokens equal tokenizing the response text alone, so eval-time continuations
+    are in-distribution."""
+    tokenizer = _tokenizer("llama3-8B", SIMPLE_TEMPLATE)
+    row = _prepare(tokenizer, [NON_STRADDLING_CONVO])[0]
+    first = row["completion_mask"].index(1)
+    completion_text = NON_STRADDLING_CONVO[-1]["content"] + tokenizer.eos_token
+    assert row["input_ids"][first:] == tokenizer(completion_text, add_special_tokens=False)["input_ids"]
 
 
 def test_single_bos_is_preserved():

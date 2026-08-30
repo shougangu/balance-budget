@@ -198,25 +198,33 @@ def tokenize_sft_dataset(tokenizer, dataset, max_length, num_proc=4, mask_prompt
     """
 
     def _tokenize(examples):
-        encoded = tokenizer(
-            examples["text"],
-            truncation=True,
-            max_length=max_length,
-            padding=False,
-            add_special_tokens=False,
-            return_offsets_mapping=mask_prompt,
-        )
         if not mask_prompt:
-            return encoded
+            return tokenizer(
+                examples["text"],
+                truncation=True,
+                max_length=max_length,
+                padding=False,
+                add_special_tokens=False,
+            )
 
-        # A token spanning the seam holds the first response characters, so it counts
-        # as response; assigning it to the prompt would drop it from the loss.
-        offsets = encoded.pop("offset_mapping")
-        encoded["completion_mask"] = [
-            [int(end > prompt_length) for _, end in row]
-            for row, prompt_length in zip(offsets, examples["prompt_length"])
-        ]
-        return encoded
+        # The prompt is tokenized on its own, exactly as it is at inference, so no
+        # token can straddle the prompt/response seam (the Llama BPE fuses e.g.
+        # "Answer:" + "<think>" into one ":<" token the model would never be prompted with).
+        prompts = [text[:n] for text, n in zip(examples["text"], examples["prompt_length"])]
+        completions = [text[n:] for text, n in zip(examples["text"], examples["prompt_length"])]
+        prompt_ids = tokenizer(prompts, add_special_tokens=False)["input_ids"]
+        completion_ids = tokenizer(completions, add_special_tokens=False)["input_ids"]
+        input_ids, attention_mask, completion_mask = [], [], []
+        for p_ids, c_ids in zip(prompt_ids, completion_ids):
+            ids = (p_ids + c_ids)[:max_length]
+            input_ids.append(ids)
+            attention_mask.append([1] * len(ids))
+            completion_mask.append(([0] * len(p_ids) + [1] * len(c_ids))[:max_length])
+        return {
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "completion_mask": completion_mask,
+        }
 
     map_kwargs = {
         "batched": True,
