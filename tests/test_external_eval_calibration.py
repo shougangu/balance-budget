@@ -112,3 +112,19 @@ def test_merge_reuses_a_completed_merge_dir(tmp_path):
     out.mkdir()
     (out / cal.MERGE_DONE_MARKER).touch()
     assert cal.merge_adapter_into_base("base", "adapter", str(out)) == str(out)
+
+
+def test_ifbench_takes_its_own_sample_count():
+    args = cal.parse_args([
+        "--model", "m", "--model-family", "gemma3-12B", "--benchmarks", "ifeval,ifbench",
+        "--n-samples", "4", "--ifbench-n-samples", "8", "--out", "o.json",
+    ])
+    assert cal.benchmark_n_samples("ifeval", args) == 4
+    assert cal.benchmark_n_samples("ifbench", args) == 8
+
+
+def test_ifbench_defaults_to_the_shared_sample_count():
+    args = cal.parse_args(["--model", "m", "--model-family", "gemma3-12B",
+                           "--n-samples", "4", "--out", "o.json"])
+    assert cal.benchmark_n_samples("ifbench", args) == 4
+    assert cal.benchmark_n_samples("amc", args) == 8

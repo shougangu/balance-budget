@@ -322,6 +322,15 @@ def merge_adapter_into_base(base: str, adapter: str, out: str) -> str:
     return out
 
 
+def benchmark_n_samples(benchmark: str, args) -> int:
+    """Sample count for one benchmark: its own override, else the shared count."""
+    return {
+        "amc": args.amc_n_samples,
+        "gsm8k": args.gsm8k_n_samples,
+        "ifbench": args.ifbench_n_samples,
+    }.get(benchmark, args.n_samples)
+
+
 def resolve_model(model: str, merge_root: str = DEFAULT_MERGE_ROOT):
     """Map --model to (engine model path, LoRA adapter path, adapter rank).
 
@@ -361,8 +370,7 @@ def run(args):
     benchmarks = [b.strip() for b in args.benchmarks.split(",") if b.strip()]
     strategies = []
     for benchmark in benchmarks:
-        n_samples = {"amc": args.amc_n_samples, "gsm8k": args.gsm8k_n_samples}.get(
-            benchmark, args.n_samples)
+        n_samples = benchmark_n_samples(benchmark, args)
         k_values = [k for k in args.k_values if k <= n_samples] or [1]
         strategy = build_strategy(
             benchmark, n_samples, k_values, args.num_prompts,
@@ -416,6 +424,7 @@ def run(args):
         "n_samples": args.n_samples,
         "amc_n_samples": args.amc_n_samples,
         "gsm8k_n_samples": args.gsm8k_n_samples,
+        "ifbench_n_samples": args.ifbench_n_samples,
         "sample_prompt": rendered,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "benchmarks": {},
@@ -485,6 +494,8 @@ def parse_args(argv=None):
     parser.add_argument("--amc-n-samples", type=int, default=8)
     parser.add_argument("--gsm8k-n-samples", type=int, default=None,
                         help="Defaults to --n-samples.")
+    parser.add_argument("--ifbench-n-samples", type=int, default=None,
+                        help="Defaults to --n-samples.")
     parser.add_argument("--k-values", type=int, nargs="+", default=[1, 2, 4])
     parser.add_argument("--num-prompts", type=int, default=None)
     parser.add_argument("--ifeval-strict", action="store_true",
@@ -503,6 +514,8 @@ def parse_args(argv=None):
     args = parser.parse_args(argv)
     if args.gsm8k_n_samples is None:
         args.gsm8k_n_samples = args.n_samples
+    if args.ifbench_n_samples is None:
+        args.ifbench_n_samples = args.n_samples
     return args
 
 

@@ -205,3 +205,4 @@ tuning/slurm/submitscripts
 /writeup
 /outputs/
 /checkpoint_backups/
+/docs/IF_REEVAL_HANDOFF.md
