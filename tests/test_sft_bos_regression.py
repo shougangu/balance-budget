@@ -62,7 +62,7 @@ def test_sft_pipeline_pretokenizes_rendered_text_before_trl(monkeypatch, tmp_pat
             assert resume_from_checkpoint is None
 
     monkeypatch.setattr(sft_training, "SFTTrainer", FakeTrainer)
-    monkeypatch.setattr(sft_training, "OffsetAwareWandbCallback", object)
+    monkeypatch.setattr(sft_training, "OffsetAwareWandbCallback", lambda **_kwargs: object())
     monkeypatch.setattr(sft_training, "disable_loss_kwargs_if_unsupported", lambda _trainer: False)
     monkeypatch.setattr(sft_training, "remove_default_wandb_callback", lambda _trainer: None)
     monkeypatch.setattr(sft_training, "save_trained_model", lambda *_args: None)
@@ -75,6 +75,12 @@ def test_sft_pipeline_pretokenizes_rendered_text_before_trl(monkeypatch, tmp_pat
         full_finetune=False,
         mask_prompt_tokens=False,
         resume_from_checkpoint=False,
+        fsdp="",
+        gpu_minute_multiplier=None,
+        do_eval=True,
+        packing=False,
+        packing_strategy="bfd",
+        padding_free=False,
         to_hf_args=lambda **_kwargs: {},
     )
     model_load_config = SimpleNamespace(max_seq_length=1024)

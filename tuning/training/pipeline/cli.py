@@ -112,6 +112,21 @@ def is_worker_mode():
     )
 
 
+def sft_skips_unsloth(argv=None):
+    """True for SFT runs on the plain-HF FSDP2 path (budget marks or several GPUs).
+
+    unsloth's import patches transformers globally, so the entry shim consults
+    this before parsing to leave those runs untouched.
+    """
+    argv = sys.argv if argv is None else argv
+    if "--sft-budget-marks" in argv:
+        return True
+    if "--sft-num-gpus" in argv:
+        position = argv.index("--sft-num-gpus") + 1
+        return position < len(argv) and argv[position].isdigit() and int(argv[position]) > 1
+    return False
+
+
 def parse_early_tuple(s):
     """Parse 'patience:min_delta' string into (int, float) tuple."""
     try:
@@ -239,6 +254,25 @@ def _parse_args(argv=None):
                         help="Trainer checkpoint cadence in optimizer steps.")
     parser.add_argument("--sft-save-total-limit", type=int, default=None,
                         help="How many trainer checkpoints to keep on disk.")
+    parser.add_argument("--sft-num-gpus", type=int, default=1,
+                        help="GPUs for the SFT worker; >1 enables FSDP2 full-shard under torchrun "
+                             "and multiplies the train/total_minutes clock accordingly.")
+    parser.add_argument("--sft-budget-marks", type=float, nargs="+", default=None,
+                        help="GPU-minute marks at which to bank a checkpoint + metadata row "
+                             "(no in-loop eval; evaluation happens offline).")
+    parser.add_argument("--sft-eval-only-marks", type=float, nargs="+", default=None,
+                        help="Subset of --sft-budget-marks saved pre-claimed: evaluated offline "
+                             "but never seeding an RL worker (100%%-budget anchors).")
+    parser.add_argument("--sft-use-liger-kernel", action="store_true", default=False,
+                        help="Fused linear cross-entropy; required at 16k+ seq lens where the "
+                             "logits tensor alone is tens of GB.")
+    parser.add_argument("--sft-packing", action="store_true", default=False,
+                        help="BFD-pack sequences into max_length windows (needs flash attention).")
+    parser.add_argument("--sft-padding-free", action="store_true", default=False,
+                        help="Concatenate the micro-batch instead of padding (needs flash attention).")
+    parser.add_argument("--sft-attn-implementation", default=None,
+                        choices=["flash_attention_2", "sdpa", "eager"],
+                        help="Attention backend for the plain-HF full fine-tune path.")
     parser.add_argument("--dpo-learning-rate", type=float, default=5e-6)
     parser.add_argument("--dpo-num-epochs", type=int, default=3)
     parser.add_argument("--dpo-eval-steps", type=int, default=256)
@@ -415,10 +449,19 @@ def _parse_args(argv=None):
 
     args = parser.parse_args(argv)
 
+    if (args.sft_num_gpus > 1 or args.sft_budget_marks) and not args.sft_full_finetune:
+        parser.error("--sft-num-gpus > 1 and --sft-budget-marks run the plain-HF FSDP2 "
+                     "full fine-tune path; pass --sft-full-finetune")
+
     if args.sft_optim is None:
-        args.sft_optim = (
-            "paged_adamw_8bit" if args.sft_full_finetune else "adamw_8bit"
-        )
+        if args.sft_full_finetune and args.sft_num_gpus > 1:
+            # FSDP shards fp32 optimizer state HBM-resident; 8-bit paging would
+            # reintroduce both its rounding hazard and its PCIe stalls.
+            args.sft_optim = "adamw_torch"
+        elif args.sft_full_finetune:
+            args.sft_optim = "paged_adamw_8bit"
+        else:
+            args.sft_optim = "adamw_8bit"
 
     if args.grpo_vllm_mode == "server":
         try:

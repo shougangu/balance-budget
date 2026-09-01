@@ -1,6 +1,7 @@
 # ABOUTME: Loads the training dataset for a run, sampling a subset when requested.
 # ABOUTME: Full-coverage requests read the canonical split; smaller ones cache a sample.
 
+import json
 from typing import Union
 from tuning.training.config_training import DatasetConfig, PTRunConfig, SFTRunConfig
 from tuning.data.utils import get_random_train_subset
@@ -62,25 +63,7 @@ def get_train_dataset(run_config: Union[PTRunConfig, SFTRunConfig]) -> DatasetDi
         return full_dataset
 
     print(f"Checking for dataset at {check_path}")
-    if Path(check_path).exists():
-        print(f"Dataset already exists at {check_path}")
-
-        try:
-            cached_dataset = load_from_disk(check_path)
-        except (IndexError, FileNotFoundError):
-            # datasets 4.8.2 can't reload 0-row splits (no arrow file written for 0/0 shards)
-            test = Dataset.load_from_disk(f"{check_path}/test")
-            train = Dataset.from_dict({col: [] for col in test.column_names})
-            cached_dataset = DatasetDict({"train": train, "test": test})
-        print(f"Sampled dataset: {cached_dataset}")
-        if len(cached_dataset['train']) > 0:
-            print(f"Example training row: {cached_dataset['train'][0]}")
-        print(f"Example evaluation row: {cached_dataset['test'][0]}")
-
-        return cached_dataset
-
-    sampled_dataset = None
-    if rank == 0:
+    if rank == 0 and not _cache_is_complete(check_path):
         print(f"Loading dataset from {full_dataset_path}")
         print(f"Full dataset: {full_dataset}")
 
@@ -89,20 +72,37 @@ def get_train_dataset(run_config: Union[PTRunConfig, SFTRunConfig]) -> DatasetDi
             full_dataset, train_size, unique_column=None,
             seed=tuning.config.DEFAULT_SEED,
         )
-        print(f"Sampled dataset: {sampled_dataset}")
-        if len(sampled_dataset['train']) > 0:
-            print(f"Example training row: {sampled_dataset['train'][0]}")
-        print(f"Example evaluation row: {sampled_dataset['test'][0]}")
-
         sampled_dataset.save_to_disk(check_path)
 
+    # Every rank reads the cache only once rank 0 is done writing it: a
+    # directory that merely exists may still be mid-save.
     if is_dist:
         dist.barrier()
 
-    if rank != 0:
-        sampled_dataset = load_from_disk(check_path)
+    try:
+        cached_dataset = load_from_disk(check_path)
+    except (IndexError, FileNotFoundError):
+        # datasets 4.8.2 can't reload 0-row splits (no arrow file written for 0/0 shards)
+        test = Dataset.load_from_disk(f"{check_path}/test")
+        train = Dataset.from_dict({col: [] for col in test.column_names})
+        cached_dataset = DatasetDict({"train": train, "test": test})
+    if rank == 0:
+        print(f"Sampled dataset: {cached_dataset}")
+        if len(cached_dataset['train']) > 0:
+            print(f"Example training row: {cached_dataset['train'][0]}")
+        print(f"Example evaluation row: {cached_dataset['test'][0]}")
+    return cached_dataset
 
-    return sampled_dataset
+
+def _cache_is_complete(check_path: str) -> bool:
+    """True when save_to_disk finished: every split named in dataset_dict.json has
+    its state.json (written last per split). A killed run leaves fewer."""
+    manifest = Path(check_path) / "dataset_dict.json"
+    if not manifest.is_file():
+        return False
+    splits = json.loads(manifest.read_text()).get("splits", [])
+    return bool(splits) and all((Path(check_path) / split / "state.json").is_file() for split in splits)
+
 
 if __name__ == "__main__":
 

@@ -54,6 +54,15 @@ def test_to_hf_args_passes_fsdp_fields_through():
     assert d["fsdp_config"]["fsdp_version"] == 2
 
 
+def test_to_hf_args_pops_sft_batching_fields():
+    """packing/padding_free are SFTConfig-only; DPOConfig/GRPOConfig reject them."""
+    config = TrainingArgumentsConfig(packing=True, padding_free=True)
+    d = config.to_hf_args(output_dir="/tmp/test")
+    assert "packing" not in d
+    assert "packing_strategy" not in d
+    assert "padding_free" not in d
+
+
 # ---------------------------------------------------------------------------
 # Model loading without PEFT wrapping
 # ---------------------------------------------------------------------------
@@ -341,3 +350,35 @@ def test_cli_full_finetune_allows_nonpaged_optimizer_override():
         "--sft-full-finetune", "--sft-optim", "adamw_8bit",
     ])
     assert args.sft_optim == "adamw_8bit"
+
+
+# ---------------------------------------------------------------------------
+# Plain-HF paths (FSDP2 / budget marks) never load unsloth
+# ---------------------------------------------------------------------------
+
+def _cli(*extra):
+    return ["--model", "qwen3-8B", "--wandb-project", "test", *extra]
+
+
+def test_multi_gpu_sft_requires_full_finetune():
+    with pytest.raises(SystemExit):
+        _parse_args(_cli("--sft-num-gpus", "8"))
+    args = _parse_args(_cli("--sft-num-gpus", "8", "--sft-full-finetune"))
+    assert args.sft_num_gpus == 8
+
+
+def test_budget_marks_require_full_finetune():
+    with pytest.raises(SystemExit):
+        _parse_args(_cli("--sft-budget-marks", "3840"))
+    args = _parse_args(_cli("--sft-budget-marks", "3840", "--sft-full-finetune"))
+    assert args.sft_budget_marks == [3840.0]
+
+
+def test_entry_shim_skips_unsloth_only_on_plain_hf_sft():
+    from tuning.training.pipeline.cli import sft_skips_unsloth
+
+    assert sft_skips_unsloth(["--run-sft", "--sft-budget-marks", "3840"])
+    assert sft_skips_unsloth(["--run-sft", "--sft-num-gpus", "8"])
+    assert not sft_skips_unsloth(["--run-sft", "--sft-num-gpus", "1"])
+    assert not sft_skips_unsloth(["--run-sft", "--sft-full-finetune"])
+    assert not sft_skips_unsloth(["--run-sft"])

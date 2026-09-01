@@ -35,13 +35,15 @@ def padding_free_status(model, args, full_finetune):
     """Describe whether padding-free batching survived, and why it did not.
 
     Padding-free concatenates a micro-batch instead of padding every sequence to the
-    batch maximum, so losing it roughly doubles the cost of a step. Only Unsloth's
-    text-model path provides it, and it switches off silently, so name the reason.
+    batch maximum, so losing it roughly doubles the cost of a step. It switches off
+    silently, so name the reason.
     """
+    if getattr(args, "packing", False):
+        return "on (bfd packing)"
     if getattr(args, "padding_free", False):
         return "on"
     if full_finetune:
-        return "off (full fine-tune runs the plain HF path, which has no flash-attention build)"
+        return "off (full fine-tune runs the plain HF path; pass --sft-packing or --sft-padding-free with flash attention)"
     config = getattr(model, "config", None)
     architectures = getattr(config, "architectures", None) or []
     is_vlm = any(name.endswith("ForConditionalGeneration") for name in architectures)
@@ -60,6 +62,7 @@ def train_model_sft(
     primary_eval = None,  # Pre-built EvalStrategy
     monitor_evals = None,  # Additional EvalStrategy list
     pipeline_args = None,  # Parsed pipeline CLI args, for callback-triggered live dispatch
+    budget_marks_config = None,  # BudgetMarksConfig: bank checkpoints at GPU-minute marks, no in-loop eval
 ):
     dataset = get_train_dataset(run_config)
     raw_eval_dataset = dataset["test"]
@@ -110,9 +113,22 @@ def train_model_sft(
     # processor stays available for chat templating, callbacks, and saving.
     trainer_processing_class = getattr(tokenizer, "tokenizer", tokenizer)
 
-    callbacks = [OffsetAwareWandbCallback()]
-    if training_args.full_finetune:
+    callbacks = [OffsetAwareWandbCallback(
+        time_multiplier=training_args.gpu_minute_multiplier or 1.0,
+    )]
+    if training_args.full_finetune and not training_args.fsdp:
+        # FSDP shards the optimizer state HBM-resident; paging is a single-GPU crutch.
         callbacks.append(PagedOptimizerOffloadCallback())
+    budget_mark_callback = None
+    if budget_marks_config is not None:
+        from tuning.training.budget_marks import BudgetMarkCallback
+        budget_mark_callback = BudgetMarkCallback(
+            model_name=run_config.model_name,
+            tokenizer=tokenizer,
+            target_total_minutes=budget_marks_config.target_total_minutes,
+            eval_only_minutes=budget_marks_config.eval_only_minutes,
+        )
+        callbacks.append(budget_mark_callback)
     if passk_config is not None and passk_config.enabled:
         passk_callback = PassAtKStoppingCallback(
             config=passk_config,
@@ -138,19 +154,27 @@ def train_model_sft(
         model = model,
         processing_class = trainer_processing_class,
         train_dataset = dataset["train"],
-        eval_dataset = dataset["test"],
+        eval_dataset = dataset["test"] if training_args.do_eval else None,
         callbacks = callbacks,
         args = SFTConfig(
             dataset_text_field = "text",
             max_length = model_load_config.max_seq_length,
             dataset_num_proc = 4,
-            packing = False,
+            packing = training_args.packing,
+            packing_strategy = training_args.packing_strategy,
+            padding_free = training_args.padding_free,
             # TRL infers this from prompt/completion columns, which a pre-tokenized
             # dataset does not have, so the mask is only honoured when set here.
             completion_only_loss = mask_prompt,
             **training_args.to_hf_args(output_dir=run_config.output_dir),
         ),
     )
+    if training_args.gpu_minute_multiplier:
+        # Survives resume: the rebuilt callback recovers it from trainer.args
+        # (see OffsetAwareWandbCallback.on_train_begin).
+        trainer.args.gpu_minute_multiplier = float(training_args.gpu_minute_multiplier)
+    if budget_mark_callback is not None:
+        budget_mark_callback.set_trainer(trainer)
 
     if disable_loss_kwargs_if_unsupported(trainer):
         print(

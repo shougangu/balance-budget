@@ -56,7 +56,7 @@ def _run_pipeline(monkeypatch, tmp_path, mask_prompt):
             assert resume_from_checkpoint is None
 
     monkeypatch.setattr(sft_training, "SFTTrainer", FakeTrainer)
-    monkeypatch.setattr(sft_training, "OffsetAwareWandbCallback", object)
+    monkeypatch.setattr(sft_training, "OffsetAwareWandbCallback", lambda **_kwargs: object())
     monkeypatch.setattr(sft_training, "disable_loss_kwargs_if_unsupported", lambda _trainer: False)
     monkeypatch.setattr(sft_training, "remove_default_wandb_callback", lambda _trainer: None)
     monkeypatch.setattr(sft_training, "save_trained_model", lambda *_args: None)
@@ -73,6 +73,12 @@ def _run_pipeline(monkeypatch, tmp_path, mask_prompt):
             full_finetune=False,
             mask_prompt_tokens=mask_prompt,
             resume_from_checkpoint=False,
+            fsdp="",
+            gpu_minute_multiplier=None,
+            do_eval=True,
+            packing=False,
+            packing_strategy="bfd",
+            padding_free=False,
             to_hf_args=lambda **_kwargs: {},
         ),
     )
@@ -108,6 +114,15 @@ def test_padding_free_status_names_the_full_finetune_path():
 
     assert status.startswith("off")
     assert "full fine-tune" in status
+
+
+def test_padding_free_status_reports_packing_on():
+    """BFD packing removes padding entirely, full fine-tune included."""
+    args = SimpleNamespace(padding_free=False, packing=True)
+
+    status = sft_training.padding_free_status(None, args, full_finetune=True)
+
+    assert status.startswith("on")
 
 
 def test_padding_free_status_names_vision_language_models():

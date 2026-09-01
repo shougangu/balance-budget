@@ -17,6 +17,7 @@ from tuning.config import HF_MODEL_MAP, set_chat_template
 from tuning.training.config_training import (
     DatasetConfig, SFTRunConfig, PTRunConfig, ModelLoadConfig,
     LoraConfig, TrainingArgumentsConfig, DPOTrainingConfig, GRPOTrainingConfig,
+    BudgetMarksConfig,
 )
 from tuning.utils.gpu import cleanup_gpu
 
@@ -102,15 +103,53 @@ def run_sft(args):
         training_args.save_steps = args.sft_save_steps
     if args.sft_save_total_limit is not None:
         training_args.save_total_limit = args.sft_save_total_limit
+    training_args.use_liger_kernel = args.sft_use_liger_kernel
+    training_args.packing = args.sft_packing
+    training_args.padding_free = args.sft_padding_free
+    if args.sft_attn_implementation:
+        model_load_config.attn_implementation = args.sft_attn_implementation
+    if args.sft_num_gpus > 1:
+        training_args.fsdp = "full_shard"
+        training_args.fsdp_config = {"fsdp_version": 2}
+        training_args.gpu_minute_multiplier = float(args.sft_num_gpus)
 
-    passk_config, primary_eval, monitor_evals = _build_eval_components(args, "sft", gpu_util)
+    # Bring up the process group early so the rank-0 wandb gate and dataset-cache
+    # barriers work before the trainer builds its Accelerator (which reuses it).
+    if "LOCAL_RANK" in os.environ and not dist.is_initialized():
+        dist.init_process_group(backend="nccl")
+        torch.cuda.set_device(int(os.environ["LOCAL_RANK"]))
+    is_dist = dist.is_initialized() and dist.get_world_size() > 1
+    rank = dist.get_rank() if is_dist else 0
+
+    budget_marks_config = None
+    if args.sft_budget_marks:
+        budget_marks_config = BudgetMarksConfig(
+            target_total_minutes=args.sft_budget_marks,
+            eval_only_minutes=args.sft_eval_only_marks or [],
+        )
+        training_args.eval_strategy = "no"
+        training_args.do_eval = False
+        passk_config, primary_eval, monitor_evals = None, None, []
+    else:
+        passk_config, primary_eval, monitor_evals = _build_eval_components(args, "sft", gpu_util)
     ppl_config = _sft_ppl_config(args)
     tags = _sft_tags(passk_config, ppl_config, primary_eval) + args.tags
     if args.sft_full_finetune:
         tags = tags + ["fullft"]
+    if args.sft_num_gpus > 1:
+        tags = tags + [f"gpus{args.sft_num_gpus}"]
 
-    wandb_ctx = _init_wandb_run(args, run_config.model_name, "sft", tags, args.sft_resume)
-    run_config.wandb_run_id = wandb_ctx.id if wandb_ctx else ""
+    if rank == 0:
+        wandb_ctx = _init_wandb_run(args, run_config.model_name, "sft", tags, args.sft_resume)
+        wandb_run_id = wandb_ctx.id if wandb_ctx else ""
+    else:
+        wandb_ctx = contextlib.nullcontext()
+        wandb_run_id = ""
+    if is_dist:
+        payload = [wandb_run_id]
+        dist.broadcast_object_list(payload, src=0)
+        wandb_run_id = payload[0]
+    run_config.wandb_run_id = wandb_run_id
     with wandb_ctx:
         model, tokenizer, trainer, callbacks = train_model_sft(
             run_config=run_config,
@@ -122,7 +161,10 @@ def run_sft(args):
             primary_eval=primary_eval,
             monitor_evals=monitor_evals,
             pipeline_args=args,
+            budget_marks_config=budget_marks_config,
         )
+    if is_dist:
+        dist.barrier()
 
     metadata_paths = [
         cb.metadata_path for cb in callbacks if getattr(cb, "metadata_path", None)

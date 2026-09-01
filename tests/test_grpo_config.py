@@ -152,9 +152,9 @@ def test_grpo_precision_bf16_sets_hf_mixed_precision():
     assert d["bf16"] is True
 
 
-def test_grpo_zero_variance_filter_cli_default_on():
+def test_grpo_zero_variance_filter_cli_default_off():
     args = _parse_args(["--model", "qwen2-3B", "--wandb-project", "test"])
-    assert args.grpo_zero_variance_filter is True
+    assert args.grpo_zero_variance_filter is False
     assert args.grpo_zero_variance_filter_epsilon == 0.0
 
 

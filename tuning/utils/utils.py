@@ -1,4 +1,5 @@
 import json
+import sys
 import warnings
 from pathlib import Path
 
@@ -111,8 +112,6 @@ GEMMA_3_CHAT_TEMPLATE = """\
 
 
 def chat_template_func(tokenizer):
-    from unsloth.chat_templates import get_chat_template
-
     chat_template = tuning.config.DEFAULT_CHAT_TEMPLATE
 
     # For simple mode, use the base template for unsloth setup (special tokens,
@@ -121,12 +120,18 @@ def chat_template_func(tokenizer):
     if chat_template == "simple":
         setup_template = tuning.config._BASE_CHAT_TEMPLATE
 
-    tokenizer = get_chat_template(
-        tokenizer,
-        chat_template = setup_template,
-        mapping = {"role" : "from", "content" : "value", "user" : "human", "assistant" : "gpt"},
-        map_eos_token = False,
-    )
+    # unsloth's setup belongs to the unsloth training path only: on plain-HF runs
+    # its import is deliberately skipped, and its chatml setup stamps literal
+    # sentinel tokens (<EOS_TOKEN>) onto tokenizers it doesn't recognize.
+    if "unsloth" in sys.modules:
+        from unsloth.chat_templates import get_chat_template
+
+        tokenizer = get_chat_template(
+            tokenizer,
+            chat_template = setup_template,
+            mapping = {"role" : "from", "content" : "value", "user" : "human", "assistant" : "gpt"},
+            map_eos_token = False,
+        )
 
     if chat_template == "llama-3.1":
         tokenizer.chat_template = LLAMA_31_SIMPLE_TEMPLATE

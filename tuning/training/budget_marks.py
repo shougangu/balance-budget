@@ -66,7 +66,13 @@ class BudgetMarkCallback(TrainerCallback):
             self.metadata_path = os.path.join(
                 MODELS_METADATA_DIR, f"{self.model_name}_budget-marks-{now}.json"
             )
-        print(f"METADATA_FILE:{self.metadata_path}")
+        if dist.is_initialized() and dist.get_world_size() > 1:
+            # The timestamped name can differ across ranks; rank 0's wins.
+            payload = [self.metadata_path]
+            dist.broadcast_object_list(payload, src=0)
+            self.metadata_path = payload[0]
+        if self._is_rank_zero():
+            print(f"METADATA_FILE:{self.metadata_path}")
 
         starting_minutes = get_total_minutes_from_state(state)
         if starting_minutes > 0 and self._engine.target_total_minutes:

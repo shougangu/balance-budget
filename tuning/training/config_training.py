@@ -19,9 +19,16 @@ def effective_batch_size(dataset_size: int):
     return 16  # Increased for H100/L40 GPUs
 
 class ModelLoadConfig(BaseModel):
-    max_seq_length: int = 1024 
+    max_seq_length: int = 1024
     dtype: Any | None = None
-    load_in_4bit: bool = False 
+    load_in_4bit: bool = False
+    attn_implementation: Optional[str] = None  # e.g. "flash_attention_2"; required for padding-free/packing
+
+
+class BudgetMarksConfig(BaseModel):
+    """GPU-minute marks at which SFT banks a checkpoint for the budget grid."""
+    target_total_minutes: list[float]
+    eval_only_minutes: list[float] = []
 
 class LoraConfig(BaseModel):
     r: int = 32
@@ -74,6 +81,10 @@ class TrainingArgumentsConfig(BaseModel):
     mask_prompt_tokens: bool = False  # exclude prompt tokens from the SFT loss
     fsdp: str = ""  # e.g. "full_shard"; empty string disables FSDP
     fsdp_config: Optional[dict] = None  # e.g. {"fsdp_version": 2, "activation_checkpointing": True}
+    use_liger_kernel: bool = False  # fused linear cross-entropy; required at long seq lens
+    packing: bool = False  # SFT only: BFD-pack sequences to max_length windows
+    packing_strategy: str = "bfd"
+    padding_free: bool = False  # SFT only: concatenate the micro-batch instead of padding
     # Wall-seconds-to-GPU-seconds factor for train/total_minutes; set as an attribute
     # on the built config after to_hf_args so it survives callback rebuild on resume.
     gpu_minute_multiplier: Optional[float] = None
@@ -88,6 +99,10 @@ class TrainingArgumentsConfig(BaseModel):
         d.pop("full_finetune", None)  # consumed by model loading, not a TrainingArguments field
         d.pop("mask_prompt_tokens", None)  # consumed by dataset preparation, not a TrainingArguments field
         d.pop("gpu_minute_multiplier", None)  # not a TrainingArguments field; re-attached post-construction
+        # SFTConfig-only batching fields; sft_training passes them explicitly.
+        d.pop("packing", None)
+        d.pop("packing_strategy", None)
+        d.pop("padding_free", None)
         d["output_dir"] = output_dir
         d["fp16"] = not bf16_supported
         d["bf16"] = bf16_supported

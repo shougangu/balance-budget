@@ -166,6 +166,25 @@ class TestChatTemplateFuncSimpleMode:
         tuning.config.DEFAULT_CHAT_TEMPLATE = original
         tuning.config._BASE_CHAT_TEMPLATE = original_base
 
+    def test_simple_mode_without_unsloth_skips_its_setup(self):
+        """Plain-HF runs never import unsloth: its chatml setup stamps literal
+        sentinel tokens (<EOS_TOKEN>) onto BOS-less tokenizers."""
+        import sys
+
+        tuning.config.DEFAULT_CHAT_TEMPLATE = "simple"
+        tuning.config._BASE_CHAT_TEMPLATE = "chatml"
+        mock_tokenizer = MagicMock()
+        mock_tokenizer.chat_template = "original"
+
+        without_unsloth = {k: v for k, v in sys.modules.items()
+                           if not k.startswith("unsloth")}
+        with patch.dict(sys.modules, without_unsloth, clear=True):
+            from tuning.utils.utils import chat_template_func
+            result = chat_template_func(mock_tokenizer)
+            assert not any(k.startswith("unsloth") for k in sys.modules)
+
+        assert result.chat_template == SIMPLE_TEMPLATE
+
     def test_simple_mode_overrides_tokenizer_chat_template(self):
         """When DEFAULT_CHAT_TEMPLATE is 'simple', chat_template_func should
         set tokenizer.chat_template to SIMPLE_TEMPLATE."""

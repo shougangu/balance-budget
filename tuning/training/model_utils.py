@@ -133,11 +133,15 @@ def load_model_with_lora(model_path, model_name, model_load_config, lora_config,
         # the adapter into the weights so the fresh adapter below starts from the same
         # full-model point a merged checkpoint would have provided.
         load_path = _adapter_base_path(model_path) if is_adapter else model_path
+        extra_load_kwargs = {}
+        if model_load_config.attn_implementation:
+            extra_load_kwargs["attn_implementation"] = model_load_config.attn_implementation
         model = AutoModelForCausalLM.from_pretrained(
             load_path,
             quantization_config=quantization_config,
             torch_dtype=dtype,
             device_map=device_map,
+            **extra_load_kwargs,
         )
         if is_adapter:
             model = PeftModel.from_pretrained(model, model_path).merge_and_unload()
@@ -435,12 +439,20 @@ def sync_colocated_vllm_chat_template(trainer, tokenizer) -> bool:
 
 
 def save_trained_model(model, tokenizer, trainer, output_dir):
-    """Save the LoRA adapter, tokenizer, and training config to output_dir."""
-    if hasattr(model, 'save_pretrained'):
+    """Save the trained weights, tokenizer, and training config to output_dir."""
+    fsdp_enabled = bool(getattr(trainer.args, "fsdp", None))
+    if fsdp_enabled:
+        # Collective: gathers the sharded weights and writes from the main
+        # process; every rank must enter it.
+        trainer.save_model(output_dir)
+    elif hasattr(model, 'save_pretrained'):
         model.save_pretrained(output_dir)
     else:
         model.save_pretrained_merged(output_dir, tokenizer, save_method="lora")
-    tokenizer.save_pretrained(output_dir)
-    with open(f"{output_dir}/training_config.json", "w") as f:
-        json.dump(trainer.args.to_dict(), f, indent=4)
-    save_trainer_state(trainer.state, output_dir)
+    if trainer.args.process_index == 0:
+        tokenizer.save_pretrained(output_dir)
+        with open(f"{output_dir}/training_config.json", "w") as f:
+            json.dump(trainer.args.to_dict(), f, indent=4)
+        save_trainer_state(trainer.state, output_dir)
+    if fsdp_enabled:
+        trainer.accelerator.wait_for_everyone()

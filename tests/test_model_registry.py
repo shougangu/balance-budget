@@ -37,6 +37,7 @@ def test_qwen2_14b_fully_registered():
 def test_qwen3_base_models_fully_registered():
     """The long-CoT campaign lineages must be selectable and fully mapped."""
     expected_repos = {
+        "qwen3-1.7B": "Qwen/Qwen3-1.7B-Base",
         "qwen3-4B": "Qwen/Qwen3-4B-Base",
         "qwen3-8B": "Qwen/Qwen3-8B-Base",
         "qwen3-14B": "Qwen/Qwen3-14B-Base",
