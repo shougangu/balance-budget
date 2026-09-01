@@ -363,3 +363,24 @@ def get_aime24_test_dataset(num_prompts=None):
     aime = load_dataset("math-ai/aime24", split="test")
     return _boxed_math_dataset(
         aime["problem"], [last_boxed_content(s) for s in aime["solution"]], num_prompts)
+
+
+def get_aime25_test_dataset(num_prompts=None):
+    """Load AIME 2025 (30 problems, math-ai/aime25); answers are a direct column."""
+    from datasets import load_dataset
+    aime = load_dataset("math-ai/aime25", split="test")
+    return _boxed_math_dataset(aime["problem"], aime["answer"], num_prompts)
+
+
+def get_aime26_test_dataset(num_prompts=None):
+    """Load AIME 2026 (30 problems, MathArena/aime_2026) with integer answers."""
+    from datasets import load_dataset
+    aime = load_dataset("MathArena/aime_2026", split="train")
+    return _boxed_math_dataset(aime["problem"], aime["answer"], num_prompts)
+
+
+def get_hmmt_feb25_test_dataset(num_prompts=None):
+    """Load HMMT February 2025 (30 problems, MathArena/hmmt_feb_2025)."""
+    from datasets import load_dataset
+    hmmt = load_dataset("MathArena/hmmt_feb_2025", split="train")
+    return _boxed_math_dataset(hmmt["problem"], hmmt["answer"], num_prompts)
