@@ -13,13 +13,13 @@ BOS = "<bos>"
 EOS = "<eos>"
 
 
-def render(messages, add_generation_prompt=False):
+def render(messages, add_generation_prompt=False, bos_token=BOS, eos_token=EOS):
     env = Environment(loader=BaseLoader())
     template = env.from_string(SIMPLE_TEMPLATE)
     return template.render(
         messages=messages,
-        bos_token=BOS,
-        eos_token=EOS,
+        bos_token=bos_token,
+        eos_token=eos_token,
         add_generation_prompt=add_generation_prompt,
     )
 
@@ -74,6 +74,31 @@ class TestSimpleTemplateRendering:
         assert result == f"{BOS}Write a poem about cats."
 
 
+class TestBosLessTokenizers:
+    """Qwen tokenizers have bos_token=None; the template must not emit artifacts."""
+
+    MESSAGES = [
+        {"role": "user", "content": "Problem: 2+2?\nAnswer:"},
+        {"role": "assistant", "content": "<think>\neasy\n</think>\n\n4"},
+    ]
+
+    def test_none_bos_emits_nothing(self):
+        result = render(self.MESSAGES, bos_token=None)
+        assert result == f"Problem: 2+2?\nAnswer:<think>\neasy\n</think>\n\n4{EOS}"
+
+    def test_none_bos_sharegpt_emits_nothing(self):
+        messages = [
+            {"from": "human", "value": "Problem: 1+1?\nAnswer:"},
+            {"from": "gpt", "value": "2"},
+        ]
+        result = render(messages, bos_token=None)
+        assert result == f"Problem: 1+1?\nAnswer:2{EOS}"
+
+    def test_bos_still_emitted_when_present(self):
+        result = render(self.MESSAGES)
+        assert result.startswith(BOS)
+
+
 class TestSimpleStopTokens:
     def test_simple_stop_tokens_exist(self):
         assert "simple" in STOP_TOKENS
@@ -82,6 +107,9 @@ class TestSimpleStopTokens:
         tokens = STOP_TOKENS["simple"]
         assert "<|end_of_text|>" in tokens
         assert "</s>" in tokens
+
+    def test_simple_stop_tokens_cover_qwen_eos(self):
+        assert "<|endoftext|>" in STOP_TOKENS["simple"]
 
     def test_get_stop_tokens_returns_simple(self):
         original = tuning.config.DEFAULT_CHAT_TEMPLATE
@@ -92,6 +120,41 @@ class TestSimpleStopTokens:
             assert "</s>" in result
         finally:
             tuning.config.DEFAULT_CHAT_TEMPLATE = original
+
+
+class TestQwen3SimpleTemplateIntegration:
+    """Renders SIMPLE_TEMPLATE through the real Qwen3 tokenizer (BOS-less, EOS
+    <|endoftext|>, <think> as an ordinary added token). Downloads ~10MB once."""
+
+    @pytest.fixture(scope="class")
+    def qwen3(self):
+        from transformers import AutoTokenizer
+
+        return AutoTokenizer.from_pretrained("Qwen/Qwen3-8B-Base")
+
+    def test_qwen3_has_no_bos(self, qwen3):
+        assert qwen3.bos_token is None
+
+    def test_qwen3_eos_covered_by_simple_stop_tokens(self, qwen3):
+        assert qwen3.eos_token == "<|endoftext|>"
+        assert qwen3.eos_token in STOP_TOKENS["simple"]
+
+    def test_apply_simple_template_renders_clean(self, qwen3):
+        qwen3.chat_template = SIMPLE_TEMPLATE
+        messages = [
+            {"role": "system", "content": "Solve the problem."},
+            {"role": "user", "content": "Problem: 2+2?\nAnswer:"},
+            {"role": "assistant", "content": "<think>\neasy\n</think>\n\n4"},
+        ]
+        text = qwen3.apply_chat_template(messages, tokenize=False)
+        assert text == "Problem: 2+2?\nAnswer:<think>\neasy\n</think>\n\n4<|endoftext|>"
+
+    def test_think_is_a_plain_reversible_token(self, qwen3):
+        ids = qwen3("<think>", add_special_tokens=False).input_ids
+        assert qwen3.decode(ids) == "<think>"
+        # Must not be a special token, or eval decode(skip_special_tokens=True)
+        # would silently strip the think block openers.
+        assert not set(ids) & set(qwen3.all_special_ids)
 
 
 class TestChatTemplateFuncSimpleMode:

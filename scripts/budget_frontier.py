@@ -31,6 +31,9 @@ NON_EMBEDDING_PARAMS = {
     "llama3-8B": 6_979_588_096,
     "gemma3-4B": 3_209_010_688,
     "gemma3-12B": 10_759_155_456,
+    "qwen3-4B": 3_633_511_936,
+    "qwen3-8B": 6_946_075_648,
+    "qwen3-14B": 13_212_482_560,
 }
 
 # Runs that carry the campaign tag but are not part of the lineage.

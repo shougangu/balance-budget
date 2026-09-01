@@ -32,3 +32,18 @@ def test_qwen2_14b_fully_registered():
         assert model in MODEL_TO_GPU_1
         assert model in MODEL_TO_GPU_2
         assert model in MODEL_TO_GPU_3
+
+
+def test_qwen3_base_models_fully_registered():
+    """The long-CoT campaign lineages must be selectable and fully mapped."""
+    expected_repos = {
+        "qwen3-4B": "Qwen/Qwen3-4B-Base",
+        "qwen3-8B": "Qwen/Qwen3-8B-Base",
+        "qwen3-14B": "Qwen/Qwen3-14B-Base",
+    }
+    for model, repo in expected_repos.items():
+        assert HF_MODEL_MAP.get(model) == repo
+        assert model in MODEL_CHAT_TEMPLATE_MAP
+        assert model in MODEL_TO_GPU_1
+        assert model in MODEL_TO_GPU_2
+        assert model in MODEL_TO_GPU_3

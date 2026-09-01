@@ -47,7 +47,7 @@ LLAMA_31_SIMPLE_TEMPLATE = """\
 
 
 SIMPLE_TEMPLATE = """\
-{% if 'role' in messages[0] %}{{- bos_token }}\
+{% if 'role' in messages[0] %}{% if bos_token %}{{- bos_token }}{% endif %}\
 {%- for message in messages %}\
 {%- if message['role'] != 'system' %}\
 {{ message['content'] }}\
@@ -56,7 +56,7 @@ SIMPLE_TEMPLATE = """\
 {%- if not add_generation_prompt %}\
 {{- eos_token }}\
 {%- endif %}\
-{% else %}{{- bos_token }}\
+{% else %}{% if bos_token %}{{- bos_token }}{% endif %}\
 {%- for message in messages %}\
 {%- if message['from'] != 'system' %}\
 {{ message['value'] }}\
@@ -293,7 +293,7 @@ STOP_TOKENS = {
     "chatml": ["<|im_end|>", "<|end_of_text|>"],
     "llama-3.1": ["<|eot_id|>", "<|end_of_text|>"],
     "gemma-3": ["<end_of_turn>", "<eos>"],
-    "simple": ["<|end_of_text|>", "</s>", "<|im_end|>", "<|eot_id|>"],
+    "simple": ["<|end_of_text|>", "</s>", "<|im_end|>", "<|eot_id|>", "<|endoftext|>"],
 }
 
 
