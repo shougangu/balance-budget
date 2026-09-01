@@ -46,3 +46,23 @@ def test_claim_rewrites_only_the_matching_row(tmp_path):
     assert claimed["claimed"] is True
     rewritten = [json.loads(l) for l in path.read_text().splitlines()]
     assert rewritten == [{"checkpoint_path": "/ckpt/a", "claimed": False}, {"checkpoint_path": "/ckpt/b", "claimed": True}]
+
+
+def test_claim_checkpoint_reclaims_a_claimed_row(tmp_path):
+    """A resumed worker re-claims its own pinned row; completion is checked by callers."""
+    path = tmp_path / "rows.json"
+    append_metadata_row(str(path), {"checkpoint_path": "/ckpt/a", "claimed": True})
+    assert claim_checkpoint(str(path), "/ckpt/a")["checkpoint_path"] == "/ckpt/a"
+    assert claim_checkpoint(str(path), "/ckpt/missing") is None
+
+
+def test_mark_eval_submitted_flags_only_that_row(tmp_path):
+    from tuning.training.pipeline.checkpoint_metadata import mark_eval_submitted
+
+    path = tmp_path / "rows.json"
+    append_metadata_row(str(path), {"checkpoint_path": "/ckpt/a"})
+    append_metadata_row(str(path), {"checkpoint_path": "/ckpt/b"})
+    mark_eval_submitted(str(path), "/ckpt/b")
+    rows = [json.loads(line) for line in path.read_text().splitlines()]
+    assert rows[0].get("eval_submitted") is None
+    assert rows[1]["eval_submitted"] is True

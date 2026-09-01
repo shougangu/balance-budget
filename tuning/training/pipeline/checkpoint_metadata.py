@@ -95,11 +95,14 @@ def claim_next_checkpoint(metadata_file):
 
 
 def claim_checkpoint(metadata_file, checkpoint_path):
-    """Claim the row for checkpoint_path; None when absent, claimed, or completed."""
+    """Claim the row for checkpoint_path, or None when absent.
+
+    A pinned worker re-claims its own row on every (re)start, so an existing
+    claimed flag is not a refusal; callers check completed themselves.
+    """
     return _claim_row(
         metadata_file,
-        lambda r: (r["checkpoint_path"] == checkpoint_path)
-                #    and not r.get("claimed") and not r.get("completed")),
+        lambda r: r["checkpoint_path"] == checkpoint_path,
     )
 
 
@@ -109,6 +112,15 @@ def mark_completed(metadata_file, checkpoint_path):
         metadata_file,
         lambda r: r["checkpoint_path"] == checkpoint_path,
         {"completed": True},
+    )
+
+
+def mark_eval_submitted(metadata_file, checkpoint_path):
+    """Flag a checkpoint's row once its offline eval job has been submitted."""
+    _update_row(
+        metadata_file,
+        lambda r: r["checkpoint_path"] == checkpoint_path,
+        {"eval_submitted": True},
     )
 
 

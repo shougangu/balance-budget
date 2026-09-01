@@ -328,6 +328,14 @@ def _read_on_disk_chat_template(checkpoint_path: str) -> str | None:
     return None
 
 
+def on_disk_template_is_simple(checkpoint_path: str) -> bool | None:
+    """Whether the checkpoint's saved chat_template is SIMPLE_TEMPLATE; None if absent."""
+    on_disk = _read_on_disk_chat_template(checkpoint_path)
+    if on_disk is None:
+        return None
+    return on_disk.strip() == SIMPLE_TEMPLATE.strip()
+
+
 def warn_if_template_mismatch(checkpoint_path: str, simple_requested: bool) -> None:
     """Warn when --simple-template disagrees with the SFT checkpoint's saved template.
 
@@ -336,8 +344,8 @@ def warn_if_template_mismatch(checkpoint_path: str, simple_requested: bool) -> N
     the model on prompts formatted with the on-disk template instead of the requested
     one. Re-run SFT with the matching flag, or align the flag with the checkpoint.
     """
-    on_disk = _read_on_disk_chat_template(checkpoint_path)
-    if on_disk is None:
+    on_disk_is_simple = on_disk_template_is_simple(checkpoint_path)
+    if on_disk_is_simple is None:
         warnings.warn(
             f"Could not verify chat-template consistency: no chat_template found at "
             f"{checkpoint_path}. Expected --simple-template={simple_requested}.",
@@ -345,7 +353,6 @@ def warn_if_template_mismatch(checkpoint_path: str, simple_requested: bool) -> N
         )
         return
 
-    on_disk_is_simple = on_disk.strip() == SIMPLE_TEMPLATE.strip()
     if simple_requested and not on_disk_is_simple:
         warnings.warn(
             f"Chat-template mismatch: --simple-template was passed, but the SFT "

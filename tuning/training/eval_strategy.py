@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import List, Dict, Optional
 
 from instruction_following_eval import evaluation_lib
-from tuning.data.test_dataset import get_ifeval_test_dataset, get_gsm8k_test_dataset, get_math500_test_dataset, get_amc_test_dataset, get_ifbench_test_dataset, get_math_test_dataset, get_aime24_test_dataset, get_aime25_test_dataset, get_aime26_test_dataset, get_hmmt_feb25_test_dataset
+from tuning.data.test_dataset import get_ifeval_test_dataset, get_gsm8k_test_dataset, get_math500_test_dataset, get_amc_test_dataset, get_ifbench_test_dataset, get_math_test_dataset, get_aime24_test_dataset, get_aime25_test_dataset, get_aime26_test_dataset, get_hmmt_feb25_test_dataset, get_olympiadbench_test_dataset
 from math_verify.errors import TimeoutException
 from tuning.evaluation.math_scoring import is_correct as math_is_correct
 
@@ -437,6 +437,15 @@ class HMMTFeb25EvalStrategy(MATH500EvalStrategy):
 
     def load_test_dataset(self, num_prompts=None):
         return get_hmmt_feb25_test_dataset(num_prompts=num_prompts)
+
+
+class OlympiadBenchEvalStrategy(MATH500EvalStrategy):
+    """OlympiadBench open-ended English competition math, 675 single-answer problems."""
+
+    benchmark = "olympiadbench"
+
+    def load_test_dataset(self, num_prompts=None):
+        return get_olympiadbench_test_dataset(num_prompts=num_prompts)
 
 
 class AMCEvalStrategy(EvalStrategy):

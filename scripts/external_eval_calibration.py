@@ -54,7 +54,11 @@ _MATH_SUFFIX = COMPMATH_STRING.split("{problem}")[1]
 _GSM8K_PREFIX = GSM8K_STRING.split("{question}")[0]
 _GSM8K_SUFFIX = GSM8K_STRING.split("{question}")[1]
 
-MATH_BENCHMARKS = ("math500", "math", "amc", "aime24", "gsm8k")
+MATH_BENCHMARKS = ("math500", "math", "amc", "aime24", "aime25", "aime26",
+                   "hmmt_feb25", "olympiadbench", "gsm8k")
+
+# 30-problem competition sets need heavy sampling for a usable pass@1 SE.
+AIME_SIZED_BENCHMARKS = ("aime24", "aime25", "aime26", "hmmt_feb25")
 
 # Merged SFT-parent weights (~16 GB per parent) are cached under here, one dir
 # per parent, and shared by every arm that serves a child of that parent.
@@ -115,12 +119,16 @@ def build_strategy(benchmark: str, n_samples: int, k_values: list[int], num_prom
                    strict: dict):
     from tuning.training.eval_strategy import (
         AIME24EvalStrategy,
+        AIME25EvalStrategy,
+        AIME26EvalStrategy,
         AMCEvalStrategy,
         GSM8KEvalStrategy,
+        HMMTFeb25EvalStrategy,
         IFBenchStrategy,
         IFEvalStrategy,
         MATH500EvalStrategy,
         MATHEvalStrategy,
+        OlympiadBenchEvalStrategy,
     )
 
     if benchmark == "math500":
@@ -129,6 +137,14 @@ def build_strategy(benchmark: str, n_samples: int, k_values: list[int], num_prom
         return MATHEvalStrategy(k_values=k_values, n_samples=n_samples, num_prompts=num_prompts)
     if benchmark == "aime24":
         return AIME24EvalStrategy(k_values=k_values, n_samples=n_samples, num_prompts=num_prompts)
+    if benchmark == "aime25":
+        return AIME25EvalStrategy(k_values=k_values, n_samples=n_samples, num_prompts=num_prompts)
+    if benchmark == "aime26":
+        return AIME26EvalStrategy(k_values=k_values, n_samples=n_samples, num_prompts=num_prompts)
+    if benchmark == "hmmt_feb25":
+        return HMMTFeb25EvalStrategy(k_values=k_values, n_samples=n_samples, num_prompts=num_prompts)
+    if benchmark == "olympiadbench":
+        return OlympiadBenchEvalStrategy(k_values=k_values, n_samples=n_samples, num_prompts=num_prompts)
     if benchmark == "gsm8k":
         return GSM8KEvalStrategy(k_values=k_values, n_samples=n_samples, num_prompts=num_prompts)
     if benchmark == "amc":
@@ -344,11 +360,13 @@ def merge_adapter_into_base(base: str, adapter: str, out: str) -> str:
 
 def benchmark_n_samples(benchmark: str, args) -> int:
     """Sample count for one benchmark: its own override, else the shared count."""
-    return {
+    overrides = {
         "amc": args.amc_n_samples,
         "gsm8k": args.gsm8k_n_samples,
         "ifbench": args.ifbench_n_samples,
-    }.get(benchmark, args.n_samples)
+    }
+    overrides.update({b: args.aime_n_samples for b in AIME_SIZED_BENCHMARKS})
+    return overrides.get(benchmark, args.n_samples)
 
 
 def resolve_model(model: str, merge_root: str = DEFAULT_MERGE_ROOT):
@@ -512,6 +530,8 @@ def parse_args(argv=None):
     parser.add_argument("--max-tokens", type=int, default=4096)
     parser.add_argument("--n-samples", type=int, default=4)
     parser.add_argument("--amc-n-samples", type=int, default=8)
+    parser.add_argument("--aime-n-samples", type=int, default=32,
+                        help="Samples for the 30-problem competition sets (AIME 24/25/26, HMMT).")
     parser.add_argument("--gsm8k-n-samples", type=int, default=None,
                         help="Defaults to --n-samples.")
     parser.add_argument("--ifbench-n-samples", type=int, default=None,

@@ -1,4 +1,4 @@
-# ABOUTME: Tests for the hard competition math test sets (AIME 25/26, HMMT Feb 2025).
+# ABOUTME: Tests for the hard competition math test sets (AIME 25/26, HMMT Feb 2025, OlympiadBench).
 # ABOUTME: Verifies each loads into the OPENMATH prompt format with string reference answers.
 
 from unittest.mock import patch
@@ -52,6 +52,7 @@ def test_hard_math_eval_strategies_delegate_to_their_datasets():
         ("AIME25EvalStrategy", "get_aime25_test_dataset", "aime25"),
         ("AIME26EvalStrategy", "get_aime26_test_dataset", "aime26"),
         ("HMMTFeb25EvalStrategy", "get_hmmt_feb25_test_dataset", "hmmt_feb25"),
+        ("OlympiadBenchEvalStrategy", "get_olympiadbench_test_dataset", "olympiadbench"),
     ]
     for cls_name, getter_name, benchmark in cases:
         cls = getattr(es, cls_name)

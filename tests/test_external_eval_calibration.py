@@ -25,6 +25,27 @@ def test_build_strategy_math_and_aime24():
     assert cal.build_strategy("aime24", 1, [1], None, strict={}).id == "aime24"
 
 
+def test_hard_benchmarks_are_math_benchmarks():
+    assert {"aime25", "aime26", "hmmt_feb25", "olympiadbench"} <= set(cal.MATH_BENCHMARKS)
+
+
+def test_build_strategy_hard_benchmarks():
+    for benchmark in ("aime25", "aime26", "hmmt_feb25", "olympiadbench"):
+        assert cal.build_strategy(benchmark, 1, [1], 2, strict={}).id == benchmark
+
+
+def test_thirty_problem_sets_take_the_aime_sample_count():
+    args = cal.parse_args([
+        "--model", "m", "--model-family", "qwen3-8B",
+        "--n-samples", "4", "--aime-n-samples", "32", "--out", "o.json",
+    ])
+    for benchmark in ("aime24", "aime25", "aime26", "hmmt_feb25"):
+        assert cal.benchmark_n_samples(benchmark, args) == 32
+    assert cal.benchmark_n_samples("math500", args) == 4
+    # 581 problems: the shared sample count already gives a usable SE.
+    assert cal.benchmark_n_samples("olympiadbench", args) == 4
+
+
 def test_resolve_model_full_checkpoint(tmp_path):
     assert cal.resolve_model(str(tmp_path)) == (str(tmp_path), None, None)
 
