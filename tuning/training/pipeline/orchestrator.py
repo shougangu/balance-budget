@@ -1,6 +1,7 @@
 # ABOUTME: Orchestrator: top-level submits SFT+post-training as sbatch jobs and exits.
 # ABOUTME: Worker/resume mode (--run-dpo|grpo --run-all) skips SFT and runs one local share.
 
+import math
 import os
 import re
 import subprocess
@@ -65,6 +66,77 @@ _LIVE_DISPATCH_SBATCH_FLAGS = {
     2880: _TWELVE_HOUR_SBATCH_FLAGS,
     3840: _SHORT_SBATCH_FLAGS
 }
+
+# Killarney GPU partition tiers (gpubase_<type>_b<n>) and their wall-time caps,
+# shallowest first; the same ladder exists for every GPU type.
+_PARTITION_TIERS = (
+    ("b1", 3 * 60),
+    ("b2", 12 * 60),
+    ("b3", 24 * 60),
+    ("b4", 3 * 24 * 60),
+    ("b5", 7 * 24 * 60),
+)
+
+VERL_SBATCH_SCRIPT = "tuning/slurm/verl_grpo.sh"
+
+
+def _dispatch_flags(remaining_gpu_minutes, num_gpus, gpu_type="h100",
+                    rate=0.85, overhead_minutes=30):
+    """Partition list + wall time sized so one worker finishes its budget share.
+
+    rate is budget-GPU-minutes accrued per GPU-wall-minute (below 1.0 for
+    engine startup, checkpoint saves, and clock pauses). A budget too large for
+    the deepest tier is capped there; a resubmitted worker resumes the rest.
+    Killarney partition names, like every table in this module.
+
+    Returns (flags tuple, wall_minutes).
+    """
+    wall = math.ceil(remaining_gpu_minutes / (num_gpus * rate)) + overhead_minutes
+    eligible = [tier for tier, cap in _PARTITION_TIERS if cap >= wall]
+    if not eligible:
+        eligible = [_PARTITION_TIERS[-1][0]]
+        wall = _PARTITION_TIERS[-1][1]
+    partitions = ",".join(f"gpubase_{gpu_type}_{tier}" for tier in eligible)
+    time_flag = f"--time={wall // 1440}-{(wall % 1440) // 60:02d}:{wall % 60:02d}:00"
+    return (f"--partition={partitions}", time_flag), wall
+
+
+def submit_verl_worker_for_metadata(args, metadata_file, checkpoint_path,
+                                    budget_minutes, sft_total_minutes, bank_at):
+    """Submit one verl RL worker for a banked SFT mark; never aborts the caller.
+
+    The worker claims the pinned row, spends (budget - mark) GPU-minutes, banks
+    an HF checkpoint at each bank_at budget it passes and at its own budget.
+    Allocation is computed from the remaining budget and the worker's GPU count.
+    """
+    worker_argv = [
+        "--metadata-file", metadata_file,
+        "--claim-checkpoint", checkpoint_path,
+        "--budget-minutes", str(int(budget_minutes)),
+        "--bank-at", *[str(int(b)) for b in bank_at],
+        "--config", args.verl_config,
+        "--wandb-project", args.wandb_project,
+    ]
+    remaining = budget_minutes - (sft_total_minutes or 0)
+    flags, _wall = _dispatch_flags(remaining, args.verl_num_gpus, args.verl_gpu_type)
+    sbatch_flags = list(flags)
+    qos = getattr(args, "qos", None)
+    if qos:
+        sbatch_flags.append(f"--qos={qos}")
+    sbatch_flags.append(f"--gres=gpu:{args.verl_gpu_type}:{args.verl_num_gpus}")
+
+    try:
+        job_id = _submit_sbatch_worker(
+            VERL_SBATCH_SCRIPT, worker_argv, sbatch_flags=sbatch_flags,
+        )
+    except SystemExit as exc:
+        print(f"[orchestrator] WARNING: verl live-dispatch failed "
+              f"for {checkpoint_path}: {exc}")
+        return None
+    print(f"[orchestrator] Live-dispatched verl worker for {checkpoint_path} "
+          f"(budget {budget_minutes:g}m): job {job_id}")
+    return job_id
+
 
 def _build_base_cmd(argv):
     """Build a stage-neutral subprocess command for worker launches."""

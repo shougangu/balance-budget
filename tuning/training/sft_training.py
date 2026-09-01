@@ -121,12 +121,16 @@ def train_model_sft(
         callbacks.append(PagedOptimizerOffloadCallback())
     budget_mark_callback = None
     if budget_marks_config is not None:
-        from tuning.training.budget_marks import BudgetMarkCallback
+        from tuning.training.budget_marks import BudgetMarkCallback, budget_marks_metadata_path
         budget_mark_callback = BudgetMarkCallback(
             model_name=run_config.model_name,
             tokenizer=tokenizer,
             target_total_minutes=budget_marks_config.target_total_minutes,
             eval_only_minutes=budget_marks_config.eval_only_minutes,
+            metadata_path=(budget_marks_metadata_path(run_config.model_name, run_config.wandb_run_id)
+                           if run_config.wandb_run_id else None),
+            pipeline_args=pipeline_args,
+            budget_rows=budget_marks_config.budget_rows,
         )
         callbacks.append(budget_mark_callback)
     if passk_config is not None and passk_config.enabled:

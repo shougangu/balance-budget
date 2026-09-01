@@ -31,6 +31,7 @@ MODEL_TO_GPU_1 = {
     "qwen2-14B-instruct": 0.85,
     "qwen2-32B": 0.85,
     "qwen2-32B-instruct": 0.85,
+    "qwen3-1.7B": 0.85,
     "qwen3-4B": 0.85,
     "qwen3-8B": 0.85,
     "qwen3-14B": 0.85,
@@ -56,6 +57,7 @@ MODEL_TO_GPU_2 = {
     "qwen2-14B-instruct": 0.35,
     "qwen2-32B": 0.35,
     "qwen2-32B-instruct": 0.35,
+    "qwen3-1.7B": 0.65,
     "qwen3-4B": 0.65,
     "qwen3-8B": 0.5,
     "qwen3-14B": 0.35,
@@ -81,6 +83,7 @@ MODEL_TO_GPU_3 = {
     "qwen2-14B-instruct": 0.3,
     "qwen2-32B": 0.3,
     "qwen2-32B-instruct": 0.3,
+    "qwen3-1.7B": 0.45,
     "qwen3-4B": 0.45,
     "qwen3-8B": 0.6,
     "qwen3-14B": 0.5,
@@ -263,6 +266,16 @@ def _parse_args(argv=None):
     parser.add_argument("--sft-eval-only-marks", type=float, nargs="+", default=None,
                         help="Subset of --sft-budget-marks saved pre-claimed: evaluated offline "
                              "but never seeding an RL worker (100%%-budget anchors).")
+    parser.add_argument("--sft-budget-rows", type=float, nargs="+", default=None,
+                        help="Total cell budgets in GPU-minutes (e.g. 15360 30720 61440); each "
+                             "crossed mark live-dispatches one verl worker per row it serves.")
+    parser.add_argument("--verl-config", default=None,
+                        help="verl config yaml the live-dispatched RL workers run with.")
+    parser.add_argument("--verl-num-gpus", type=int, default=8,
+                        help="GPUs per verl RL worker.")
+    parser.add_argument("--verl-gpu-type", default="h100", choices=["h100", "l40s"],
+                        help="GPU type for verl RL workers: names both the GRES and the "
+                             "gpubase_<type>_b<n> partition ladder.")
     parser.add_argument("--sft-use-liger-kernel", action="store_true", default=False,
                         help="Fused linear cross-entropy; required at 16k+ seq lens where the "
                              "logits tensor alone is tens of GB.")

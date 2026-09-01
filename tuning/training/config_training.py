@@ -29,6 +29,7 @@ class BudgetMarksConfig(BaseModel):
     """GPU-minute marks at which SFT banks a checkpoint for the budget grid."""
     target_total_minutes: list[float]
     eval_only_minutes: list[float] = []
+    budget_rows: list[float] = []  # total cell budgets each mark may serve
 
 class LoraConfig(BaseModel):
     r: int = 32

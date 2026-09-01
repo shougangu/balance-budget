@@ -126,6 +126,7 @@ def run_sft(args):
         budget_marks_config = BudgetMarksConfig(
             target_total_minutes=args.sft_budget_marks,
             eval_only_minutes=args.sft_eval_only_marks or [],
+            budget_rows=args.sft_budget_rows or [],
         )
         training_args.eval_strategy = "no"
         training_args.do_eval = False
