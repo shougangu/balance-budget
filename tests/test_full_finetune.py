@@ -38,6 +38,22 @@ def test_to_hf_args_pops_full_finetune():
     assert "full_finetune" not in d
 
 
+def test_to_hf_args_pops_gpu_minute_multiplier():
+    config = TrainingArgumentsConfig(gpu_minute_multiplier=8.0)
+    d = config.to_hf_args(output_dir="/tmp/test")
+    assert "gpu_minute_multiplier" not in d
+
+
+def test_to_hf_args_passes_fsdp_fields_through():
+    config = TrainingArgumentsConfig(
+        fsdp="full_shard",
+        fsdp_config={"fsdp_version": 2, "activation_checkpointing": True},
+    )
+    d = config.to_hf_args(output_dir="/tmp/test")
+    assert d["fsdp"] == "full_shard"
+    assert d["fsdp_config"]["fsdp_version"] == 2
+
+
 # ---------------------------------------------------------------------------
 # Model loading without PEFT wrapping
 # ---------------------------------------------------------------------------

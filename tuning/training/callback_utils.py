@@ -10,6 +10,7 @@ from transformers.integrations import WandbCallback
 from transformers.trainer_callback import ExportableState
 from transformers.training_args import TrainingArguments
 from tuning.config import MODELS_DIR
+from tuning.training.pipeline.checkpoint_metadata import append_metadata_row
 
 
 TRAINER_STATE_FILENAME = "trainer_state.json"
@@ -200,6 +201,24 @@ def save_trainer_state(state: TrainerState, output_dir: str) -> None:
     state.save_to_json(os.path.join(output_dir, TRAINER_STATE_FILENAME))
 
 
+def record_saved_dtype(checkpoint_path: str, state_dict: dict) -> None:
+    """Make config.json declare the floating dtype the weights were written in.
+
+    save_pretrained copies the dtype from the live model (fp32 masters under
+    FSDP); a bf16 state_dict on disk must be labelled bf16 or serving stacks
+    pick their precision from the wrong value.
+    """
+    dtype = next((t.dtype for t in state_dict.values() if t.is_floating_point()), None)
+    if dtype is None:
+        return
+    config_path = os.path.join(checkpoint_path, "config.json")
+    with open(config_path) as f:
+        config = json.load(f)
+    config["torch_dtype"] = str(dtype).removeprefix("torch.")
+    with open(config_path, "w") as f:
+        json.dump(config, f, indent=2)
+
+
 def save_sweetspot_checkpoint(
     model,
     tokenizer,
@@ -210,6 +229,7 @@ def save_sweetspot_checkpoint(
     metadata_path: str,
     extra_metadata: dict = None,
     accelerator=None,
+    state_dict=None,
 ) -> str:
     """Save a sweetspot checkpoint with metadata.
 
@@ -223,6 +243,8 @@ def save_sweetspot_checkpoint(
         metadata_path: Path to append JSONL metadata to.
         extra_metadata: Additional metadata keys to include.
         accelerator: If provided, unwrap the model before saving the adapter (DDP).
+        state_dict: Pre-gathered weights to save instead of the model's own
+            (FSDP: the full state dict collected across ranks).
 
     Returns:
         Path to the saved checkpoint directory.
@@ -238,7 +260,11 @@ def save_sweetspot_checkpoint(
     print(f"[Callback] Saving sweetspot checkpoint to {checkpoint_path}")
     target = accelerator.unwrap_model(model) if accelerator is not None else model
     if hasattr(target, 'save_pretrained'):
-        target.save_pretrained(checkpoint_path)
+        if state_dict is not None:
+            target.save_pretrained(checkpoint_path, state_dict=state_dict)
+            record_saved_dtype(checkpoint_path, state_dict)
+        else:
+            target.save_pretrained(checkpoint_path)
     else:
         target.save_pretrained_merged(checkpoint_path, tokenizer, save_method="lora")
     tokenizer.save_pretrained(checkpoint_path)
@@ -257,8 +283,7 @@ def save_sweetspot_checkpoint(
         "wandb_run_id": wandb_run_id,
         "sft_wandb_run_id": wandb_run_id,
     }
-    with open(metadata_path, "a") as f:
-        f.write(json.dumps(metadata) + "\n")
+    append_metadata_row(metadata_path, metadata)
 
     print(f"[Callback] Sweetspot checkpoint saved with metadata at {metadata_path}")
     return checkpoint_path

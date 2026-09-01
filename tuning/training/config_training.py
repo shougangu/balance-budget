@@ -72,6 +72,11 @@ class TrainingArgumentsConfig(BaseModel):
     resume_from_checkpoint: bool = False  # forwarded to trainer.train(); not an HF args field
     full_finetune: bool = False  # train all weights instead of a LoRA adapter
     mask_prompt_tokens: bool = False  # exclude prompt tokens from the SFT loss
+    fsdp: str = ""  # e.g. "full_shard"; empty string disables FSDP
+    fsdp_config: Optional[dict] = None  # e.g. {"fsdp_version": 2, "activation_checkpointing": True}
+    # Wall-seconds-to-GPU-seconds factor for train/total_minutes; set as an attribute
+    # on the built config after to_hf_args so it survives callback rebuild on resume.
+    gpu_minute_multiplier: Optional[float] = None
 
     def to_hf_args(self, output_dir: str) -> dict:
         """Return kwargs for TrainingArguments/DPOConfig constructor."""
@@ -82,6 +87,7 @@ class TrainingArgumentsConfig(BaseModel):
         d.pop("resume_from_checkpoint", None)  # consumed by trainer.train(), not its constructor
         d.pop("full_finetune", None)  # consumed by model loading, not a TrainingArguments field
         d.pop("mask_prompt_tokens", None)  # consumed by dataset preparation, not a TrainingArguments field
+        d.pop("gpu_minute_multiplier", None)  # not a TrainingArguments field; re-attached post-construction
         d["output_dir"] = output_dir
         d["fp16"] = not bf16_supported
         d["bf16"] = bf16_supported

@@ -5,7 +5,28 @@ import json
 
 import pytest
 
-from tuning.training.pipeline.checkpoint_metadata import claim_checkpoint
+from tuning.training.pipeline.checkpoint_metadata import (
+    append_metadata_row,
+    claim_checkpoint,
+    claim_next_checkpoint,
+)
+
+
+def test_append_metadata_row_writes_exactly_one_line(tmp_path):
+    path = tmp_path / "rows.json"
+    append_metadata_row(str(path), {"checkpoint_path": "/ckpt/a", "total_minutes": 2.0})
+    append_metadata_row(str(path), {"checkpoint_path": "/ckpt/b", "total_minutes": 5.0})
+    lines = path.read_text().splitlines()
+    assert len(lines) == 2
+    assert json.loads(lines[1])["checkpoint_path"] == "/ckpt/b"
+
+
+def test_appended_rows_are_claimable(tmp_path):
+    path = tmp_path / "rows.json"
+    append_metadata_row(str(path), {"checkpoint_path": "/ckpt/a"})
+    claimed = claim_next_checkpoint(str(path))
+    assert claimed["checkpoint_path"] == "/ckpt/a"
+    assert claimed["claimed"] is True
 
 
 def test_malformed_row_leaves_the_file_untouched(tmp_path):

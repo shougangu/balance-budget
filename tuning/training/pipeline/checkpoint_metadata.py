@@ -124,6 +124,16 @@ def record_wandb_run_id(metadata_file, checkpoint_path, wandb_run_id):
     )
 
 
+def append_metadata_row(metadata_file, row):
+    """Append one checkpoint row as a single JSONL line.
+
+    Every writer must come through here: a pretty-printed (multi-line) row makes
+    _update_row fail mid-rewrite and destroy the file.
+    """
+    with open(metadata_file, "a") as f:
+        f.write(json.dumps(row) + "\n")
+
+
 def print_metadata_paths(paths):
     """Print metadata file paths with a prefix for subprocess IPC."""
     for p in paths:
