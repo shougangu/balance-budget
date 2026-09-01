@@ -179,7 +179,10 @@ def _parse_args(argv=None):
                             "(e.g. 'high' for the priority queue).")
     parser.add_argument("--sft-dataset", default="gsm8k", choices=["gsm8k", "tuluif", "tulumix", "ifmix", "openmath", "openmath-1M", "openmath-lenp95", "openmath-reasoning",
                                                                    "nemotron-math-low", "nemotron-math-medium",
-                                                                   "nemotron-math-low-x4", "nemotron-math-medium-x4"])
+                                                                   "nemotron-math-high",
+                                                                   "nemotron-math-low-x4", "nemotron-math-medium-x4",
+                                                                   "nemotron-math-v2-16k", "nemotron-math-v2-32k",
+                                                                   "nemotron-math-v4-32k", "nemotron-math-v4-32k-x4"])
     parser.add_argument("--dataset", default="gsm8k",
                         choices=["tuluif", "gsm8k", "openmath", "ifrlvr", "dapo",
                                  "mathmix", "simplerl", "simplerl-easy",

@@ -86,6 +86,15 @@ class TestNemotronMathSFT:
         assert "Add 2 and 2" in rows[0]["messages"][2]["content"]
         assert "2 and 2 together" in rows[1]["messages"][2]["content"]
 
+    def test_zero_cap_keeps_every_tool_free_solution(self):
+        """The whole corpus: every tool-free trace of every problem, in corpus order."""
+        rows = self._train_rows(max_solutions=0)
+        assert [r["prompt"] for r in rows] == [
+            COMPMATH_STRING.format(problem="What is 2+2?"),
+            COMPMATH_STRING.format(problem="What is 2+2?"),
+            COMPMATH_STRING.format(problem="What is 9+9?"),
+        ]
+
     def test_cap_never_exceeds_available_solutions(self):
         """Problems with fewer solutions than the cap contribute what they have."""
         rows = self._train_rows(max_solutions=8)
@@ -135,5 +144,75 @@ def test_build_loads_the_requested_effort_split():
         build_nemotron_math_sft(effort="medium", save_name="sft-nemotron-math-medium",
                                 max_tokens=8000)
     assert load.call_args.args[0] == "nvidia/Nemotron-Math-v2"
-    assert load.call_args.kwargs["data_files"] == "data/medium.parquet"
+    assert load.call_args.kwargs["data_files"] == "data/medium*.parquet"
     assert save.call_args.kwargs["save_name"] == "sft-nemotron-math-medium"
+
+
+def test_build_loads_the_v4_corpus():
+    """corpus='v4' pulls the sharded Nemotron-SFT-Math-v4 train split; no effort needed."""
+    from tuning.data.nemotron_math_sft import build_nemotron_math_sft
+    fake_eval = Dataset.from_dict({"prompt": ["held out"]})
+    with patch("tuning.data.nemotron_math_sft.load_dataset",
+               return_value=_make_fake_rows()) as load, \
+         patch("tuning.data.nemotron_math_sft.build_heldout_math_eval",
+               return_value=fake_eval), \
+         patch("tuning.data.hf_dataset.HFDataset.save_dataset_to_disk") as save:
+        build_nemotron_math_sft(corpus="v4", save_name="sft-nemotron-math-v4-32k",
+                                max_tokens=32000)
+    assert load.call_args.args[0] == "nvidia/Nemotron-SFT-Math-v4"
+    assert load.call_args.kwargs["data_files"] == "data/train-*.parquet"
+    assert save.call_args.kwargs["save_name"] == "sft-nemotron-math-v4-32k"
+
+
+def test_build_v2_still_requires_a_valid_effort():
+    from tuning.data.nemotron_math_sft import build_nemotron_math_sft
+    import pytest
+    with pytest.raises(ValueError):
+        build_nemotron_math_sft(corpus="v2", effort="frantic", save_name="x")
+
+
+def test_build_measures_the_cap_with_the_requested_tokenizer():
+    """Long-CoT builds cap lengths under the training model's tokenizer, not Llama's."""
+    from tuning.data.nemotron_math_sft import build_nemotron_math_sft
+    fake_eval = Dataset.from_dict({"prompt": ["held out"]})
+    with patch("tuning.data.nemotron_math_sft.load_dataset",
+               return_value=_make_fake_rows()), \
+         patch("tuning.data.nemotron_math_sft.build_heldout_math_eval",
+               return_value=fake_eval), \
+         patch("tuning.data.hf_dataset.HFDataset.save_dataset_to_disk"), \
+         patch("tuning.data.nemotron_math_sft.AutoTokenizer") as auto_tok:
+        auto_tok.from_pretrained.return_value = (
+            lambda texts, add_special_tokens: {"input_ids": [[0]] * len(texts)}
+        )
+        build_nemotron_math_sft(effort="high", save_name="sft-nemotron-math-high-32k",
+                                max_tokens=32000, tokenizer_name="Qwen/Qwen3-8B-Base")
+    assert auto_tok.from_pretrained.call_args.args[0] == "Qwen/Qwen3-8B-Base"
+
+
+def test_build_loads_every_shard_of_the_v2_high_split():
+    """`high` ships as `high_part00..02.parquet`, so the pattern must cover shards."""
+    from tuning.data.nemotron_math_sft import build_nemotron_math_sft
+    fake_eval = Dataset.from_dict({"prompt": ["held out"]})
+    with patch("tuning.data.nemotron_math_sft.load_dataset",
+               return_value=_make_fake_rows()) as load, \
+         patch("tuning.data.nemotron_math_sft.build_heldout_math_eval",
+               return_value=fake_eval), \
+         patch("tuning.data.hf_dataset.HFDataset.save_dataset_to_disk"):
+        build_nemotron_math_sft(effort="high", save_name="sft-nemotron-math-high",
+                                max_tokens=24000)
+    assert load.call_args.kwargs["data_files"] == "data/high*.parquet"
+
+
+def test_build_loads_every_effort_split_for_all():
+    from tuning.data.nemotron_math_sft import build_nemotron_math_sft
+    fake_eval = Dataset.from_dict({"prompt": ["held out"]})
+    with patch("tuning.data.nemotron_math_sft.load_dataset",
+               return_value=_make_fake_rows()) as load, \
+         patch("tuning.data.nemotron_math_sft.build_heldout_math_eval",
+               return_value=fake_eval), \
+         patch("tuning.data.hf_dataset.HFDataset.save_dataset_to_disk") as save:
+        build_nemotron_math_sft(effort="all", save_name="sft-nemotron-math-v2-32k",
+                                max_tokens=32000, max_solutions_per_problem=0)
+    assert load.call_args.kwargs["data_files"] == [
+        "data/low*.parquet", "data/medium*.parquet", "data/high*.parquet"]
+    assert save.call_args.kwargs["save_name"] == "sft-nemotron-math-v2-32k"
