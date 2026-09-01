@@ -1,0 +1,67 @@
+# ABOUTME: verl overrides for the smoke-ladder GRPO worker: 2 GPUs, short responses, small
+# ABOUTME: batches, frequent saves. Exercises claim -> rollout -> reward -> bank on a small model.
+
+data:
+  # gsm8k, not dapo: a small gsm8k-SFT'd model must score above zero for the
+  # smoke to exercise a non-trivial policy-gradient update.
+  train_files: tuning/data/datasets/verl/rlvr-gsm8k.train.parquet
+  val_files: tuning/data/datasets/verl/rlvr-gsm8k.test.parquet
+  train_batch_size: 8
+  max_prompt_length: 1024
+  max_response_length: 1024
+  filter_overlong_prompts: true
+  truncation: error
+
+actor_rollout_ref:
+  model:
+    use_remove_padding: true
+  actor:
+    strategy: fsdp2
+    ppo_mini_batch_size: 8
+    use_dynamic_bsz: true
+    ppo_max_token_len_per_gpu: 8192
+    loss_agg_mode: token-mean
+    clip_ratio_low: 0.2
+    clip_ratio_high: 0.28
+    use_kl_loss: false
+    entropy_coeff: 0.0
+    optim:
+      lr: 1.0e-6
+    fsdp_config:
+      param_offload: true
+      optimizer_offload: true
+  rollout:
+    name: vllm
+    n: 4
+    tensor_model_parallel_size: 1
+    gpu_memory_utilization: 0.5
+    temperature: 1.0
+
+algorithm:
+  adv_estimator: grpo
+  use_kl_in_reward: false
+
+reward:
+  # verl 0.9.0 reads the reward function from here; the legacy top-level
+  # custom_reward_function block is only migrated on the v1 trainer path.
+  custom_reward_function:
+    path: tuning/verl/reward.py
+    name: compute_score
+  # DAPO soft overlong punishment: a response inside the last `len` tokens of
+  # the cap loses up to penalty_factor, so a truncated answer is not graded
+  # like a confidently wrong one (length collapse guard).
+  reward_manager:
+    name: dapo
+  reward_kwargs:
+    max_resp_len: 1024
+    overlong_buffer_cfg:
+      enable: true
+      len: 256
+      penalty_factor: 1.0
+      log: true
+
+trainer:
+  nnodes: 1
+  n_gpus_per_node: 2
+  save_freq: 2
+  max_actor_ckpt_to_keep: 2

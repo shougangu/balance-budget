@@ -1,0 +1,5 @@
+pyarrow<19.0.2
+opencv-python-headless<4.14
+opencv-python<4.14
+opencv-contrib-python<4.14
+opencv-contrib-python-headless<4.14
