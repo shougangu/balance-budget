@@ -52,6 +52,22 @@ def padding_free_status(model, args, full_finetune):
     return "off (unexpected: check for a data_collator or processor passed to SFTTrainer)"
 
 
+def latest_complete_checkpoint(output_dir):
+    """Highest-step trainer checkpoint that finished saving, or None.
+
+    The Trainer writes trainer_state.json after the weights and the optimizer, so a
+    directory without it was cut off part-way through a save. Resuming from one dies
+    on a missing trainer_state.json before the first step runs.
+    """
+    candidates = [
+        path for path in Path(output_dir).glob("checkpoint-*")
+        if (path / "trainer_state.json").is_file()
+    ]
+    if not candidates:
+        return None
+    return str(max(candidates, key=lambda path: int(path.name.split("-")[1])))
+
+
 def train_model_sft(
     run_config: SFTRunConfig = None,
     lora_config: LoraConfig = None,
@@ -195,10 +211,9 @@ def train_model_sft(
     print(trainer.args.to_dict())
 
     resume_from_checkpoint = None
-    if training_args.resume_from_checkpoint and Path(run_config.output_dir).exists():
-        checkpoints = list(Path(run_config.output_dir).glob("checkpoint-*"))
-        if checkpoints:
-            resume_from_checkpoint = str(max(checkpoints, key=lambda x: int(x.name.split("-")[1])))
+    if training_args.resume_from_checkpoint:
+        resume_from_checkpoint = latest_complete_checkpoint(run_config.output_dir)
+        if resume_from_checkpoint:
             print(f"[SFT] Resuming from checkpoint: {resume_from_checkpoint}")
 
     install_resume_epoch_patch()
