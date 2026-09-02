@@ -210,9 +210,9 @@ def _parse_args(argv=None):
     parser.add_argument("--dpo-data-size", type=int, default=None)
     parser.add_argument("--grpo-data-size", type=int, default=None)
     parser.add_argument("--task-name", default="gsm8k",
-                        choices=["ifeval", "gsm8k", "math500", "amc", "ifbench"])
+                        choices=["ifeval", "gsm8k", "math500", "amc", "ifbench", "aime24"])
     parser.add_argument("--monitor-evals", nargs="*", default=[],
-                        choices=["ifeval", "gsm8k", "math500", "amc", "ifbench"])
+                        choices=["ifeval", "gsm8k", "math500", "amc", "ifbench", "aime24"])
     parser.add_argument("--max-seq-length", type=int, default=1024)
     parser.add_argument(
         "--sft-max-seq-length", type=int, default=None,

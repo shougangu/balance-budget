@@ -1147,6 +1147,10 @@ class TestTaskNameDispatch:
         args = _parse_args(REQUIRED + ["--monitor-evals", "math500", "ifeval"])
         assert args.monitor_evals == ["math500", "ifeval"]
 
+    def test_monitor_evals_accepts_aime24(self):
+        args = _parse_args(REQUIRED + ["--monitor-evals", "aime24"])
+        assert args.monitor_evals == ["aime24"]
+
     def test_default_sft_warmup_ratio(self):
         args = _parse_args(REQUIRED)
         assert args.sft_warmup_ratio == 0.0
@@ -1494,9 +1498,33 @@ class TestFixedEvalSampling:
         from tuning.training.pipeline.eval_components import _eval_sampling
         assert _eval_sampling("ifbench", [1], 1) == ([1, 2, 4, 8], 8)
 
+    def test_eval_sampling_aime24_fixed_n8(self):
+        """30 problems make a single sample too noisy; aime24 is averaged over 8."""
+        from tuning.training.pipeline.eval_components import _eval_sampling
+        assert _eval_sampling("aime24", [1], 1) == ([1, 2, 4, 8], 8)
+
+    def test_eval_sampling_aime24_stays_averaged_without_fixed_sampling(self):
+        """--no-eval-fixed-sampling buys eval time on the big sets; 30 problems still need n>1."""
+        from tuning.training.pipeline.eval_components import _eval_sampling
+        assert _eval_sampling("aime24", [1], 1, fixed=False) == ([1, 2, 4, 8], 8)
+
+    def test_eval_sampling_math500_still_drops_to_n1_without_fixed_sampling(self):
+        from tuning.training.pipeline.eval_components import _eval_sampling
+        assert _eval_sampling("math500", [1], 1, fixed=False) == ([1], 1)
+
+    def test_monitor_evals_builds_an_aime24_strategy(self):
+        from tuning.training.pipeline.eval_components import _build_monitor_evals
+        from tuning.training.eval_strategy import AIME24EvalStrategy
+        args = _parse_args(REQUIRED + ["--task-name", "math500",
+                                       "--monitor-evals", "aime24"])
+        evals = _build_monitor_evals(args, [1], 1)
+        assert len(evals) == 1
+        assert isinstance(evals[0], AIME24EvalStrategy)
+        assert evals[0].n_samples == 8
+
     def test_eval_sampling_passes_through_unlisted(self):
         from tuning.training.pipeline.eval_components import _eval_sampling
-        assert _eval_sampling("aime24", [1, 2], 3) == ([1, 2], 3)
+        assert _eval_sampling("hmmt_feb25", [1, 2], 3) == ([1, 2], 3)
 
     def _components(self, extra):
         from tuning.training.pipeline.eval_components import _build_eval_components

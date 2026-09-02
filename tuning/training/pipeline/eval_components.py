@@ -12,13 +12,22 @@ FIXED_EVAL_SAMPLING = {
     "math500": (4, [1, 2, 4]),
 }
 
+# Benchmarks small enough that one sample per problem carries no signal. These keep
+# their averaging even under --no-eval-fixed-sampling, which trades resolution for
+# eval time on the 500-prompt sets.
+SMALL_SET_SAMPLING = {
+    "aime24": (8, [1, 2, 4, 8]),
+}
+
 
 def _eval_sampling(name, k_values, n_samples, fixed=True):
     """Return (k_values, n_samples) for a dataset, applying any fixed override."""
-    fixed = FIXED_EVAL_SAMPLING.get(name) if fixed else None
-    if fixed is None:
+    override = SMALL_SET_SAMPLING.get(name)
+    if override is None and fixed:
+        override = FIXED_EVAL_SAMPLING.get(name)
+    if override is None:
         return k_values, n_samples
-    fixed_n, fixed_k = fixed
+    fixed_n, fixed_k = override
     return fixed_k, fixed_n
 
 
@@ -157,6 +166,9 @@ def _build_monitor_evals(args, k_values, n_samples):
         elif name == "ifbench":
             from tuning.training.eval_strategy import IFBenchStrategy
             monitor_evals.append(IFBenchStrategy(k_values=kv, n_samples=ns))
+        elif name == "aime24":
+            from tuning.training.eval_strategy import AIME24EvalStrategy
+            monitor_evals.append(AIME24EvalStrategy(k_values=kv, n_samples=ns))
     return monitor_evals
 
 
