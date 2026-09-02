@@ -2,7 +2,6 @@
 # ABOUTME: Slurm launcher for long-CoT SFT workers: multi-GPU FSDP2 under torchrun.
 # ABOUTME: Banks budget-mark checkpoints; evaluation happens offline on the banked marks.
 #SBATCH --job-name=longcot_sft
-#SBATCH --partition=gpubase_h100_b4,gpubase_h100_b5
 #SBATCH --gres=gpu:h100:4
 #SBATCH -c 16
 #SBATCH --mem=256GB

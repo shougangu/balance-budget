@@ -274,8 +274,7 @@ def _parse_args(argv=None):
     parser.add_argument("--verl-num-gpus", type=int, default=8,
                         help="GPUs per verl RL worker.")
     parser.add_argument("--verl-gpu-type", default="h100", choices=["h100", "l40s"],
-                        help="GPU type for verl RL workers: names both the GRES and the "
-                             "gpubase_<type>_b<n> partition ladder.")
+                        help="GPU type for verl RL workers, requested as the typed GRES.")
     parser.add_argument("--sft-use-liger-kernel", action="store_true", default=False,
                         help="Fused linear cross-entropy; required at 16k+ seq lens where the "
                              "logits tensor alone is tens of GB.")

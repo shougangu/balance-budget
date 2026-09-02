@@ -2,7 +2,6 @@
 # ABOUTME: Slurm launcher for one verl GRPO worker: claims a banked SFT mark and spends
 # ABOUTME: the remainder of its cell budget. Single node, ray local mode, verl venv.
 #SBATCH --job-name=verl_grpo
-#SBATCH --partition=gpubase_h100_b4,gpubase_h100_b5
 #SBATCH --gres=gpu:h100:4
 #SBATCH -c 16
 #SBATCH --mem=256GB
@@ -24,6 +23,7 @@ unset ROCR_VISIBLE_DEVICES
 # the one the venv's pyarrow placeholder dist was registered against.
 module load gcc arrow/19.0.1 opencv
 
-VERL_VENV="${VERL_VENV:-/project/6105902/shougan/venvs/verl-0.9.0}"
+# The verl venv lives beside the repo clone on every cluster.
+VERL_VENV="${VERL_VENV:-$(dirname "$SLURM_SUBMIT_DIR")/venvs/verl-0.9.0}"
 
 "${VERL_VENV}/bin/python" -m tuning.verl.run_verl_grpo "$@"

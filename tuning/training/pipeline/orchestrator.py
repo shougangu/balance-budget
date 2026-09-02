@@ -67,38 +67,28 @@ _LIVE_DISPATCH_SBATCH_FLAGS = {
     3840: _SHORT_SBATCH_FLAGS
 }
 
-# Killarney GPU partition tiers (gpubase_<type>_b<n>) and their wall-time caps,
-# shallowest first; the same ladder exists for every GPU type.
-_PARTITION_TIERS = (
-    ("b1", 3 * 60),
-    ("b2", 12 * 60),
-    ("b3", 24 * 60),
-    ("b4", 3 * 24 * 60),
-    ("b5", 7 * 24 * 60),
-)
+# The 7-day b5 tier is the deepest GPU partition on Killarney, Fir and Nibi.
+_MAX_WALL_MINUTES = 7 * 24 * 60
 
 VERL_SBATCH_SCRIPT = "tuning/slurm/verl_grpo.sh"
 
 
-def _dispatch_flags(remaining_gpu_minutes, num_gpus, gpu_type="h100",
-                    rate=0.85, overhead_minutes=30):
-    """Partition list + wall time sized so one worker finishes its budget share.
+def _dispatch_flags(remaining_gpu_minutes, num_gpus, rate=0.85, overhead_minutes=30):
+    """Wall time sized so one worker finishes its budget share.
 
     rate is budget-GPU-minutes accrued per GPU-wall-minute (below 1.0 for
     engine startup, checkpoint saves, and clock pauses). A budget too large for
     the deepest tier is capped there; a resubmitted worker resumes the rest.
-    Killarney partition names, like every table in this module.
+    Only the wall time is requested: each cluster's job-submit filter routes
+    the job to every partition that wall time fits, and Fir and Nibi reject an
+    explicit partition list outright.
 
     Returns (flags tuple, wall_minutes).
     """
     wall = math.ceil(remaining_gpu_minutes / (num_gpus * rate)) + overhead_minutes
-    eligible = [tier for tier, cap in _PARTITION_TIERS if cap >= wall]
-    if not eligible:
-        eligible = [_PARTITION_TIERS[-1][0]]
-        wall = _PARTITION_TIERS[-1][1]
-    partitions = ",".join(f"gpubase_{gpu_type}_{tier}" for tier in eligible)
+    wall = min(wall, _MAX_WALL_MINUTES)
     time_flag = f"--time={wall // 1440}-{(wall % 1440) // 60:02d}:{wall % 60:02d}:00"
-    return (f"--partition={partitions}", time_flag), wall
+    return (time_flag,), wall
 
 
 def submit_verl_worker_for_metadata(args, metadata_file, checkpoint_path,
@@ -118,7 +108,7 @@ def submit_verl_worker_for_metadata(args, metadata_file, checkpoint_path,
         "--wandb-project", args.wandb_project,
     ]
     remaining = budget_minutes - (sft_total_minutes or 0)
-    flags, _wall = _dispatch_flags(remaining, args.verl_num_gpus, args.verl_gpu_type)
+    flags, _wall = _dispatch_flags(remaining, args.verl_num_gpus)
     sbatch_flags = list(flags)
     qos = getattr(args, "qos", None)
     if qos:

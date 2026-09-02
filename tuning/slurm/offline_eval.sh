@@ -2,7 +2,6 @@
 # ABOUTME: Slurm wrapper for the offline checkpoint eval: vLLM inference on banked marks.
 # ABOUTME: GPU count/time are set by the submitter (--gres/--time on the sbatch line).
 #SBATCH --job-name=offline_eval
-#SBATCH --partition=gpubase_h100_b2,gpubase_h100_b3
 #SBATCH --gres=gpu:h100:1
 #SBATCH -c 8
 #SBATCH --mem=128GB

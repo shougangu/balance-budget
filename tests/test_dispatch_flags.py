@@ -8,29 +8,24 @@ import tuning.training.pipeline.orchestrator as orch
 
 
 class TestDispatchFlags:
-    def test_gpu_type_selects_the_matching_partition_family_and_gres(self):
-        flags, _ = orch._dispatch_flags(remaining_gpu_minutes=100, num_gpus=2, gpu_type="l40s")
-        assert flags[0].startswith("--partition=gpubase_l40s_b1,")
-        assert "h100" not in flags[0]
+    def test_only_the_wall_time_is_requested_so_each_cluster_routes_the_partition(self):
+        flags, _ = orch._dispatch_flags(remaining_gpu_minutes=100, num_gpus=2)
+        assert len(flags) == 1
+        assert flags[0].startswith("--time=")
 
-    def test_small_remaining_budget_reaches_the_shallow_tiers(self):
-        flags, wall = orch._dispatch_flags(remaining_gpu_minutes=960, num_gpus=8)
-        partition = flags[0]
-        assert partition.startswith("--partition=")
-        assert "gpubase_h100_b1" in partition
+    def test_small_remaining_budget_fits_the_shallowest_tier(self):
+        _, wall = orch._dispatch_flags(remaining_gpu_minutes=960, num_gpus=8)
         assert wall <= 3 * 60
 
-    def test_large_remaining_budget_uses_only_deep_tiers(self):
-        # 46080 GPU-min on 8 GPUs ~ 4 days of wall: only b5 fits.
-        flags, wall = orch._dispatch_flags(remaining_gpu_minutes=46080, num_gpus=8)
-        assert flags[0] == "--partition=gpubase_h100_b5"
+    def test_large_remaining_budget_needs_a_deep_tier(self):
+        # 46080 GPU-min on 8 GPUs ~ 4 days of wall: only the 7-day tier fits.
+        _, wall = orch._dispatch_flags(remaining_gpu_minutes=46080, num_gpus=8)
         assert wall > 3 * 24 * 60
 
     def test_wall_time_is_capped_at_the_deepest_tier(self):
         flags, wall = orch._dispatch_flags(remaining_gpu_minutes=10_000_000, num_gpus=8)
-        assert flags[0] == "--partition=gpubase_h100_b5"
         assert wall == 7 * 24 * 60
-        assert flags[1] == "--time=7-00:00:00"
+        assert flags[0] == "--time=7-00:00:00"
 
     def test_more_gpus_shrink_the_wall(self):
         _, wall8 = orch._dispatch_flags(remaining_gpu_minutes=7680, num_gpus=8)
@@ -39,9 +34,8 @@ class TestDispatchFlags:
 
     def test_time_format_days_hours_minutes(self):
         flags, wall = orch._dispatch_flags(remaining_gpu_minutes=7680, num_gpus=8)
-        assert flags[1].startswith("--time=")
         # 7680/(8*0.85)+30 ~ 1160 min ~ 19h20m, zero-padded H:MM
-        assert flags[1] == f"--time={wall // 1440}-{(wall % 1440) // 60:02d}:{wall % 60:02d}:00"
+        assert flags[0] == f"--time={wall // 1440}-{(wall % 1440) // 60:02d}:{wall % 60:02d}:00"
 
 
 def _args(**overrides):
@@ -71,9 +65,10 @@ class TestSubmitVerlWorker:
         assert worker_argv[worker_argv.index("--bank-at") + 1] == "15360"
         flags = submit.call_args.kwargs["sbatch_flags"]
         assert "--gres=gpu:h100:8" in flags
-        assert any(f.startswith("--partition=gpubase_h100") for f in flags)
+        assert any(f.startswith("--time=") for f in flags)
+        assert not any(f.startswith("--partition") for f in flags)
 
-    def test_gpu_type_flows_into_gres_and_partitions(self):
+    def test_gpu_type_flows_into_gres_only(self):
         with patch.object(orch, "_submit_sbatch_worker", return_value="7") as submit:
             orch.submit_verl_worker_for_metadata(
                 _args(verl_num_gpus=2, verl_gpu_type="l40s"), "meta.json", "/ckpt/a",
@@ -81,7 +76,7 @@ class TestSubmitVerlWorker:
             )
         flags = submit.call_args.kwargs["sbatch_flags"]
         assert "--gres=gpu:l40s:2" in flags
-        assert any(f.startswith("--partition=gpubase_l40s") for f in flags)
+        assert not any(f.startswith("--partition") for f in flags)
 
     def test_sbatch_failure_is_swallowed(self):
         with patch.object(orch, "_submit_sbatch_worker", side_effect=SystemExit("boom")):
