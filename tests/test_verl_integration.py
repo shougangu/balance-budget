@@ -211,7 +211,7 @@ def test_campaign_configs_penalize_overlong_responses():
     guard against the length-collapse mode of the TRL long runs."""
     import yaml
 
-    for name in ("qwen3_8b_grpo", "qwen3_14b_grpo", "smoke_qwen3_grpo"):
+    for name in ("qwen3_8b_grpo", "qwen3_14b_grpo", "llama3_8b_grpo", "smoke_qwen3_grpo"):
         with open(f"tuning/verl/configs/{name}.yaml") as fh:
             config = yaml.safe_load(fh)
         reward = config["reward"]

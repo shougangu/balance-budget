@@ -1,0 +1,73 @@
+# ABOUTME: verl overrides for the Llama-3.1-8B long-CoT GRPO worker (merged over ppo_trainer defaults).
+# ABOUTME: Qwen3-8B recipe at a 16k response cap, matching the 16k SFT length of its lineage.
+
+data:
+  train_files: tuning/data/datasets/verl/rlvr-dapo.train.parquet
+  val_files: tuning/data/datasets/verl/rlvr-dapo.test.parquet
+  train_batch_size: 64
+  max_prompt_length: 2048
+  max_response_length: 16384
+  filter_overlong_prompts: true
+  truncation: error
+
+actor_rollout_ref:
+  model:
+    use_remove_padding: true
+  actor:
+    strategy: fsdp2
+    ppo_mini_batch_size: 32
+    use_dynamic_bsz: true
+    ppo_max_token_len_per_gpu: 18432
+    loss_agg_mode: token-mean
+    # Chunked entropy keeps the fp32 logits of llama's 128k vocab off the peak.
+    entropy_from_logits_with_chunking: true
+    clip_ratio_low: 0.2
+    clip_ratio_high: 0.28
+    use_kl_loss: false
+    entropy_coeff: 0.0
+    optim:
+      lr: 5.0e-6
+    fsdp_config:
+      param_offload: true
+      optimizer_offload: true
+      forward_prefetch: true
+  rollout:
+    name: vllm
+    n: 8
+    tensor_model_parallel_size: 1
+    # Actor params and optimizer are offloaded to CPU and the KV cache is only
+    # resumed afterwards, so vLLM has the whole GPU during rollout; the KV cache
+    # is what bounds concurrency at a 16k response cap.
+    gpu_memory_utilization: 0.85
+    # Forward-only log-prob recompute can pack twice the training token budget.
+    log_prob_max_token_len_per_gpu: 36864
+    temperature: 1.0
+
+algorithm:
+  adv_estimator: grpo
+  use_kl_in_reward: false
+
+reward:
+  # verl 0.9.0 reads the reward function from here; the legacy top-level
+  # custom_reward_function block is only migrated on the v1 trainer path.
+  custom_reward_function:
+    path: tuning/verl/reward.py
+    name: compute_score
+  # DAPO soft overlong punishment: a response inside the last `len` tokens of
+  # the cap loses up to penalty_factor, so a truncated answer is not graded
+  # like a confidently wrong one (length collapse guard).
+  reward_manager:
+    name: dapo
+  reward_kwargs:
+    max_resp_len: 16384
+    overlong_buffer_cfg:
+      enable: true
+      len: 4096
+      penalty_factor: 1.0
+      log: true
+
+trainer:
+  nnodes: 1
+  n_gpus_per_node: 4
+  save_freq: 20
+  max_actor_ckpt_to_keep: 2

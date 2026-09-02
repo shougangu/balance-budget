@@ -3,9 +3,9 @@
 # ABOUTME: Banks budget-mark checkpoints; evaluation happens offline on the banked marks.
 #SBATCH --job-name=longcot_sft
 #SBATCH --partition=gpubase_h100_b4,gpubase_h100_b5
-#SBATCH --gres=gpu:h100:8
-#SBATCH -c 32
-#SBATCH --mem=512GB
+#SBATCH --gres=gpu:h100:4
+#SBATCH -c 16
+#SBATCH --mem=256GB
 #SBATCH --time=3-00:00:00
 #SBATCH --output=/dev/null
 
