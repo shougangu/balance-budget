@@ -31,6 +31,22 @@ class BudgetMarksConfig(BaseModel):
     eval_only_minutes: list[float] = []
     budget_rows: list[float] = []  # total cell budgets each mark may serve
 
+def multi_gpu_training_args(training_args: "TrainingArgumentsConfig", num_gpus: int) -> "TrainingArgumentsConfig":
+    """Shard the full fine-tune across num_gpus and scale the budget clock to match.
+
+    auto_wrap makes each decoder layer its own FSDP unit (accelerate takes the
+    class from the model's _no_split_modules); without it the whole model is a
+    single unit and every step all-gathers the full bf16 weights and gradients.
+    """
+    training_args.fsdp = "full_shard auto_wrap"
+    training_args.fsdp_config = {"fsdp_version": 2}
+    # transformers forwards every other fsdp_config key to accelerate as an
+    # FSDP_* env var but never the version; accelerate reads it here.
+    os.environ["FSDP_VERSION"] = "2"
+    training_args.gpu_minute_multiplier = float(num_gpus)
+    return training_args
+
+
 class LoraConfig(BaseModel):
     r: int = 32
     target_modules: list = ["q_proj", "k_proj", "v_proj", "o_proj",

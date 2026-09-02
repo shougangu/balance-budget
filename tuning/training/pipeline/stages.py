@@ -17,7 +17,7 @@ from tuning.config import HF_MODEL_MAP, set_chat_template
 from tuning.training.config_training import (
     DatasetConfig, SFTRunConfig, PTRunConfig, ModelLoadConfig,
     LoraConfig, TrainingArgumentsConfig, DPOTrainingConfig, GRPOTrainingConfig,
-    BudgetMarksConfig,
+    BudgetMarksConfig, multi_gpu_training_args,
 )
 from tuning.utils.gpu import cleanup_gpu
 
@@ -109,9 +109,7 @@ def run_sft(args):
     if args.sft_attn_implementation:
         model_load_config.attn_implementation = args.sft_attn_implementation
     if args.sft_num_gpus > 1:
-        training_args.fsdp = "full_shard"
-        training_args.fsdp_config = {"fsdp_version": 2}
-        training_args.gpu_minute_multiplier = float(args.sft_num_gpus)
+        multi_gpu_training_args(training_args, args.sft_num_gpus)
 
     # Bring up the process group early so the rank-0 wandb gate and dataset-cache
     # barriers work before the trainer builds its Accelerator (which reuses it).

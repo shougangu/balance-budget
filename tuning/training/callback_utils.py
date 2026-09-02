@@ -4,6 +4,7 @@ import os
 import time
 import warnings
 
+import torch
 import wandb
 from transformers import TrainerCallback, TrainerState
 from transformers.integrations import WandbCallback
@@ -199,6 +200,18 @@ def save_trainer_state(state: TrainerState, output_dir: str) -> None:
         raise TypeError("state must be a transformers.TrainerState")
     os.makedirs(output_dir, exist_ok=True)
     state.save_to_json(os.path.join(output_dir, TRAINER_STATE_FILENAME))
+
+
+def bf16_for_disk(state_dict: dict) -> dict:
+    """Cast the floating tensors of a gathered state dict to bf16 for saving.
+
+    Full fine-tunes keep fp32 masters; every checkpoint the lineage serves or
+    evaluates is written in bf16, so the same cast precedes every save.
+    """
+    return {
+        key: value.to(torch.bfloat16) if value.is_floating_point() else value
+        for key, value in state_dict.items()
+    }
 
 
 def record_saved_dtype(checkpoint_path: str, state_dict: dict) -> None:

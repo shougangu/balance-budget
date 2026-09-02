@@ -6,12 +6,12 @@ import json
 import math
 import os
 
-import torch
 import torch.distributed as dist
 from transformers import TrainerCallback
 
 from tuning.config import MODELS_METADATA_DIR
 from tuning.training.callback_utils import (
+    bf16_for_disk,
     get_total_minutes_from_state,
     save_sweetspot_checkpoint,
 )
@@ -158,10 +158,7 @@ class BudgetMarkCallback(TrainerCallback):
         state_dict = accelerator.get_state_dict(model)
         if not self._is_rank_zero() or state_dict is None:
             return state_dict
-        return {
-            key: value.to(torch.bfloat16) if value.is_floating_point() else value
-            for key, value in state_dict.items()
-        }
+        return bf16_for_disk(state_dict)
 
     def _bank(self, decision, state, args, model):
         state_dict = self._gathered_state_dict(model)

@@ -6,7 +6,7 @@ import os
 import torch
 import torch.nn.functional as F
 
-from tuning.training.callback_utils import save_trainer_state
+from tuning.training.callback_utils import bf16_for_disk, record_saved_dtype, save_trainer_state
 
 
 def is_adapter_checkpoint(model_path):
@@ -442,9 +442,14 @@ def save_trained_model(model, tokenizer, trainer, output_dir):
     """Save the trained weights, tokenizer, and training config to output_dir."""
     fsdp_enabled = bool(getattr(trainer.args, "fsdp", None))
     if fsdp_enabled:
-        # Collective: gathers the sharded weights and writes from the main
-        # process; every rank must enter it.
-        trainer.save_model(output_dir)
+        # Collective: every rank enters the gather; the full dict lands on
+        # rank 0 only. The trainer's own save_model writes no weights under
+        # the sharded state dict the periodic checkpoints use.
+        state_dict = trainer.accelerator.get_state_dict(model)
+        if trainer.args.process_index == 0:
+            target = trainer.accelerator.unwrap_model(model)
+            target.save_pretrained(output_dir, state_dict=bf16_for_disk(state_dict))
+            record_saved_dtype(output_dir, state_dict=bf16_for_disk(state_dict))
     elif hasattr(model, 'save_pretrained'):
         model.save_pretrained(output_dir)
     else:

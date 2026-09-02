@@ -76,7 +76,7 @@ def test_save_trained_model_saves_adapter_only(tmp_path):
     model = _FakeModel()
     tokenizer = _FakeTokenizer()
     trainer = SimpleNamespace(
-        args=SimpleNamespace(to_dict=lambda: {"lr": 1e-5}),
+        args=SimpleNamespace(to_dict=lambda: {"lr": 1e-5}, process_index=0),
         state=TrainerState(),
     )
 
