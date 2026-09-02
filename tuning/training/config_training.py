@@ -101,7 +101,10 @@ class TrainingArgumentsConfig(BaseModel):
     use_liger_kernel: bool = False  # fused linear cross-entropy; required at long seq lens
     packing: bool = False  # SFT only: BFD-pack sequences to max_length windows
     packing_strategy: str = "bfd"
-    padding_free: bool = False  # SFT only: concatenate the micro-batch instead of padding
+    # SFT only: concatenate the micro-batch instead of padding. None leaves the choice
+    # to TRL/Unsloth, which enable it wherever the model supports it; an explicit False
+    # reaches SFTConfig and turns it off.
+    padding_free: Optional[bool] = None
     # Wall-seconds-to-GPU-seconds factor for train/total_minutes; set as an attribute
     # on the built config after to_hf_args so it survives callback rebuild on resume.
     gpu_minute_multiplier: Optional[float] = None

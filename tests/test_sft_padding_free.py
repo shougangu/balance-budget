@@ -147,3 +147,21 @@ def test_padding_free_status_flags_an_unexplained_loss():
 
     assert status.startswith("off")
     assert "unexpected" in status
+
+
+def test_padding_free_defaults_to_unset_so_trl_can_auto_enable():
+    """An explicit False reaches SFTConfig and defeats Unsloth's auto-enable, so the
+    default must stay unset."""
+    from tests.test_unified_early_pipeline import _parse_args, REQUIRED
+    assert _parse_args(REQUIRED).sft_padding_free is None
+
+
+def test_padding_free_flag_forces_it_on_and_off():
+    from tests.test_unified_early_pipeline import _parse_args, REQUIRED
+    assert _parse_args(REQUIRED + ["--sft-padding-free"]).sft_padding_free is True
+    assert _parse_args(REQUIRED + ["--no-sft-padding-free"]).sft_padding_free is False
+
+
+def test_training_config_leaves_padding_free_unset_by_default():
+    from tuning.training.config_training import TrainingArgumentsConfig
+    assert TrainingArgumentsConfig().padding_free is None

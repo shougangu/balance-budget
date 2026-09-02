@@ -281,8 +281,9 @@ def _parse_args(argv=None):
                              "logits tensor alone is tens of GB.")
     parser.add_argument("--sft-packing", action="store_true", default=False,
                         help="BFD-pack sequences into max_length windows (needs flash attention).")
-    parser.add_argument("--sft-padding-free", action="store_true", default=False,
-                        help="Concatenate the micro-batch instead of padding (needs flash attention).")
+    parser.add_argument("--sft-padding-free", action=argparse.BooleanOptionalAction, default=None,
+                        help="Concatenate the micro-batch instead of padding (needs flash attention). "
+                             "Unset lets TRL/Unsloth enable it wherever the model supports it.")
     parser.add_argument("--sft-attn-implementation", default=None,
                         choices=["flash_attention_2", "sdpa", "eager"],
                         help="Attention backend for the plain-HF full fine-tune path.")
