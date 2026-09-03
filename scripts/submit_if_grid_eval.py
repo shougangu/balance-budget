@@ -49,7 +49,10 @@ CELLS = {
 }
 
 # The protocol the [1]if-g12b runs trained and evaluated under, with the sample
-# counts FIXED_EVAL_SAMPLING now pins: IFEval n=4, IFBench n=8.
+# counts FIXED_EVAL_SAMPLING now pins: IFEval 4, IFBench 8. Those counts are drawn
+# as independent single-sample passes on consecutive seeds: one n=4 request scores
+# 8pt below four n=1 passes on the same checkpoint, because raising n lengthens
+# every generation until ~5% run into the token cap unterminated.
 PROTOCOL = [
     "--benchmarks", "ifeval,ifbench",
     "--template", "repo",
@@ -58,6 +61,8 @@ PROTOCOL = [
     "--n-samples", "4",
     "--ifbench-n-samples", "8",
     "--k-values", "1", "2", "4", "8",
+    "--seed-sweep",
+    "--seed-base", "42",
 ]
 
 

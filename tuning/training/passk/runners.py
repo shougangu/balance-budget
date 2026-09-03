@@ -89,8 +89,8 @@ class VLLMRunner:
         return self._format_outputs(outputs, eval_strategy)
 
     @staticmethod
-    def _format_outputs(outputs, eval_strategy) -> List[Dict]:
-        n_samples = eval_strategy.n_samples
+    def _format_outputs(outputs, eval_strategy, n_samples=None) -> List[Dict]:
+        n_samples = eval_strategy.n_samples if n_samples is None else n_samples
         if n_samples == 1:
             responses = [output.outputs[0].text for output in outputs]
         else:
@@ -103,6 +103,26 @@ class VLLMRunner:
             else:
                 grouped[prompt].append(resp)
         return [{"prompt": p, "responses": resps} for p, resps in grouped.items()]
+
+    @staticmethod
+    def merge_passes(passes: List[List[Dict]]) -> List[Dict]:
+        """Pool independent generation passes into one entry per prompt.
+
+        Each pass carries one result per prompt. Responses are concatenated in
+        pass order, so a sweep of single-sample passes scores the same way a
+        single multi-sample request would.
+        """
+        if not passes:
+            return []
+        merged = [{"prompt": item["prompt"], "responses": list(item["responses"])}
+                  for item in passes[0]]
+        by_prompt = {item["prompt"]: item for item in merged}
+        for extra in passes[1:]:
+            if {item["prompt"] for item in extra} != set(by_prompt):
+                raise ValueError("generation passes cover different prompts")
+            for item in extra:
+                by_prompt[item["prompt"]]["responses"].extend(item["responses"])
+        return merged
 
     @contextmanager
     def _with_model_offloaded(self, model):

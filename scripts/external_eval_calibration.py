@@ -463,30 +463,43 @@ def run(args):
         "amc_n_samples": args.amc_n_samples,
         "gsm8k_n_samples": args.gsm8k_n_samples,
         "ifbench_n_samples": args.ifbench_n_samples,
+        "seed_sweep": args.seed_sweep,
+        "seed_base": args.seed_base if args.seed_sweep else None,
         "sample_prompt": rendered,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "benchmarks": {},
     }
 
+    def generate(strategy, n, seed):
+        sampling_config = VLLMSamplingParamsConfig(
+            n=n,
+            seed=seed,
+            temperature=args.temperature,
+            top_p=args.top_p,
+            top_k=args.top_k,
+            max_tokens=args.max_tokens,
+        )
+        sampling_params = SamplingParams(**sampling_config.model_dump())
+        print(f"\n[calibration] {strategy.id}: {sampling_params}", flush=True)
+        return llm.chat(
+            strategy.get_test_messages(),
+            sampling_params,
+            chat_template=chat_template,
+            lora_request=lora_request,
+        )
+
     try:
         for strategy in strategies:
-            sampling_config = VLLMSamplingParamsConfig(
-                n=strategy.n_samples,
-                temperature=args.temperature,
-                top_p=args.top_p,
-                top_k=args.top_k,
-                max_tokens=args.max_tokens,
-            )
-            sampling_params = SamplingParams(**sampling_config.model_dump())
-            print(f"\n[calibration] {strategy.id}: {sampling_params}", flush=True)
-
-            outputs = llm.chat(
-                strategy.get_test_messages(),
-                sampling_params,
-                chat_template=chat_template,
-                lora_request=lora_request,
-            )
-            results = VLLMRunner._format_outputs(outputs, strategy)
+            if args.seed_sweep:
+                passes = [
+                    VLLMRunner._format_outputs(
+                        generate(strategy, 1, args.seed_base + i), strategy, n_samples=1)
+                    for i in range(strategy.n_samples)
+                ]
+                results = VLLMRunner.merge_passes(passes)
+            else:
+                results = VLLMRunner._format_outputs(
+                    generate(strategy, strategy.n_samples, None), strategy)
             scores = {k: float(v) for k, v in
                       strategy.score_responses(results, tokenizer).items()}
             scores.update(cross_score(strategy.id, results, strategy, tokenizer))
@@ -538,6 +551,12 @@ def parse_args(argv=None):
                         help="Defaults to --n-samples.")
     parser.add_argument("--k-values", type=int, nargs="+", default=[1, 2, 4])
     parser.add_argument("--num-prompts", type=int, default=None)
+    parser.add_argument("--seed-sweep", action="store_true",
+                        help="Draw each benchmark's n_samples as that many "
+                             "independent single-sample passes with "
+                             "consecutive seeds, instead of one n>1 request.")
+    parser.add_argument("--seed-base", type=int, default=42,
+                        help="First seed of the --seed-sweep run.")
     parser.add_argument("--ifeval-strict", action="store_true",
                         help="Score IFEval strict; our production runs score loose.")
     parser.add_argument("--ifbench-strict", dest="ifbench_strict",

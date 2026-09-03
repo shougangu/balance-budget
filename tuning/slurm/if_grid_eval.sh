@@ -4,7 +4,7 @@
 #SBATCH --gres=gpu:h100:1
 #SBATCH -c 8
 #SBATCH --mem=128GB
-#SBATCH --time=3:00:00
+#SBATCH --time=6:00:00
 #SBATCH --output=/dev/null
 
 set -euo pipefail

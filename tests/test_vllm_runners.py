@@ -414,3 +414,45 @@ def test_callback_falls_back_from_persistent_to_ephemeral(monkeypatch):
     assert persistent_run_calls[0] == ("/tmp/a", optimizer)
     assert ephemeral_run_calls[0] == ("/tmp/a", optimizer)
     assert isinstance(callback._runner, FakeEphemeral)
+
+
+def _outputs_for(texts_per_prompt):
+    """Build fake vLLM outputs: one entry per prompt, each with its completions."""
+    return [SimpleNamespace(outputs=[SimpleNamespace(text=t) for t in texts])
+            for texts in texts_per_prompt]
+
+
+def test_format_outputs_n_samples_override_takes_one_completion():
+    es = _make_eval_strategy(n=4)
+    es.get_test_prompts.return_value = ["p1", "p2"]
+    outputs = _outputs_for([["a1", "a2"], ["b1", "b2"]])
+
+    formatted = VLLMRunner._format_outputs(outputs, es, n_samples=1)
+
+    assert formatted == [{"prompt": "p1", "responses": ["a1"]},
+                         {"prompt": "p2", "responses": ["b1"]}]
+
+
+def test_merge_passes_concatenates_responses_per_prompt_in_seed_order():
+    seed_a = [{"prompt": "p1", "responses": ["a1"]},
+              {"prompt": "p2", "responses": ["b1"]}]
+    seed_b = [{"prompt": "p1", "responses": ["a2"]},
+              {"prompt": "p2", "responses": ["b2"]}]
+
+    merged = VLLMRunner.merge_passes([seed_a, seed_b])
+
+    assert merged == [{"prompt": "p1", "responses": ["a1", "a2"]},
+                      {"prompt": "p2", "responses": ["b1", "b2"]}]
+
+
+def test_merge_passes_is_identity_for_a_single_pass():
+    single = [{"prompt": "p1", "responses": ["a1"]}]
+    assert VLLMRunner.merge_passes([single]) == single
+
+
+def test_merge_passes_rejects_disagreeing_prompt_sets():
+    import pytest
+    a = [{"prompt": "p1", "responses": ["a1"]}]
+    b = [{"prompt": "p2", "responses": ["b1"]}]
+    with pytest.raises(ValueError):
+        VLLMRunner.merge_passes([a, b])
