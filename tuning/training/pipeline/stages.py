@@ -5,6 +5,7 @@ import contextlib
 import os
 import sys
 from dataclasses import dataclass
+from datetime import timedelta
 from pathlib import Path
 from typing import Literal
 
@@ -41,6 +42,20 @@ def _build_lora_config(args) -> LoraConfig:
     if not getattr(args, "gradient_checkpointing", True):
         cfg.use_gradient_checkpointing = False
     return cfg
+
+
+# Rank 0 renders and tokenizes the SFT corpus behind a barrier while the other
+# ranks wait; on a multi-million-row corpus that outlasts NCCL's ten-minute default.
+PROCESS_GROUP_TIMEOUT = timedelta(hours=3)
+
+
+def init_process_group_early():
+    """Bring up the process group before the trainer builds its Accelerator, so the
+    rank-0 wandb gate, checkpoint claims and dataset-cache barriers work; the
+    Accelerator detects the existing group and reuses it."""
+    if "LOCAL_RANK" in os.environ and not dist.is_initialized():
+        dist.init_process_group(backend="nccl", timeout=PROCESS_GROUP_TIMEOUT)
+        torch.cuda.set_device(int(os.environ["LOCAL_RANK"]))
 
 
 def run_sft(args):
@@ -111,11 +126,7 @@ def run_sft(args):
     if args.sft_num_gpus > 1:
         multi_gpu_training_args(training_args, args.sft_num_gpus)
 
-    # Bring up the process group early so the rank-0 wandb gate and dataset-cache
-    # barriers work before the trainer builds its Accelerator (which reuses it).
-    if "LOCAL_RANK" in os.environ and not dist.is_initialized():
-        dist.init_process_group(backend="nccl")
-        torch.cuda.set_device(int(os.environ["LOCAL_RANK"]))
+    init_process_group_early()
     is_dist = dist.is_initialized() and dist.get_world_size() > 1
     rank = dist.get_rank() if is_dist else 0
 
@@ -407,12 +418,7 @@ def run_post_training(args, method: Literal["dpo", "grpo"]):
     """Claim → check budget → build configs → wandb run → train → mark completed."""
     metadata_file = args.metadata_file[0]
 
-    # Bring up the process group early so claim/broadcast/barrier work before
-    # the trainer is constructed. HF Accelerator detects an existing group and
-    # reuses it.
-    if "LOCAL_RANK" in os.environ and not dist.is_initialized():
-        dist.init_process_group(backend="nccl")
-        torch.cuda.set_device(int(os.environ["LOCAL_RANK"]))
+    init_process_group_early()
     is_dist = dist.is_initialized() and dist.get_world_size() > 1
     rank = dist.get_rank() if is_dist else 0
 

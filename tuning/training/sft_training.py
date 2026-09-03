@@ -1,4 +1,5 @@
 
+from accelerate import PartialState
 from trl import SFTTrainer, SFTConfig
 from tuning.data.train_dataset import get_train_dataset
 from tuning.training.config_training import ModelLoadConfig, LoraConfig, SFTRunConfig, TrainingArgumentsConfig, PassAtKConfig, PerplexityConfig, DatasetConfig, sft_batch_size, effective_batch_size
@@ -68,6 +69,32 @@ def latest_complete_checkpoint(output_dir):
     return str(max(candidates, key=lambda path: int(path.name.split("-")[1])))
 
 
+def preprocessing_num_proc():
+    """Dataset map workers: the CPUs this process may run on, i.e. the job's cgroup
+    share, not the node's core count (which OOMs a node with many cores and little
+    memory)."""
+    return max(1, len(os.sched_getaffinity(0)))
+
+
+def preprocess_sft_dataset(tokenizer, dataset, max_length, mask_prompt):
+    """Render the chat template and tokenize on the main process only.
+
+    The other ranks wait at the barrier and then load the main process's cache
+    files, instead of each rank redoing both passes over the same rows, splitting
+    the allocated CPUs between them and writing identical cache files at once.
+    The rendered template already contains BOS; supplying input_ids prevents
+    TRL's language-model text path from tokenizing with the Llama default and
+    prepending a second BOS.
+    """
+    num_proc = preprocessing_num_proc()
+    with PartialState().main_process_first():
+        dataset = apply_chat_template(tokenizer, dataset, mask_prompt=mask_prompt, num_proc=num_proc)
+        dataset = tokenize_sft_dataset(
+            tokenizer, dataset, max_length=max_length, num_proc=num_proc, mask_prompt=mask_prompt,
+        )
+    return dataset
+
+
 def train_model_sft(
     run_config: SFTRunConfig = None,
     lora_config: LoraConfig = None,
@@ -109,18 +136,10 @@ def train_model_sft(
     tokenizer = chat_template_func(tokenizer)
 
     mask_prompt = training_args.mask_prompt_tokens
-    dataset = apply_chat_template(tokenizer, dataset, mask_prompt=mask_prompt)
-    print(f"Example SFT input:\n{dataset['train'][0]['text']}")
-    # The rendered template already contains BOS. Supplying input_ids here prevents
-    # TRL's language-model text path from tokenizing with the Llama default and
-    # prepending a second BOS.
-    dataset = tokenize_sft_dataset(
-        tokenizer,
-        dataset,
-        max_length=model_load_config.max_seq_length,
-        num_proc=4,
-        mask_prompt=mask_prompt,
+    dataset = preprocess_sft_dataset(
+        tokenizer, dataset, max_length=model_load_config.max_seq_length, mask_prompt=mask_prompt,
     )
+    print(f"Example SFT input:\n{dataset['train'][0]['text']}")
     # Unsloth turns padding-free batching off whenever the caller supplies a
     # collator or a processor, so let TRL build the collator from
     # ``completion_only_loss`` below and hand it a plain tokenizer. Gemma 3's
@@ -179,7 +198,7 @@ def train_model_sft(
         args = SFTConfig(
             dataset_text_field = "text",
             max_length = model_load_config.max_seq_length,
-            dataset_num_proc = 4,
+            dataset_num_proc = preprocessing_num_proc(),
             packing = training_args.packing,
             packing_strategy = training_args.packing_strategy,
             padding_free = training_args.padding_free,

@@ -143,7 +143,7 @@ def chat_template_func(tokenizer):
     return tokenizer
 
 
-def apply_chat_template(tokenizer, dataset, mask_prompt=False):
+def apply_chat_template(tokenizer, dataset, mask_prompt=False, num_proc=None):
     """Render conversations to text, optionally recording where each prompt ends.
 
     ``mask_prompt`` adds a ``prompt_length`` column holding the character offset at
@@ -182,7 +182,10 @@ def apply_chat_template(tokenizer, dataset, mask_prompt=False):
             prompt_lengths.append(len(prompt))
         return {"text": texts, "prompt_length": prompt_lengths}
 
-    dataset = dataset.map(_format, batched=True)
+    map_kwargs = {"batched": True}
+    if num_proc is not None:
+        map_kwargs["num_proc"] = num_proc
+    dataset = dataset.map(_format, **map_kwargs)
     # Remove "messages" column so TRL SFTTrainer doesn't redundantly
     # re-process the dataset (spawning num_proc=os.cpu_count() workers
     # which causes OOM on SLURM nodes with many cores but limited --mem).
