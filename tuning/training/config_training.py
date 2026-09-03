@@ -74,7 +74,7 @@ class TrainingArgumentsConfig(BaseModel):
     eval_steps: float = 64
     logging_steps: int = 1
     do_eval: bool = True
-    warmup_ratio: int = 0.0
+    warmup_ratio: float = 0.0
     num_train_epochs: int = 1
     learning_rate: float = 5e-5
     optim: str = "adamw_8bit"
